@@ -1,0 +1,46 @@
+# EX-aero Pre-Commit Configuration
+# See https://pre-commit.com for more information
+# To install: pre-commit install
+
+repos:
+  # 1. Standard Git Hook Repository Hygiene
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.6.0
+    hooks:
+      - id: trailing-whitespace
+        description: Trims trailing whitespace from all files.
+      - id: end-of-file-fixer
+        description: Ensures that all files end with a newline.
+      - id: check-yaml
+        description: Verifies all GOCART and project YAML configuration files are syntactically valid.
+      - id: check-added-large-files
+        description: Prevents accidental commits of large datasets or pre-built binaries.
+      - id: check-merge-conflict
+        description: Prevents committing files with unresolved git merge conflict markers.
+      - id: check-case-conflict
+        description: Detects files that would conflict on case-insensitive filesystems (like macOS/Windows).
+      - id: check-executables-have-shebangs
+        description: Ensures non-binary executables have correct shebangs.
+      - id: check-xml
+        description: Verifies XML syntax correctness.
+      - id: check-toml
+        description: Verifies TOML syntax correctness.
+
+  # 2. C++ Formatting (clang-format)
+  - repo: https://github.com/pre-commit/mirrors-clang-format
+    rev: v18.1.5
+    hooks:
+      - id: clang-format
+        name: clang-format (C++)
+        description: Formats all public and private C++ source and header files.
+        types_or: [c++, c]
+        exclude: ^src/src_impl/third_party/
+
+  # 3. CMake Formatting & Linting (cmake-format)
+  - repo: https://github.com/cheshirekow/cmake-format-precommit
+    rev: v0.6.13
+    hooks:
+      - id: cmake-format
+        name: cmake-format
+        description: Formats all CMakeLists.txt and .cmake files automatically.
+        types: [cmake]
