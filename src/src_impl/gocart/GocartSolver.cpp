@@ -53,17 +53,17 @@ namespace exaero {
     void run_gocart_diagnostics(
         GocartSolverState* state,
         int num_cells, int num_levels, int num_species,
-        const double* rh_ptr, const double* state_ptr, double* diags_ptr) {
+        const double* rh_ptr, const double* thick_ptr, const double* state_ptr, double* diags_ptr) {
         
-        // Passive placeholder for Task 3 (will be fully implemented in Task 5)
+        // Passive placeholder for Task 3 & 4 (will be fully implemented in Task 5)
     }
 
     void run_gocart_optics(
         GocartSolverState* state,
         int num_cells, int num_levels, int num_species,
-        const double* rh_ptr, const double* state_ptr, double* optics_ptr) {
+        const double* rh_ptr, const double* thick_ptr, const double* state_ptr, double* optics_ptr) {
         
-        // Passive placeholder for Task 3 (will be fully implemented in Task 6)
+        // Passive placeholder for Task 3 & 4 (will be fully implemented in Task 6)
     }
 
 } // namespace exaero

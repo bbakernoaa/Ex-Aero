@@ -24,5 +24,16 @@
   #define MDSPAN_IMPL_PROPOSED_NAMESPACE experimental
 #endif
 
-#include "mdspan"
-#include "../mdspan/mdarray.hpp"
+#include "../exaero_mdspan_impl/mdspan.hpp"
+
+// backward compatibility import into experimental
+namespace MDSPAN_IMPL_STANDARD_NAMESPACE {
+  namespace MDSPAN_IMPL_PROPOSED_NAMESPACE {
+    using ::MDSPAN_IMPL_STANDARD_NAMESPACE::mdspan;
+    using ::MDSPAN_IMPL_STANDARD_NAMESPACE::extents;
+    using ::MDSPAN_IMPL_STANDARD_NAMESPACE::layout_left;
+    using ::MDSPAN_IMPL_STANDARD_NAMESPACE::layout_right;
+    using ::MDSPAN_IMPL_STANDARD_NAMESPACE::layout_stride;
+    using ::MDSPAN_IMPL_STANDARD_NAMESPACE::default_accessor;
+  }
+}

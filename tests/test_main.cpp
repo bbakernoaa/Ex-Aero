@@ -55,19 +55,21 @@ void test_zero_copy_mapping() {
     double pres_raw[1] = { 101325.0 };
     double dens_raw[1] = { 1.2 };
     double rh_raw[1] = { 0.5 };
+    double thick_raw[1] = { 100.0 }; // 100 meters vertical layer thickness
 
     exaero::View2D<const double> temperature(temp_raw, 1, 1);
     exaero::View2D<const double> pressure(pres_raw, 1, 1);
     exaero::View2D<const double> air_density(dens_raw, 1, 1);
     exaero::View2D<const double> relative_humidity(rh_raw, 1, 1);
+    exaero::View2D<const double> layer_thickness(thick_raw, 1, 1);
 
-    exaero::EnvironmentalStateView env{temperature, pressure, air_density, relative_humidity};
+    exaero::EnvironmentalStateView env{temperature, pressure, air_density, relative_humidity, layer_thickness};
 
     double state_raw[1] = { 1.0e-6 };
     exaero::View3D<double> state(state_raw, 1, 1, 1);
 
-    double diags_raw[6] = { 0.0 };
-    exaero::View3D<double> diagnostics_out(diags_raw, 1, 1, 6);
+    double diags_raw[exaero::diagnostic_indices::NUM_DIAGNOSTICS] = { 0.0 };
+    exaero::View3D<double> diagnostics_out(diags_raw, 1, 1, exaero::diagnostic_indices::NUM_DIAGNOSTICS);
 
     // Run diagnostic calculation step (maps raw pointers to unmanaged views zero-copy)
     package.computeDerivedDiagnostics(env, state, diagnostics_out);

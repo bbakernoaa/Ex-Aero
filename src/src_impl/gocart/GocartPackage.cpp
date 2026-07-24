@@ -11,13 +11,13 @@ namespace exaero {
     void run_gocart_diagnostics(
         GocartSolverState* state,
         int num_cells, int num_levels, int num_species,
-        const double* rh_ptr, const double* state_ptr, double* diags_ptr
+        const double* rh_ptr, const double* thick_ptr, const double* state_ptr, double* diags_ptr
     );
 
     void run_gocart_optics(
         GocartSolverState* state,
         int num_cells, int num_levels, int num_species,
-        const double* rh_ptr, const double* state_ptr, double* optics_ptr
+        const double* rh_ptr, const double* thick_ptr, const double* state_ptr, double* optics_ptr
     );
 
     GocartPackage::GocartPackage() : solver_state_(nullptr) {}
@@ -82,6 +82,7 @@ namespace exaero {
         int num_levels = state.extent(1);
 
         const double* rh_ptr = env.relative_humidity.data_handle();
+        const double* thick_ptr = env.layer_thickness.data_handle();
         const double* state_ptr = state.data_handle();
         double* diags_ptr = diagnostics_out.data_handle();
 
@@ -89,7 +90,7 @@ namespace exaero {
         run_gocart_diagnostics(
             solver_state_,
             num_cells, num_levels, num_species_,
-            rh_ptr, state_ptr, diags_ptr
+            rh_ptr, thick_ptr, state_ptr, diags_ptr
         );
     }
 
@@ -106,6 +107,7 @@ namespace exaero {
         int num_levels = state.extent(1);
 
         const double* rh_ptr = env.relative_humidity.data_handle();
+        const double* thick_ptr = env.layer_thickness.data_handle();
         const double* state_ptr = state.data_handle();
         double* optics_ptr = optics_out.data_handle();
 
@@ -113,7 +115,7 @@ namespace exaero {
         run_gocart_optics(
             solver_state_,
             num_cells, num_levels, num_species_,
-            rh_ptr, state_ptr, optics_ptr
+            rh_ptr, thick_ptr, state_ptr, optics_ptr
         );
     }
 
