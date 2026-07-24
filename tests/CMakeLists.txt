@@ -1,0 +1,3 @@
+add_executable(exaero_test_runner test_main.cpp)
+target_link_libraries(exaero_test_runner PRIVATE exaero)
+add_test(NAME ExaeroUnitTests COMMAND exaero_test_runner)
