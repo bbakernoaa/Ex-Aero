@@ -2,6 +2,7 @@
 #include <exaero/Environment.hpp>
 #include <cassert>
 #include <iostream>
+#include <cmath>
 
 void test_gocart_yaml_parsing() {
     std::string yaml_string = R"(
@@ -73,6 +74,20 @@ void test_zero_copy_mapping() {
 
     // Run diagnostic calculation step (maps raw pointers to unmanaged views zero-copy)
     package.computeDerivedDiagnostics(env, state, diagnostics_out);
+
+    // Verify 3D diagnostics
+    assert(diags_raw[exaero::diagnostic_indices::MASS_CONCENTRATION] == 1.0e-6);
+    assert(diags_raw[exaero::diagnostic_indices::PM2_5_CONCENTRATION] == 1.0e-6); // 2.0e-6 dry size is <= 2.5e-6
+    assert(diags_raw[exaero::diagnostic_indices::PM10_CONCENTRATION] == 1.0e-6);
+    assert(diags_raw[exaero::diagnostic_indices::NUMBER_CONCENTRATION] > 0.0);
+    assert(diags_raw[exaero::diagnostic_indices::SURFACE_AREA_DENSITY] > 0.0);
+
+    // Verify 2D Column Mass and Surface Mass diagnostics
+    double expected_col_mass = state_raw[0] * thick_raw[0]; // 1.0e-6 kg/m³ * 100 m = 1.0e-4 kg/m²
+    assert(std::abs(diags_raw[exaero::diagnostic_indices::COLUMN_MASS] - expected_col_mass) < 1e-12);
+    assert(diags_raw[exaero::diagnostic_indices::SURFACE_MASS] == 1.0e-6);
+    assert(diags_raw[exaero::diagnostic_indices::SURFACE_PM2_5_MASS] == 1.0e-6);
+    assert(std::abs(diags_raw[exaero::diagnostic_indices::COLUMN_PM2_5_MASS] - expected_col_mass) < 1e-12);
 
     std::cout << "Memory Mapping Zero-Copy Integration Test: PASS" << std::endl;
 }

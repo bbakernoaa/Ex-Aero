@@ -10,7 +10,7 @@ target_include_directories(exaero_mdspan INTERFACE
 add_library(exaero_solver STATIC
     gocart/GocartSolver.cpp
 )
-target_include_directories(exaero_solver PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+target_include_directories(exaero_solver PRIVATE ${CMAKE_CURRENT_SOURCE_DIR} ${CMAKE_CURRENT_SOURCE_DIR}/..)
 target_link_libraries(exaero_solver PUBLIC Kokkos::kokkos)
 
 # 2. The Package Interface Implementation (mdspan, yaml-cpp, NO Kokkos)
