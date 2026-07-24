@@ -11,5 +11,6 @@ target_include_directories(exaero_impl PRIVATE
 )
 target_link_libraries(exaero_impl PUBLIC exaero_mdspan)
 
-# Link exaero to private implementation
+# Link exaero to private implementation and propagate mdspan backport publicly
 target_link_libraries(exaero PRIVATE exaero_impl)
+target_link_libraries(exaero PUBLIC exaero_mdspan)
