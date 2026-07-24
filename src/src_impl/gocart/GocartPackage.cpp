@@ -16,8 +16,9 @@ namespace exaero {
 
     void run_gocart_optics(
         GocartSolverState* state,
-        int num_cells, int num_levels, int num_species,
-        const double* rh_ptr, const double* thick_ptr, const double* state_ptr, double* optics_ptr
+        int num_cells, int num_levels, int num_bands, int num_species,
+        const double* wavelengths_ptr, const double* rh_ptr, const double* thick_ptr,
+        const double* state_ptr, double* optics_ptr
     );
 
     GocartPackage::GocartPackage() : solver_state_(nullptr) {}
@@ -53,8 +54,7 @@ namespace exaero {
                 s["lognormal_dg"].as<double>(),
                 s["refractive_index_real"].as<double>(),
                 s["refractive_index_imag"].as<double>(),
-                has_lookup,
-                {0.0}, {0.0}, {0.0}, {0.0}
+                has_lookup
             };
 
             if (has_lookup) {
@@ -115,7 +115,8 @@ namespace exaero {
     void GocartPackage::computeOptics(
         const EnvironmentalStateView& env,
         const View3D<const double>& state,
-        View3D<double>& optics_out) {
+        const View1D<const double>& wavelengths,
+        View4D<double>& optics_out) {
 
         if (!solver_state_) {
             throw std::runtime_error("GocartPackage not initialized");
@@ -123,7 +124,9 @@ namespace exaero {
 
         int num_cells = state.extent(0);
         int num_levels = state.extent(1);
+        int num_bands = wavelengths.extent(0);
 
+        const double* wavelengths_ptr = wavelengths.data_handle();
         const double* rh_ptr = env.relative_humidity.data_handle();
         const double* thick_ptr = env.layer_thickness.data_handle();
         const double* state_ptr = state.data_handle();
@@ -132,8 +135,8 @@ namespace exaero {
         // Delegate to decoupled Kokkos solver
         run_gocart_optics(
             solver_state_,
-            num_cells, num_levels, num_species_,
-            rh_ptr, thick_ptr, state_ptr, optics_ptr
+            num_cells, num_levels, num_bands, num_species_,
+            wavelengths_ptr, rh_ptr, thick_ptr, state_ptr, optics_ptr
         );
     }
 

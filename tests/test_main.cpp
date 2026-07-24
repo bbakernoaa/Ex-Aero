@@ -93,16 +93,16 @@ void test_zero_copy_mapping() {
 }
 
 void test_gocart_optics() {
-    // 1. Prepare YAML containing species with has_optics_lookup flag and pre-tabulated values
+    // YAML containing two species: ADT Dust (scaled to small size) and Lookup-Table Sulfate
     std::string yaml_string = R"(
     species:
       - name: "Dust_ADT"
         dry_density: 2600.0
         molecular_weight: 100.0
-        dry_particle_diameter: 2.0e-6
+        dry_particle_diameter: 0.15e-6
         hygroscopicity: 0.1
         lognormal_sigma: 1.5
-        lognormal_dg: 1.0e-6
+        lognormal_dg: 0.1e-6
         refractive_index_real: 1.55
         refractive_index_imag: 0.002
       - name: "Sulfate_Lookup"
@@ -127,8 +127,8 @@ void test_gocart_optics() {
     double temp_raw[1] = { 298.0 };
     double pres_raw[1] = { 101325.0 };
     double dens_raw[1] = { 1.2 };
-    double rh_raw[1] = { 0.75 }; // 75% relative humidity (midway between bin 0.7 and 0.8!)
-    double thick_raw[1] = { 100.0 };
+    double rh_raw[1] = { 0.75 }; // 75% relative humidity (exactly midway between bin 2: 0.7 and bin 3: 0.8!)
+    double thick_raw[1] = { 100.0 }; // 100 meters grid height
 
     exaero::View2D<const double> temperature(temp_raw, 1, 1);
     exaero::View2D<const double> pressure(pres_raw, 1, 1);
@@ -138,21 +138,52 @@ void test_gocart_optics() {
 
     exaero::EnvironmentalStateView env{temperature, pressure, air_density, relative_humidity, layer_thickness};
 
-    double state_raw[2] = { 1.0e-6, 1.0e-6 }; // 1.0 ug/m³ of each species
+    // 1.0 ug/m³ of ADT Dust and 1.0 ug/m³ of Lookup Sulfate
+    double state_raw[2] = { 1.0e-6, 1.0e-6 };
     exaero::View3D<double> state(state_raw, 1, 1, 2);
 
-    double optics_raw[exaero::optical_indices::NUM_OPTICS] = { 0.0 };
-    exaero::View3D<double> optics_out(optics_raw, 1, 1, exaero::optical_indices::NUM_OPTICS);
+    // Query two wavelength bands simultaneously: 550nm and 870nm
+    double wavelengths_raw[2] = { 550.0e-9, 870.0e-9 };
+    exaero::View1D<const double> wavelengths(wavelengths_raw, 2);
 
-    // Run optical step
-    package.computeOptics(env, state, optics_out);
+    // 4D output array of size (cells, levels, bands, optical_indices::NUM_OPTICS)
+    double optics_raw[1 * 1 * 2 * exaero::optical_indices::NUM_OPTICS] = { 0.0 };
+    exaero::View4D<double> optics_out(optics_raw, 1, 1, 2, exaero::optical_indices::NUM_OPTICS);
 
-    // Verify 1D Linear Interpolation for Sulfate_Lookup at 75% RH
+    // Run multi-band optics calculations
+    package.computeOptics(env, state, wavelengths, optics_out);
+
+    // Helper lambda to index 4D optics outputs: (cell, level, band, optics)
+    auto get_optics_val = [&](int i_cell, int i_level, int i_band, int i_opt) {
+        int idx = i_cell * (1 * 2 * exaero::optical_indices::NUM_OPTICS) +
+                  i_level * (2 * exaero::optical_indices::NUM_OPTICS) +
+                  i_band * (exaero::optical_indices::NUM_OPTICS) +
+                  i_opt;
+        return optics_raw[idx];
+    };
+
+    // ---- Mode B: RH Lookup Table Verification ----
     // rh_bins[2] = 0.7 (ext = 5.0), rh_bins[3] = 0.8 (ext = 6.5)
-    // 75% RH is exactly midway: expected MEE = 5.75 m²/g.
-    // expected ext_coeff_spec = 1.0e-6 * 5.75 * 1000 = 5.75e-3 m⁻¹
-    assert(optics_raw[exaero::optical_indices::EXTINCTION_COEFF] > 5.75e-3); // ADT dust + Sulfate
-    assert(optics_raw[exaero::optical_indices::EXTINCTION_AOT] > 0.0);
+    // At RH = 75% (exactly midway), expected Sulfate MEE = 5.75 m²/g.
+    // Conversion: 1.0e-6 kg/m³ * 5.75 m²/g * 1000 g/kg = 5.75e-3 m⁻¹ (Extinction Coefficient)
+    double expected_sulfate_ext = 5.75e-3;
+
+    // ---- Mode A: ADT Size Parameter Wavelength Scaling Verification ----
+    // Longer wavelength (870 nm) has a smaller size parameter x = pi*D_wet/lambda
+    // and therefore a smaller extinction coefficient than shorter wavelength (550 nm).
+    double ext_550 = get_optics_val(0, 0, 0, exaero::optical_indices::EXTINCTION_COEFF);
+    double ext_870 = get_optics_val(0, 0, 1, exaero::optical_indices::EXTINCTION_COEFF);
+
+    assert(ext_550 > expected_sulfate_ext); // Total visible includes ADT Dust + Lookup Sulfate
+    assert(ext_870 > 0.0);
+    assert(ext_550 > ext_870); // Shorter wavelength has physically larger extinction!
+
+    // Verify 2D Column AOT calculations
+    double aot_550 = get_optics_val(0, 0, 0, exaero::optical_indices::EXTINCTION_AOT);
+    double aot_870 = get_optics_val(0, 0, 1, exaero::optical_indices::EXTINCTION_AOT);
+    assert(aot_550 > 0.0);
+    assert(aot_870 > 0.0);
+    assert(aot_550 > aot_870); // Total visible AOT is physically larger than NIR AOT
 
     std::cout << "GOCART Optics Dual-Mode Calculations: PASS" << std::endl;
 }

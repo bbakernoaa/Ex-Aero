@@ -17,10 +17,6 @@ namespace exaero {
         GocartPackage();
         ~GocartPackage() override;
 
-        // Delete copy constructor and assignment operator to avoid double-free of solver_state_
-        GocartPackage(const GocartPackage&) = delete;
-        GocartPackage& operator=(const GocartPackage&) = delete;
-
         void initialize(const std::string& config_yaml) override;
 
         void executeMicrophysics(
@@ -36,7 +32,8 @@ namespace exaero {
         void computeOptics(
             const EnvironmentalStateView& env,
             const View3D<const double>& state,
-            View3D<double>& optics_out) override;
+            const View1D<const double>& wavelengths,
+            View4D<double>& optics_out) override;
 
         // Accessors for testing
         int get_num_species() const { return num_species_; }

@@ -169,15 +169,18 @@ namespace exaero {
         Kokkos::fence();
     }
 
-#include <cmath>
-
     void run_gocart_optics(
         GocartSolverState* state,
-        int num_cells, int num_levels, int num_species,
-        const double* rh_ptr, const double* thick_ptr, const double* state_ptr, double* optics_ptr) {
+        int num_cells, int num_levels, int num_bands, int num_species,
+        const double* wavelengths_ptr, const double* rh_ptr, const double* thick_ptr,
+        const double* state_ptr, double* optics_ptr) {
 
         using MemSpace = typename Kokkos::DefaultExecutionSpace::memory_space;
 
+        // Wrap raw pointers directly to unmanaged default space Kokkos views (zero copy!)
+        auto d_wavelengths = Kokkos::View<const double*, Kokkos::LayoutRight, MemSpace, Kokkos::MemoryTraits<Kokkos::Unmanaged>>(
+            wavelengths_ptr, num_bands
+        );
         auto d_rh = Kokkos::View<const double**, Kokkos::LayoutRight, MemSpace, Kokkos::MemoryTraits<Kokkos::Unmanaged>>(
             rh_ptr, num_cells, num_levels
         );
@@ -187,25 +190,26 @@ namespace exaero {
         auto d_state = Kokkos::View<const double***, Kokkos::LayoutRight, MemSpace, Kokkos::MemoryTraits<Kokkos::Unmanaged>>(
             state_ptr, num_cells, num_levels, num_species
         );
-        auto d_optics = Kokkos::View<double***, Kokkos::LayoutRight, MemSpace, Kokkos::MemoryTraits<Kokkos::Unmanaged>>(
-            optics_ptr, num_cells, num_levels, optical_indices::NUM_OPTICS
+        auto d_optics = Kokkos::View<double****, Kokkos::LayoutRight, MemSpace, Kokkos::MemoryTraits<Kokkos::Unmanaged>>(
+            optics_ptr, num_cells, num_levels, num_bands, optical_indices::NUM_OPTICS
         );
 
         auto d_species_params = state->d_species_params;
 
-        // 1. Calculate 3D Optical Coefficients (Extinction, Scattering, Asymmetry)
+        // 1. Calculate 3D Optical Coefficients (Extinction, Scattering, Asymmetry) across all cells, levels, and bands simultaneously
         Kokkos::parallel_for("GocartOptics3D_Kernel", 
-            Kokkos::MDRangePolicy<Kokkos::Rank<2>>({0, 0}, {num_cells, num_levels}),
-            KOKKOS_LAMBDA(int i_cell, int i_level) {
+            Kokkos::MDRangePolicy<Kokkos::Rank<3>>({0, 0, 0}, {num_cells, num_levels, num_bands}),
+            KOKKOS_LAMBDA(int i_cell, int i_level, int i_band) {
                 double total_ext_coeff = 0.0;
                 double total_sca_coeff = 0.0;
                 double weighted_asymmetry = 0.0;
 
-                double current_rh = d_rh(i_cell, i_level);
+                double current_rh = Kokkos::min(d_rh(i_cell, i_level), 0.99); // defensively clamp relative humidity to prevent infinity
+                double wavelength = d_wavelengths(i_band);                   // dynamic queried wavelength in meters
 
                 for (int i_spec = 0; i_spec < num_species; ++i_spec) {
                     const auto& params = d_species_params(i_spec);
-                    double mass_conc = d_state(i_cell, i_level, i_spec); // [kg/m³]
+                    double mass_conc = d_state(i_cell, i_level, i_spec);
 
                     if (mass_conc <= 0.0) continue;
 
@@ -215,18 +219,15 @@ namespace exaero {
 
                     if (params.has_optics_lookup) {
                         // --- MODE B: RH Lookup Table 1D Linear Interpolation ---
-                        // Clamp RH to valid table range
-                        double clamped_rh = Kokkos::min(Kokkos::max(current_rh, params.rh_bins[0]), params.rh_bins[7]);
-                        
                         // Find RH bin
                         int i_bin = 0;
-                        while (i_bin < 6 && clamped_rh > params.rh_bins[i_bin+1]) {
+                        while (i_bin < 6 && current_rh > params.rh_bins[i_bin+1]) {
                             i_bin++;
                         }
                         
                         double rh_lower = params.rh_bins[i_bin];
                         double rh_upper = params.rh_bins[i_bin+1];
-                        double weight = (clamped_rh - rh_lower) / (rh_upper - rh_lower + 1e-15);
+                        double weight = (current_rh - rh_lower) / (rh_upper - rh_lower + 1e-15);
 
                         // Linear Interpolation
                         double mee = params.ext_lookup[i_bin] + weight * (params.ext_lookup[i_bin+1] - params.ext_lookup[i_bin]);
@@ -240,13 +241,11 @@ namespace exaero {
 
                     } else {
                         // --- MODE A: Anomalous Diffraction Theory (ADT) Analytical Solver ---
-                        // 1. Wet size growth (clamp RH below 1.0 to prevent division by zero or negative base)
-                        double clamped_rh = Kokkos::min(Kokkos::max(current_rh, 0.0), 0.99);
+                        // 1. Wet size growth
                         double wet_diameter = params.dry_particle_diameter * 
-                                              Kokkos::pow(1.0 + params.hygroscopicity * (clamped_rh / (1.0 - clamped_rh)), 1.0/3.0);
+                                              Kokkos::pow(1.0 + params.hygroscopicity * (current_rh / (1.0 - current_rh)), 1.0/3.0);
                         
-                        // 2. Size parameter x
-                        double wavelength = 550.0e-9; // shortwave 550 nm visible standard
+                        // 2. Size parameter x based on dynamic wavelength
                         double x = (M_PI * wet_diameter) / wavelength;
 
                         // 3. ADT Phase shift parameter rho
@@ -280,10 +279,10 @@ namespace exaero {
                     weighted_asymmetry += sca_coeff_spec * asm_spec;
                 }
 
-                d_optics(i_cell, i_level, optical_indices::EXTINCTION_COEFF) = total_ext_coeff;
-                d_optics(i_cell, i_level, optical_indices::SCATTERING_COEFF) = total_sca_coeff;
-                d_optics(i_cell, i_level, optical_indices::BACKSCATTER_COEFF) = total_ext_coeff * 0.05; // standard backscatter ratio
-                d_optics(i_cell, i_level, optical_indices::ASYMMETRY_FACTOR) = 
+                d_optics(i_cell, i_level, i_band, optical_indices::EXTINCTION_COEFF) = total_ext_coeff;
+                d_optics(i_cell, i_level, i_band, optical_indices::SCATTERING_COEFF) = total_sca_coeff;
+                d_optics(i_cell, i_level, i_band, optical_indices::BACKSCATTER_COEFF) = total_ext_coeff * 0.05; // standard backscatter ratio
+                d_optics(i_cell, i_level, i_band, optical_indices::ASYMMETRY_FACTOR) = 
                     total_sca_coeff > 0.0 ? (weighted_asymmetry / total_sca_coeff) : 0.0;
             }
         );
@@ -291,8 +290,8 @@ namespace exaero {
 
         // 2. Calculate 2D Column-Integrated Optical AOTs
         Kokkos::parallel_for("GocartOpticsAOT_Kernel", 
-            Kokkos::RangePolicy<Kokkos::DefaultExecutionSpace>(0, num_cells),
-            KOKKOS_LAMBDA(int i_cell) {
+            Kokkos::MDRangePolicy<Kokkos::Rank<2>>({0, 0}, {num_cells, num_bands}),
+            KOKKOS_LAMBDA(int i_cell, int i_band) {
                 double total_ext_aot = 0.0;
                 double total_sca_aot = 0.0;
                 double finemode_ext_aot = 0.0;
@@ -300,9 +299,11 @@ namespace exaero {
                 double pm25_ext_aot = 0.0;
                 double pm25_sca_aot = 0.0;
 
+                double wavelength = d_wavelengths(i_band);
+
                 for (int i_level = 0; i_level < num_levels; ++i_level) {
                     double dz = d_thick(i_cell, i_level);
-                    double current_rh = d_rh(i_cell, i_level);
+                    double current_rh = Kokkos::min(d_rh(i_cell, i_level), 0.99);
 
                     for (int i_spec = 0; i_spec < num_species; ++i_spec) {
                         double mass_conc = d_state(i_cell, i_level, i_spec);
@@ -312,24 +313,21 @@ namespace exaero {
                         double ext_coeff_spec = 0.0;
                         double sca_coeff_spec = 0.0;
 
-                        // Retrieve/recompute the 3D coefficients calculated in Step 1
                         if (params.has_optics_lookup) {
-                            double clamped_rh = Kokkos::min(Kokkos::max(current_rh, params.rh_bins[0]), params.rh_bins[7]);
                             int i_bin = 0;
-                            while (i_bin < 6 && clamped_rh > params.rh_bins[i_bin+1]) {
+                            while (i_bin < 6 && current_rh > params.rh_bins[i_bin+1]) {
                                 i_bin++;
                             }
-                            double weight = (clamped_rh - params.rh_bins[i_bin]) / (params.rh_bins[i_bin+1] - params.rh_bins[i_bin] + 1e-15);
+                            double weight = (current_rh - params.rh_bins[i_bin]) / (params.rh_bins[i_bin+1] - params.rh_bins[i_bin] + 1e-15);
                             double mee = params.ext_lookup[i_bin] + weight * (params.ext_lookup[i_bin+1] - params.ext_lookup[i_bin]);
                             double ssa = params.ssa_lookup[i_bin] + weight * (params.ssa_lookup[i_bin+1] - params.ssa_lookup[i_bin]);
                             ext_coeff_spec = mass_conc * mee * 1000.0;
                             sca_coeff_spec = ext_coeff_spec * ssa;
                         } else {
                             // ADT values
-                            double clamped_rh = Kokkos::min(Kokkos::max(current_rh, 0.0), 0.99);
                             double wet_diameter = params.dry_particle_diameter * 
-                                                  Kokkos::pow(1.0 + params.hygroscopicity * (clamped_rh / (1.0 - clamped_rh)), 1.0/3.0);
-                            double x = (M_PI * wet_diameter) / 550.0e-9;
+                                                  Kokkos::pow(1.0 + params.hygroscopicity * (current_rh / (1.0 - current_rh)), 1.0/3.0);
+                            double x = (M_PI * wet_diameter) / wavelength;
                             double rho = Kokkos::max(2.0 * x * (params.refractive_index_real - 1.0), 1e-12);
                             double q_ext = 2.0 - (4.0 / rho) * Kokkos::sin(rho) + (4.0 / (rho * rho)) * (1.0 - Kokkos::cos(rho));
                             double q_sca = q_ext * Kokkos::exp(-2.0 * x * params.refractive_index_imag);
@@ -359,12 +357,12 @@ namespace exaero {
                 }
 
                 // Store 2D column AOT values in the bottom-most level slots of output
-                d_optics(i_cell, 0, optical_indices::EXTINCTION_AOT) = total_ext_aot;
-                d_optics(i_cell, 0, optical_indices::SCATTERING_AOT) = total_sca_aot;
-                d_optics(i_cell, 0, optical_indices::FINE_MODE_EXTINCTION_AOT) = finemode_ext_aot;
-                d_optics(i_cell, 0, optical_indices::FINE_MODE_SCATTERING_AOT) = finemode_sca_aot;
-                d_optics(i_cell, 0, optical_indices::PM2_5_EXTINCTION_AOT) = pm25_ext_aot;
-                d_optics(i_cell, 0, optical_indices::PM2_5_SCATTERING_AOT) = pm25_sca_aot;
+                d_optics(i_cell, 0, i_band, optical_indices::EXTINCTION_AOT) = total_ext_aot;
+                d_optics(i_cell, 0, i_band, optical_indices::SCATTERING_AOT) = total_sca_aot;
+                d_optics(i_cell, 0, i_band, optical_indices::FINE_MODE_EXTINCTION_AOT) = finemode_ext_aot;
+                d_optics(i_cell, 0, i_band, optical_indices::FINE_MODE_SCATTERING_AOT) = finemode_sca_aot;
+                d_optics(i_cell, 0, i_band, optical_indices::PM2_5_EXTINCTION_AOT) = pm25_ext_aot;
+                d_optics(i_cell, 0, i_band, optical_indices::PM2_5_SCATTERING_AOT) = pm25_sca_aot;
             }
         );
         Kokkos::fence();

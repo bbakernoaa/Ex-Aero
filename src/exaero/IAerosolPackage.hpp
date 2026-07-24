@@ -9,10 +9,16 @@
 namespace exaero {
 
     template <typename T>
-    using View3D = exaero_mdspan::mdspan<T, exaero_mdspan::extents<size_t, std::dynamic_extent, std::dynamic_extent, std::dynamic_extent>>;
+    using View1D = exaero_mdspan::mdspan<T, exaero_mdspan::extents<size_t, std::dynamic_extent>>;
 
     template <typename T>
     using View2D = exaero_mdspan::mdspan<T, exaero_mdspan::extents<size_t, std::dynamic_extent, std::dynamic_extent>>;
+
+    template <typename T>
+    using View3D = exaero_mdspan::mdspan<T, exaero_mdspan::extents<size_t, std::dynamic_extent, std::dynamic_extent, std::dynamic_extent>>;
+
+    template <typename T>
+    using View4D = exaero_mdspan::mdspan<T, exaero_mdspan::extents<size_t, std::dynamic_extent, std::dynamic_extent, std::dynamic_extent, std::dynamic_extent>>;
 
     struct EnvironmentalStateView {
         View2D<const double> temperature;       // [K] (cell, level)
@@ -41,11 +47,12 @@ namespace exaero {
             const View3D<const double>& state,    // (cell, level, species)
             View3D<double>& diagnostics_out) = 0; // (cell, level, diagnostic_index)
 
-        // Active Optical Properties Step (Extinction, Scattering, AOT, etc.)
+        // Active Optical Properties Step (Extinction, Scattering, AOT, etc. across multiple wavelength bands)
         virtual void computeOptics(
             const EnvironmentalStateView& env,
             const View3D<const double>& state,    // (cell, level, species)
-            View3D<double>& optics_out) = 0;      // (cell, level, optics_index)
+            const View1D<const double>& wavelengths, // [m] queried wavelengths (band_index)
+            View4D<double>& optics_out) = 0;      // (cell, level, band_index, optics_index)
     };
 
 } // namespace exaero
