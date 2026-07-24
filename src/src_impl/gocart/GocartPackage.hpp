@@ -35,6 +35,12 @@ namespace exaero {
             const View1D<const double>& wavelengths,
             View4D<double>& optics_out) override;
 
+        void computeCCN(
+            const EnvironmentalStateView& env,
+            const View3D<const double>& state,
+            const View1D<const double>& supersaturations,
+            View4D<double>& ccn_out) override;
+
         // Accessors for testing
         int get_num_species() const { return num_species_; }
         GocartSpeciesParams get_species_params(int i) const { return h_species_params_[i]; }

@@ -30,14 +30,13 @@ void run_property_based_tests(exaero::GocartPackage& package) {
     std::uniform_real_distribution<double> rh_dist(0.0, 0.99);
     std::uniform_real_distribution<double> thick_dist(1.0, 1000.0);
     std::uniform_real_distribution<double> state_dist(1e-10, 1e-3);
+    std::uniform_real_distribution<double> temp_dist(200.0, 320.0); // Temperature range [K]
 
     int trials = 1000;
     
-    double temp_raw[1] = { 298.0 };
     double pres_raw[1] = { 101325.0 };
     double dens_raw[1] = { 1.2 };
 
-    exaero::View2D<const double> temperature(temp_raw, 1, 1);
     exaero::View2D<const double> pressure(pres_raw, 1, 1);
     exaero::View2D<const double> air_density(dens_raw, 1, 1);
 
@@ -45,7 +44,9 @@ void run_property_based_tests(exaero::GocartPackage& package) {
         double rh = rh_dist(rng);
         double thickness = thick_dist(rng);
         double concentration = state_dist(rng);
+        double temp = temp_dist(rng);
 
+        exaero::View2D<const double> temperature(&temp, 1, 1);
         exaero::View2D<const double> relative_humidity(&rh, 1, 1);
         exaero::View2D<const double> layer_thickness(&thickness, 1, 1);
         exaero::EnvironmentalStateView env{temperature, pressure, air_density, relative_humidity, layer_thickness};
@@ -67,6 +68,8 @@ void run_property_based_tests(exaero::GocartPackage& package) {
         assert(diags_raw[exaero::diagnostic_indices::PM2_5_CONCENTRATION] >= 0.0);
         assert(diags_raw[exaero::diagnostic_indices::NUMBER_CONCENTRATION] >= 0.0);
         assert(diags_raw[exaero::diagnostic_indices::SURFACE_AREA_DENSITY] >= 0.0);
+        assert(diags_raw[exaero::diagnostic_indices::AEROSOL_LIQUID_WATER] >= 0.0);
+        assert(diags_raw[exaero::diagnostic_indices::GRAVITATIONAL_SETTLING_VELOCITY] >= 0.0);
 
         // 2. Optical Property checks
         double wavelengths_raw[2] = { 550e-9, 870e-9 };
@@ -93,6 +96,19 @@ void run_property_based_tests(exaero::GocartPackage& package) {
             // Asymmetry g must reside in [-1.0, 1.0]
             assert(asymmetry >= -1.0 && asymmetry <= 1.0);
         }
+
+        // 3. Cloud CCN Spectrum Property checks
+        double ss_raw[3] = { 0.0005, 0.001, 0.005 };
+        exaero::View1D<const double> supersaturations(ss_raw, 3);
+
+        double ccn_raw[3] = { 0.0 };
+        exaero::View4D<double> ccn_out(ccn_raw, 1, 1, 3, 1);
+
+        package.computeCCN(env, state, supersaturations, ccn_out);
+
+        // Monotonicity: higher supersaturations must activate larger or equal droplet counts
+        assert(ccn_raw[2] >= ccn_raw[1]);
+        assert(ccn_raw[1] >= ccn_raw[0]);
     }
     std::cout << "Property-Based Invariants (1000 Trials): PASS" << std::endl;
 }
@@ -141,10 +157,17 @@ void run_fuzz_tests(exaero::GocartPackage& package) {
         double optics_raw[1 * 1 * 1 * exaero::optical_indices::NUM_OPTICS] = { 0.0 };
         exaero::View4D<double> optics_out(optics_raw, 1, 1, 1, exaero::optical_indices::NUM_OPTICS);
 
+        double ss_raw[1] = { 0.001 };
+        exaero::View1D<const double> supersaturations(ss_raw, 1);
+
+        double ccn_raw[1] = { 0.0 };
+        exaero::View4D<double> ccn_out(ccn_raw, 1, 1, 1, 1);
+
         // Test robustness: solvers must defensively clamp values, handle NaNs, and NEVER segfault or crash
         try {
             package.computeDerivedDiagnostics(env, state, diagnostics_out);
             package.computeOptics(env, state, wavelengths, optics_out);
+            package.computeCCN(env, state, supersaturations, ccn_out);
         } catch (...) {
             // Exceptions are acceptable, but segmentation faults or page-fault crashes are failures
         }

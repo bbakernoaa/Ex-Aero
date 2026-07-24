@@ -21,6 +21,13 @@ namespace exaero {
         const double* state_ptr, double* optics_ptr
     );
 
+    void run_gocart_ccn(
+        GocartSolverState* state,
+        int num_cells, int num_levels, int num_ss, int num_species,
+        const double* ss_ptr, const double* temp_ptr, const double* rh_ptr,
+        const double* state_ptr, double* ccn_ptr
+    );
+
     GocartPackage::GocartPackage() : solver_state_(nullptr) {}
 
     GocartPackage::~GocartPackage() {
@@ -137,6 +144,34 @@ namespace exaero {
             solver_state_,
             num_cells, num_levels, num_bands, num_species_,
             wavelengths_ptr, rh_ptr, thick_ptr, state_ptr, optics_ptr
+        );
+    }
+
+    void GocartPackage::computeCCN(
+        const EnvironmentalStateView& env,
+        const View3D<const double>& state,
+        const View1D<const double>& supersaturations,
+        View4D<double>& ccn_out) {
+
+        if (!solver_state_) {
+            throw std::runtime_error("GocartPackage not initialized");
+        }
+
+        int num_cells = state.extent(0);
+        int num_levels = state.extent(1);
+        int num_ss = supersaturations.extent(0);
+
+        const double* ss_ptr = supersaturations.data_handle();
+        const double* temp_ptr = env.temperature.data_handle();
+        const double* rh_ptr = env.relative_humidity.data_handle();
+        const double* state_ptr = state.data_handle();
+        double* ccn_ptr = ccn_out.data_handle();
+
+        // Delegate to decoupled Kokkos solver
+        run_gocart_ccn(
+            solver_state_,
+            num_cells, num_levels, num_ss, num_species_,
+            ss_ptr, temp_ptr, rh_ptr, state_ptr, ccn_ptr
         );
     }
 

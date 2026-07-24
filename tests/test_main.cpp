@@ -81,6 +81,8 @@ void test_zero_copy_mapping() {
     assert(diags_raw[exaero::diagnostic_indices::PM10_CONCENTRATION] == 1.0e-6);
     assert(diags_raw[exaero::diagnostic_indices::NUMBER_CONCENTRATION] > 0.0);
     assert(diags_raw[exaero::diagnostic_indices::SURFACE_AREA_DENSITY] > 0.0);
+    assert(diags_raw[exaero::diagnostic_indices::AEROSOL_LIQUID_WATER] > 0.0); // Absorbed ALW
+    assert(diags_raw[exaero::diagnostic_indices::GRAVITATIONAL_SETTLING_VELOCITY] > 0.0); // vg fall velocity
 
     // Verify 2D Column Mass and Surface Mass diagnostics
     double expected_col_mass = state_raw[0] * thick_raw[0]; // 1.0e-6 kg/m³ * 100 m = 1.0e-4 kg/m²
@@ -177,6 +179,7 @@ void test_gocart_optics() {
     assert(ext_550 > expected_sulfate_ext); // Total visible includes ADT Dust + Lookup Sulfate
     assert(ext_870 > 0.0);
     assert(ext_550 > ext_870); // Shorter wavelength has physically larger extinction!
+    assert(get_optics_val(0, 0, 0, exaero::optical_indices::LIDAR_BACKSCATTER) > 0.0); // Lidar backscatter populated!
 
     // Verify 2D Column AOT calculations
     double aot_550 = get_optics_val(0, 0, 0, exaero::optical_indices::EXTINCTION_AOT);
@@ -188,12 +191,81 @@ void test_gocart_optics() {
     std::cout << "GOCART Optics Dual-Mode Calculations: PASS" << std::endl;
 }
 
+void test_gocart_ccn() {
+    // YAML containing two species: ADT Dust (scaled to small size) and Lookup-Table Sulfate
+    std::string yaml_string = R"(
+    species:
+      - name: "Dust_ADT"
+        dry_density: 2600.0
+        molecular_weight: 100.0
+        dry_particle_diameter: 0.15e-6
+        hygroscopicity: 0.1
+        lognormal_sigma: 1.5
+        lognormal_dg: 0.1e-6
+        refractive_index_real: 1.55
+        refractive_index_imag: 0.002
+      - name: "Sulfate_Lookup"
+        dry_density: 1800.0
+        molecular_weight: 98.0
+        dry_particle_diameter: 0.2e-6
+        hygroscopicity: 0.50
+        lognormal_sigma: 2.0
+        lognormal_dg: 0.15e-6
+        refractive_index_real: 1.43
+        refractive_index_imag: 1.0e-8
+    )";
+
+    exaero::GocartPackage package;
+    package.initialize(yaml_string);
+
+    double temp_raw[1] = { 298.0 }; // T = 298 K
+    double pres_raw[1] = { 101325.0 };
+    double dens_raw[1] = { 1.2 };
+    double rh_raw[1] = { 0.50 };
+    double thick_raw[1] = { 100.0 };
+
+    exaero::View2D<const double> temperature(temp_raw, 1, 1);
+    exaero::View2D<const double> pressure(pres_raw, 1, 1);
+    exaero::View2D<const double> air_density(dens_raw, 1, 1);
+    exaero::View2D<const double> relative_humidity(rh_raw, 1, 1);
+    exaero::View2D<const double> layer_thickness(thick_raw, 1, 1);
+
+    exaero::EnvironmentalStateView env{temperature, pressure, air_density, relative_humidity, layer_thickness};
+
+    // 1.0 ug/m³ of ADT Dust and 1.0 ug/m³ of Sulfate
+    double state_raw[2] = { 1.0e-6, 1.0e-6 };
+    exaero::View3D<double> state(state_raw, 1, 1, 2);
+
+    // Query three supersaturation levels simultaneously: 0.05% (0.0005), 0.1% (0.001), 0.5% (0.005)
+    double ss_raw[3] = { 0.0005, 0.001, 0.005 };
+    exaero::View1D<const double> supersaturations(ss_raw, 3);
+
+    // 4D output view of size (cells, levels, ss, 1) -> we can use ccn_out view directly
+    double ccn_raw[1 * 1 * 3] = { 0.0 };
+    exaero::View4D<double> ccn_out(ccn_raw, 1, 1, 3, 1);
+
+    // Run multi-supersaturation CCN activation solver
+    package.computeCCN(env, state, supersaturations, ccn_out);
+
+    double ccn_05ss = ccn_raw[0]; // Activated particles/m3 at 0.05% SS
+    double ccn_10ss = ccn_raw[1]; // Activated particles/m3 at 0.1% SS
+    double ccn_50ss = ccn_raw[2]; // Activated particles/m3 at 0.5% SS
+
+    // Verify physical activation spectrum monotonicity:
+    // Higher supersaturation must activate larger or equal number concentrations!
+    assert(ccn_50ss >= ccn_10ss);
+    assert(ccn_10ss >= ccn_05ss);
+
+    std::cout << "GOCART Cloud CCN Activation Spectra: PASS" << std::endl;
+}
+
 int main() {
     exaero::initialize_environment();
     
     test_gocart_yaml_parsing();
     test_zero_copy_mapping();
     test_gocart_optics();
+    test_gocart_ccn();
     
     exaero::finalize_environment();
     return 0;

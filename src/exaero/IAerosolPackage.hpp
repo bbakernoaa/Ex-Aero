@@ -41,18 +41,25 @@ namespace exaero {
             View3D<double>& state,          // (cell, level, species)
             double delta_time_sec) = 0;
 
-        // Active Diagnostics Step (PM2.5, PM10, Derived Number, Column Mass, etc.)
+        // Active Diagnostics Step (PM2.5, PM10, Derived Number, Column Mass, ALW, etc.)
         virtual void computeDerivedDiagnostics(
             const EnvironmentalStateView& env,
             const View3D<const double>& state,    // (cell, level, species)
             View3D<double>& diagnostics_out) = 0; // (cell, level, diagnostic_index)
 
-        // Active Optical Properties Step (Extinction, Scattering, AOT, etc. across multiple wavelength bands)
+        // Active Optical Properties Step (Extinction, Scattering, Lidar Backscatter, AOT, etc. across multiple bands)
         virtual void computeOptics(
             const EnvironmentalStateView& env,
             const View3D<const double>& state,    // (cell, level, species)
             const View1D<const double>& wavelengths, // [m] queried wavelengths (band_index)
             View4D<double>& optics_out) = 0;      // (cell, level, band_index, optics_index)
+
+        // Active Cloud Microphysics CCN Activation Spectra (liquid activation over supersaturations)
+        virtual void computeCCN(
+            const EnvironmentalStateView& env,
+            const View3D<const double>& state,
+            const View1D<const double>& supersaturations, // [fraction 0-1] queried supersaturations (S_index)
+            View4D<double>& ccn_out) = 0;                 // (cell, level, S_index, activated_ccn_number_concentration)
     };
 
 } // namespace exaero
