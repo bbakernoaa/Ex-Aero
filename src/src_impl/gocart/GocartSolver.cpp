@@ -55,17 +55,19 @@ namespace exaero {
         int num_cells, int num_levels, int num_species,
         const double* rh_ptr, const double* thick_ptr, const double* state_ptr, double* diags_ptr) {
 
-        // Wrap incoming raw pointers into unmanaged default space Kokkos Views (zero copy!)
-        auto d_rh = Kokkos::View<const double**, Kokkos::LayoutRight, Kokkos::HostSpace, Kokkos::MemoryTraits<Kokkos::Unmanaged>>(
+        using MemSpace = typename Kokkos::DefaultExecutionSpace::memory_space;
+
+        // Wrap incoming raw pointers into unmanaged Default Execution Space memory Views (zero copy!)
+        auto d_rh = Kokkos::View<const double**, Kokkos::LayoutRight, MemSpace, Kokkos::MemoryTraits<Kokkos::Unmanaged>>(
             rh_ptr, num_cells, num_levels
         );
-        auto d_thick = Kokkos::View<const double**, Kokkos::LayoutRight, Kokkos::HostSpace, Kokkos::MemoryTraits<Kokkos::Unmanaged>>(
+        auto d_thick = Kokkos::View<const double**, Kokkos::LayoutRight, MemSpace, Kokkos::MemoryTraits<Kokkos::Unmanaged>>(
             thick_ptr, num_cells, num_levels
         );
-        auto d_state = Kokkos::View<const double***, Kokkos::LayoutRight, Kokkos::HostSpace, Kokkos::MemoryTraits<Kokkos::Unmanaged>>(
+        auto d_state = Kokkos::View<const double***, Kokkos::LayoutRight, MemSpace, Kokkos::MemoryTraits<Kokkos::Unmanaged>>(
             state_ptr, num_cells, num_levels, num_species
         );
-        auto d_diags = Kokkos::View<double***, Kokkos::LayoutRight, Kokkos::HostSpace, Kokkos::MemoryTraits<Kokkos::Unmanaged>>(
+        auto d_diags = Kokkos::View<double***, Kokkos::LayoutRight, MemSpace, Kokkos::MemoryTraits<Kokkos::Unmanaged>>(
             diags_ptr, num_cells, num_levels, diagnostic_indices::NUM_DIAGNOSTICS
         );
 
@@ -96,15 +98,11 @@ namespace exaero {
                     double num_conc = mass_conc / vol_factor; // [particles/m³]
                     total_number_3d += num_conc;
 
-                    // 2. Wet diameter calculation (Kohler hygroscopic growth approximation)
-                    double wet_diameter = params.dry_particle_diameter * 
-                                          Kokkos::pow(1.0 + params.hygroscopicity * (current_rh / (1.0 - current_rh)), 1.0/3.0);
-
-                    // 3. Surface Area Density (SAD) [m²/m³]
+                    // 2. Surface Area Density (SAD) [m²/m³]
                     double sad_factor = M_PI * Kokkos::pow(params.lognormal_dg, 2) * Kokkos::exp(2.0 * ln_sig * ln_sig);
                     total_sad_3d += num_conc * sad_factor;
 
-                    // 4. 3D PM2.5 and PM10 size cuts
+                    // 3. 3D PM2.5 and PM10 size cuts
                     if (params.dry_particle_diameter <= 2.5e-6) {
                         total_pm2_5_3d += mass_conc;
                     }
