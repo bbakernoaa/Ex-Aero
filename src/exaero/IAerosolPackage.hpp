@@ -3,7 +3,7 @@
 
 // Force backport to compile under exaero_mdspan namespace to prevent redefinition conflicts with system Kokkos
 #define MDSPAN_IMPL_STANDARD_NAMESPACE exaero_mdspan
-#include <exaero_experimental/mdspan>
+#include <experimental/mdspan>
 
 namespace exaero {
 
