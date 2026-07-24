@@ -42,7 +42,9 @@ namespace exaero {
 
         for (int i = 0; i < num_species_; ++i) {
             auto s = species_node[i];
-            h_species_params_.push_back(GocartSpeciesParams{
+            bool has_lookup = s["has_optics_lookup"] && s["has_optics_lookup"].as<bool>();
+            
+            GocartSpeciesParams p{
                 s["dry_density"].as<double>(),
                 s["molecular_weight"].as<double>(),
                 s["dry_particle_diameter"].as<double>(),
@@ -50,8 +52,24 @@ namespace exaero {
                 s["lognormal_sigma"].as<double>(),
                 s["lognormal_dg"].as<double>(),
                 s["refractive_index_real"].as<double>(),
-                s["refractive_index_imag"].as<double>()
-            });
+                s["refractive_index_imag"].as<double>(),
+                has_lookup,
+                {0.0}, {0.0}, {0.0}, {0.0}
+            };
+
+            if (has_lookup) {
+                auto rh_bins = s["rh_bins"];
+                auto ext_lookup = s["ext_lookup"];
+                auto ssa_lookup = s["ssa_lookup"];
+                auto asm_lookup = s["asm_lookup"];
+                for (int j = 0; j < 8; ++j) {
+                    p.rh_bins[j] = rh_bins[j].as<double>();
+                    p.ext_lookup[j] = ext_lookup[j].as<double>();
+                    p.ssa_lookup[j] = ssa_lookup[j].as<double>();
+                    p.asm_lookup[j] = asm_lookup[j].as<double>();
+                }
+            }
+            h_species_params_.push_back(p);
         }
 
         // Initialize solver state (allocates and uploads parameters to GPU)
