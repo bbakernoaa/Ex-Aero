@@ -17,6 +17,10 @@ namespace exaero {
         GocartPackage();
         ~GocartPackage() override;
 
+        // Delete copy constructor and assignment operator to avoid double-free of solver_state_
+        GocartPackage(const GocartPackage&) = delete;
+        GocartPackage& operator=(const GocartPackage&) = delete;
+
         void initialize(const std::string& config_yaml) override;
 
         void executeMicrophysics(
