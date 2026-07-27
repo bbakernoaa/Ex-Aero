@@ -11,6 +11,8 @@ Welcome to the technical specifications registry. All major features, solver imp
 | :--- | :--- | :--- | :--- |
 | **[SPEC-GOCART-001](SPEC-GOCART-001-poc-design.md)** | GOCART Proof of Concept Design | Approved | Design document detailing dynamic species mapping, memory layout, Kohler wet sizing, and dual-mode optics. |
 | **[SPEC-EMISSIONS-002](SPEC-EMISSIONS-002-emissions-mapping-engine.md)** | EX-aero Emissions Mapping Engine | Approved Draft | Design document specifying 3D grid emissions mapping, unit conversions, and modal mass-to-number conversions. |
+| **[SPEC-MIE-003](SPEC-MIE-003-mie-spheroid-lut-generator.md)** | EX-aero Mie/ADT Spheroid LUT Generator Utility | Approved Spec | Design document specifying on-the-fly ADT Mie solvers, non-spherical spheroid database mappings, and Legendre phase function moment expansions with nanobind Python bindings. |
+| **[SPEC-CRTM-004](SPEC-CRTM-004-crtm-ascii-lut-parser.md)** | EX-aero CRTM ASCII LUT Parser | Approved Spec | Design document specifying the native C++ stream parser to read JCSDA CRTM ASCII aerosol coefficient files, dynamically re-sizing and mapping memory zero-copy. |
 
 ---
 
