@@ -1,5 +1,6 @@
 #include <gocart/GocartPackage.hpp>
 #include <utils/LutGenerator.hpp>
+#include <utils/DubovikSpheroidDatabase.hpp>
 #include <exaero/Environment.hpp>
 #include <cassert>
 #include <iostream>
@@ -484,6 +485,31 @@ void test_lut_generator_stub() {
     std::cout << "LutGenerator Stub test: PASS" << std::endl;
 }
 
+void test_spheroid_database_interpolation() {
+    const auto& db = exaero::SpheroidDatabase::instance();
+
+    // 1. In-bounds query: Exact match at grid point (1.53, 0.003, 1.0)
+    auto p_exact = db.interpolate(1.53, 0.003, 1.0);
+    double expected_ext = 2.0 * (1.0 - std::exp(-0.5)) * (1.53 / 1.53); // 2.0 * (1.0 - exp(-0.5)) ≈ 0.786938
+    assert(std::abs(p_exact.ext_efficiency - expected_ext) < 1e-6);
+    assert(p_exact.sca_efficiency == p_exact.ext_efficiency * (1.0 - 0.003 * 10.0));
+
+    // 2. Linear Interpolation check: midpoint between 1.53 and 1.56 at (1.545, 0.003, 1.0)
+    auto p_mid = db.interpolate(1.545, 0.003, 1.0);
+    double expected_mid_ext = 2.0 * (1.0 - std::exp(-0.5)) * (1.545 / 1.53); // midpoint ext
+    assert(std::abs(p_mid.ext_efficiency - expected_mid_ext) < 1e-6);
+
+    // 3. Boundary Clamping check: pass values exceeding grid limits (e.g. n_real = 1.60, size = 15.0)
+    // It must clamp n_real to 1.56, n_imag to 0.008, and size to 10.0 defensively
+    auto p_clamp = db.interpolate(1.60, 0.010, 15.0);
+    auto p_limit = db.interpolate(1.56, 0.008, 10.0);
+    assert(p_clamp.ext_efficiency == p_limit.ext_efficiency);
+    assert(p_clamp.sca_efficiency == p_limit.sca_efficiency);
+    assert(p_clamp.moments[5] == p_limit.moments[5]);
+
+    std::cout << "Dubovik Spheroid Database Trilinear Interpolation & Bounds Clamping: PASS" << std::endl;
+}
+
 int main() {
     exaero::initialize_environment();
     
@@ -491,6 +517,7 @@ int main() {
     test_gocart_yaml_emissions_parsing();
     test_gocart_emissions_mapping();
     test_lut_generator_stub();
+    test_spheroid_database_interpolation();
     test_zero_copy_mapping();
     test_gocart_optics();
     test_optical_precision();
