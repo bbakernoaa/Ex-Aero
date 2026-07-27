@@ -28,6 +28,15 @@ namespace exaero {
         const double* state_ptr, double* ccn_ptr
     );
 
+    void run_gocart_emissions(
+        GocartSolverState* state,
+        int num_cells, int num_levels, int num_raw_species, int num_target_species,
+        int flux_type_code,
+        const double* thick_ptr,
+        const double* raw_emissions_ptr,
+        double* target_emissions_out_ptr
+    );
+
     GocartPackage::GocartPackage() : solver_state_(nullptr) {}
 
     GocartPackage::~GocartPackage() {
@@ -172,10 +181,41 @@ namespace exaero {
         const EnvironmentalStateView& env,
         const EmissionsInputView& emissions_in,
         View3D<double>& emissions_out) {
-        // Stub implementation for compilation isolation
+
         if (!solver_state_) {
             throw std::runtime_error("GocartPackage not initialized");
         }
+
+        int num_cells = emissions_in.flux.extent(0);
+        int num_levels = emissions_in.flux.extent(1);
+        int num_raw_species = emissions_in.flux.extent(2);
+        int num_target_species = emissions_out.extent(2);
+
+        if (num_target_species != num_species_) {
+            throw std::runtime_error("EX-aero State Error: Target emissions array species dimension (" + 
+                                     std::to_string(num_target_species) + 
+                                     ") does not match GOCART initialized species count (" + 
+                                     std::to_string(num_species_) + ")!");
+        }
+
+        if (env.layer_thickness.extent(0) != num_cells || env.layer_thickness.extent(1) != num_levels) {
+            throw std::runtime_error("EX-aero Grid Error: Environmental Layer Thickness dimensions do not match the emissions array spatial grid!");
+        }
+
+        if (emissions_out.extent(0) != num_cells || emissions_out.extent(1) != num_levels) {
+            throw std::runtime_error("EX-aero Grid Error: Output emissions array spatial dimensions do not match the input emissions grid!");
+        }
+
+        const double* thick_ptr = env.layer_thickness.data_handle();
+        const double* raw_emissions_ptr = emissions_in.flux.data_handle();
+        double* target_emissions_out_ptr = emissions_out.data_handle();
+        int flux_type_code = (emissions_in.flux_type == FluxType::AREA_FLUX) ? 1 : 0;
+
+        run_gocart_emissions(
+            solver_state_,
+            num_cells, num_levels, num_raw_species, num_target_species,
+            flux_type_code, thick_ptr, raw_emissions_ptr, target_emissions_out_ptr
+        );
     }
 
     void GocartPackage::computeOptics(

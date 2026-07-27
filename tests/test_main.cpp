@@ -366,11 +366,115 @@ void test_gocart_yaml_emissions_parsing() {
     std::cout << "YAML Emissions Parsing Unit Test: PASS" << std::endl;
 }
 
+void test_gocart_emissions_mapping() {
+    std::string yaml_string = R"(
+    species:
+      - name: "Dust_1"
+        dry_density: 2600.0
+        molecular_weight: 100.0
+        dry_particle_diameter: 0.15e-6
+        hygroscopicity: 0.14
+        lognormal_sigma: 1.5
+        lognormal_dg: 0.15e-6
+        refractive_index_real: 1.53
+        refractive_index_imag: 0.003
+      - name: "Sulfate_1"
+        dry_density: 1800.0
+        molecular_weight: 98.0
+        dry_particle_diameter: 0.20e-6
+        hygroscopicity: 0.50
+        lognormal_sigma: 1.6
+        lognormal_dg: 0.20e-6
+        refractive_index_real: 1.43
+        refractive_index_imag: 1.0e-7
+    emissions_mapping:
+      - raw_name: "CECE_Dust"
+        mappings:
+          - target_species: "Dust_1"
+            mass_split_fraction: 0.40
+      - raw_name: "CECE_Sulfate"
+        mappings:
+          - target_species: "Sulfate_1"
+            mass_split_fraction: 0.60
+            is_modal_mode: true
+            emitted_particle_diameter: 0.25e-6
+            lognormal_sigma: 1.8
+    )";
+
+    exaero::GocartPackage package;
+    package.initialize(yaml_string);
+
+    // Inputs (1 cell, 1 level)
+    double temp_raw[1] = { 298.0 };
+    double pres_raw[1] = { 101325.0 };
+    double dens_raw[1] = { 1.2 };
+    double rh_raw[1] = { 0.50 };
+    double thick_raw[1] = { 50.0 }; // Δz = 50 m
+
+    exaero::View2D<const double> temperature(temp_raw, 1, 1);
+    exaero::View2D<const double> pressure(pres_raw, 1, 1);
+    exaero::View2D<const double> air_density(dens_raw, 1, 1);
+    exaero::View2D<const double> relative_humidity(rh_raw, 1, 1);
+    exaero::View2D<const double> layer_thickness(thick_raw, 1, 1);
+
+    exaero::EnvironmentalStateView env{temperature, pressure, air_density, relative_humidity, layer_thickness};
+
+    // Raw fluxes: 2 CECE species. 
+    // CECE_Dust = 1.0e-4 kg/m²/s (AREA_FLUX)
+    // CECE_Sulfate = 1.0e-4 kg/m³/s (MASS_CONCENTRATION_RATE)
+    double flux_raw[2] = { 1.0e-4, 1.0e-4 };
+    exaero::View3D<const double> flux(flux_raw, 1, 1, 2);
+
+    // Outputs: size (1, 1, 2)
+    double out_raw[2] = { 0.0, 0.0 };
+    exaero::View3D<double> emissions_out(out_raw, 1, 1, 2);
+
+    // 1. Run Area-Flux scaling test (CECE_Dust)
+    exaero::EmissionsInputView em_in_area{flux, exaero::FluxType::AREA_FLUX};
+    package.computeEmissions(env, em_in_area, emissions_out);
+
+    // Expect: (1.0e-4 / 50.0) * 0.40 = 8.0e-7 kg/m³/s
+    double mass_dust_rate = emissions_out(0, 0, 0);
+    assert(std::abs(mass_dust_rate - 8.0e-7) < 1e-12);
+
+    // 2. Run Mass-Concentration-Rate & Modal-Number conversion test (CECE_Sulfate)
+    // Clear outputs and zero out CECE_Dust flux to isolate CECE_Sulfate
+    flux_raw[0] = 0.0;
+    out_raw[0] = 0.0; out_raw[1] = 0.0;
+    exaero::EmissionsInputView em_in_rate{flux, exaero::FluxType::MASS_CONCENTRATION_RATE};
+    package.computeEmissions(env, em_in_rate, emissions_out);
+
+    // Expect: target mass rate = 1.0e-4 * 0.60 = 6.0e-5 kg/m³/s.
+    // Vol factor = (M_PI/6) * 1800 * (0.25e-6)^3 * exp(4.5 * ln^2(1.8)) ≈ 6.97103e-17
+    // Emitted Number rate = 6.0e-5 / 6.97103e-17 ≈ 8.60705e11
+    double mass_sulfate_rate = emissions_out(0, 0, 0); // Dust is 0 because CECE_Sulfate has no mapping to Dust_1
+    double num_sulfate_rate = emissions_out(0, 0, 1);
+    
+    assert(mass_sulfate_rate == 0.0);
+    assert(std::abs(num_sulfate_rate - 8.60705e11) / 8.60705e11 < 1e-6);
+
+    // 3. Boundary Clamping & Crash fuzzer test
+    double nan_flux_raw[2] = { NAN, -5.0 }; // Pass NaN and negatives
+    exaero::View3D<const double> nan_flux(nan_flux_raw, 1, 1, 2);
+    exaero::EmissionsInputView em_nan{nan_flux, exaero::FluxType::AREA_FLUX};
+    out_raw[0] = 1.234; out_raw[1] = 5.678; // non-zero default
+    
+    // Execute fuzzer-condition
+    package.computeEmissions(env, em_nan, emissions_out);
+    
+    // NaNs and negatives must be clamped defensively to 0.0, yielding 0.0 outputs
+    assert(emissions_out(0, 0, 0) == 0.0);
+    assert(emissions_out(0, 0, 1) == 0.0);
+
+    std::cout << "GOCART Parallel GPU Emissions Mapping Solver Tests: PASS" << std::endl;
+}
+
 int main() {
     exaero::initialize_environment();
     
     test_gocart_yaml_parsing();
     test_gocart_yaml_emissions_parsing();
+    test_gocart_emissions_mapping();
     test_zero_copy_mapping();
     test_gocart_optics();
     test_optical_precision();

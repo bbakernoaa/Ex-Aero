@@ -1,32 +1,32 @@
 {
   "schema_version": 2,
   "generated_by": "doc-superpowers",
-  "generated_at": "2026-07-27T14:02:49Z",
-  "build_commit": "1acadf80c425c9217922d7cfb3c08cecb926ce20",
+  "generated_at": "2026-07-27T15:38:03Z",
+  "build_commit": "4555ef6ca08e4ebc692676245b3745add9b9aab8",
   "docs": {
     "docs/index.md": {
-      "content_hash": "sha256:f90839386a16a67726ff8611574adb6478dea8dc690473da0404ae21830138a9",
+      "content_hash": "sha256:503f89e1008271cf8b5ee4d045f4b9d98fcfbc5ddc25db91dc65edced5a12a34",
       "code_refs": [
         "src/"
       ],
-      "code_commit": "1acadf80c425c9217922d7cfb3c08cecb926ce20",
+      "code_commit": "7baa268b6ab20c617e7b6c72475e3b6a85973e61",
       "doc_type": "guide",
       "status": "current",
       "replaces": null,
       "superseded_by": null,
-      "last_verified": "2026-07-27T14:02:38Z"
+      "last_verified": "2026-07-27T15:38:03Z"
     },
     "docs/architecture/system-overview.md": {
-      "content_hash": "sha256:8b0674f08276c3e18f56f43c84f72fca5dea3f8cbf95ff01aca60725927e2cb6",
+      "content_hash": "sha256:88379a41cd2623b0cfe9eecf2aa55f622790863eba15d5bb1156e2ec6b296bbb",
       "code_refs": [
         "src/"
       ],
-      "code_commit": "1acadf80c425c9217922d7cfb3c08cecb926ce20",
+      "code_commit": "7baa268b6ab20c617e7b6c72475e3b6a85973e61",
       "doc_type": "architecture",
       "status": "current",
       "replaces": null,
       "superseded_by": null,
-      "last_verified": "2026-07-27T14:02:38Z"
+      "last_verified": "2026-07-27T15:38:03Z"
     },
     "docs/architecture/components.md": {
       "content_hash": "sha256:3fd669bf9dd43e02bb77c23ee4758edd902c7781f990307ad8bd87855d944ecc",
@@ -34,12 +34,12 @@
         "src/exaero/IAerosolPackage.hpp",
         "src/exaero/MemoryMapper.hpp"
       ],
-      "code_commit": "ab768c3848d7812d957e702530e4483d207e373e",
+      "code_commit": "7baa268b6ab20c617e7b6c72475e3b6a85973e61",
       "doc_type": "architecture",
       "status": "current",
       "replaces": null,
       "superseded_by": null,
-      "last_verified": "2026-07-27T14:02:38Z"
+      "last_verified": "2026-07-27T15:38:03Z"
     },
     "docs/guides/getting-started.md": {
       "content_hash": "sha256:9d73acf84c1d1ae063d93a504efe4bd493907cb5d4843a38a53c71ab16bab65e",
@@ -47,12 +47,12 @@
         "CMakeLists.txt",
         "tests/"
       ],
-      "code_commit": "1acadf80c425c9217922d7cfb3c08cecb926ce20",
+      "code_commit": "7baa268b6ab20c617e7b6c72475e3b6a85973e61",
       "doc_type": "guide",
       "status": "current",
       "replaces": null,
       "superseded_by": null,
-      "last_verified": "2026-07-27T14:02:38Z"
+      "last_verified": "2026-07-27T15:38:03Z"
     },
     "docs/api-contracts.md": {
       "content_hash": "sha256:43270bb522f5cd19710fb99feee0afda2566c910757bb9f38edf1710e594f299",
@@ -66,31 +66,31 @@
       "status": "current",
       "replaces": null,
       "superseded_by": null,
-      "last_verified": "2026-07-27T14:02:38Z"
+      "last_verified": "2026-07-27T15:38:03Z"
     },
     "docs/codebase-guide.md": {
       "content_hash": "sha256:098bd8ff55ee99bd4528454ccc8857cbc5f71ac77b51736eed48298307ab7a13",
       "code_refs": [
         "src/"
       ],
-      "code_commit": "1acadf80c425c9217922d7cfb3c08cecb926ce20",
+      "code_commit": "7baa268b6ab20c617e7b6c72475e3b6a85973e61",
       "doc_type": "reference",
       "status": "current",
       "replaces": null,
       "superseded_by": null,
-      "last_verified": "2026-07-27T14:02:38Z"
+      "last_verified": "2026-07-27T15:38:03Z"
     },
     "docs/conventions.md": {
       "content_hash": "sha256:caa4ef8e895b435f691965e455b18dea5e52f8cbe918073dbdb03dcaa657bd66",
       "code_refs": [
         ".github/copilot-instructions.md"
       ],
-      "code_commit": "bf5478cb2249cf21e9ab9ed0b47fc30c2de359ad",
+      "code_commit": "7baa268b6ab20c617e7b6c72475e3b6a85973e61",
       "doc_type": "reference",
       "status": "current",
       "replaces": null,
       "superseded_by": null,
-      "last_verified": "2026-07-27T14:02:38Z"
+      "last_verified": "2026-07-27T15:38:03Z"
     },
     "docs/ci-cd.md": {
       "content_hash": "sha256:09931fd2e3eae702e5e6c1e230c393c7b7aef5b13643bb1152c9b4fbbb0b9e13",
@@ -102,31 +102,31 @@
       "status": "current",
       "replaces": null,
       "superseded_by": null,
-      "last_verified": "2026-07-27T14:02:38Z"
+      "last_verified": "2026-07-27T15:38:03Z"
     },
     "docs/adr/README.md": {
       "content_hash": "sha256:5fcbff62ced8af86fe33b70e38e99c13cb1dfdb329da09faa1ae748879a8a0c8",
       "code_refs": [
         "docs/adr/"
       ],
-      "code_commit": null,
+      "code_commit": "7baa268b6ab20c617e7b6c72475e3b6a85973e61",
       "doc_type": "adr",
       "status": "current",
       "replaces": null,
       "superseded_by": null,
-      "last_verified": "2026-07-27T14:02:38Z"
+      "last_verified": "2026-07-27T15:38:03Z"
     },
     "docs/adr/template.md": {
       "content_hash": "sha256:a645491b428ea2957f0c56dc6dc3d22fe93bd1d88a6c5e54324dd8c3fd5298ea",
       "code_refs": [
         "docs/adr/"
       ],
-      "code_commit": null,
+      "code_commit": "7baa268b6ab20c617e7b6c72475e3b6a85973e61",
       "doc_type": "adr",
       "status": "current",
       "replaces": null,
       "superseded_by": null,
-      "last_verified": "2026-07-27T14:02:38Z"
+      "last_verified": "2026-07-27T15:38:03Z"
     },
     "docs/adr/ADR-001-compilation-isolation.md": {
       "content_hash": "sha256:677b4199addbaf149e53b3c972ce032ef81a15cb27bfb622a0ab7ea1eb9de743",
@@ -138,7 +138,7 @@
       "status": "current",
       "replaces": null,
       "superseded_by": null,
-      "last_verified": "2026-07-27T14:02:38Z"
+      "last_verified": "2026-07-27T15:38:03Z"
     },
     "docs/adr/ADR-002-zero-copy-interop.md": {
       "content_hash": "sha256:1841fe67fb04280a610931e36343d83e0495a5dbc8a042424cb709179bd6e8d5",
@@ -146,72 +146,96 @@
         "src/exaero/MemoryMapper.hpp",
         "src/exaero/IAerosolPackage.hpp"
       ],
-      "code_commit": "ab768c3848d7812d957e702530e4483d207e373e",
+      "code_commit": "7baa268b6ab20c617e7b6c72475e3b6a85973e61",
       "doc_type": "adr",
       "status": "current",
       "replaces": null,
       "superseded_by": null,
-      "last_verified": "2026-07-27T14:02:38Z"
+      "last_verified": "2026-07-27T15:38:03Z"
     },
     "docs/specs/README.md": {
-      "content_hash": "sha256:1a72fd971d7b9d13be74c3479c7ea93aaaff65d9835b8ffafff5403e906807dd",
+      "content_hash": "sha256:0da89ceb6cdd8a74d232e2fdf0b7fdfa88c26366781fbfea8dab07f8d1feb4fb",
       "code_refs": [
         "docs/specs/"
       ],
-      "code_commit": null,
+      "code_commit": "7baa268b6ab20c617e7b6c72475e3b6a85973e61",
       "doc_type": "spec",
       "status": "current",
       "replaces": null,
       "superseded_by": null,
-      "last_verified": "2026-07-27T14:02:38Z"
+      "last_verified": "2026-07-27T15:38:03Z"
     },
     "docs/specs/template.md": {
       "content_hash": "sha256:a93e36b2ae7002d2afc863942907e1569e50f12918b28882bfd9a208f4bf323c",
       "code_refs": [
         "docs/specs/"
       ],
-      "code_commit": null,
+      "code_commit": "7baa268b6ab20c617e7b6c72475e3b6a85973e61",
       "doc_type": "spec",
       "status": "current",
       "replaces": null,
       "superseded_by": null,
-      "last_verified": "2026-07-27T14:02:38Z"
+      "last_verified": "2026-07-27T15:38:03Z"
     },
     "docs/specs/SPEC-GOCART-001-poc-design.md": {
       "content_hash": "sha256:2b91c7a9f641c1c94e749d012f6f64997b4178555c2e14bbf52c7a9e9fae7543",
       "code_refs": [
         "src/src_impl/gocart/"
       ],
-      "code_commit": "ab768c3848d7812d957e702530e4483d207e373e",
+      "code_commit": "7baa268b6ab20c617e7b6c72475e3b6a85973e61",
       "doc_type": "spec",
       "status": "current",
       "replaces": null,
       "superseded_by": null,
-      "last_verified": "2026-07-27T14:02:38Z"
+      "last_verified": "2026-07-27T15:38:03Z"
     },
     "docs/plans/2026-07-24-exaero-gocart-poc-implementation.md": {
       "content_hash": "sha256:7e28a9e1e3b9d0b23d02a369257419b6c17c09e51c37195b289263e2a94c45ad",
       "code_refs": [
         "src/src_impl/gocart/"
       ],
-      "code_commit": "ab768c3848d7812d957e702530e4483d207e373e",
+      "code_commit": "7baa268b6ab20c617e7b6c72475e3b6a85973e61",
       "doc_type": "plan",
       "status": "current",
       "replaces": null,
       "superseded_by": null,
-      "last_verified": "2026-07-27T14:02:38Z"
+      "last_verified": "2026-07-27T15:38:03Z"
     },
     "docs/Project-Charter.md": {
       "content_hash": "sha256:81350c56a43050eabc295a06e758de70cddfaf37ca7ddf373cd5cce7584c8632",
       "code_refs": [
         "src/"
       ],
-      "code_commit": "1acadf80c425c9217922d7cfb3c08cecb926ce20",
+      "code_commit": "7baa268b6ab20c617e7b6c72475e3b6a85973e61",
       "doc_type": "guide",
       "status": "current",
       "replaces": null,
       "superseded_by": null,
-      "last_verified": "2026-07-27T14:02:49Z"
+      "last_verified": "2026-07-27T15:38:03Z"
+    },
+    "docs/specs/SPEC-EMISSIONS-002-emissions-mapping-engine.md": {
+      "content_hash": "sha256:c99db112c2b1ca08741ec0eb2a947bc1d7e9045ac1a247c780e7862110a45492",
+      "code_refs": [
+        "src/"
+      ],
+      "code_commit": "7baa268b6ab20c617e7b6c72475e3b6a85973e61",
+      "doc_type": "spec",
+      "status": "current",
+      "replaces": null,
+      "superseded_by": null,
+      "last_verified": "2026-07-27T15:38:03Z"
+    },
+    "docs/plans/2026-07-27-emissions-mapping-engine-implementation.md": {
+      "content_hash": "sha256:fb856160a7d82ca6ef3ababd6bd5a8b2e5d63a479b52cf30a03e94cfb6f3e4d3",
+      "code_refs": [
+        "src/src_impl/gocart/"
+      ],
+      "code_commit": "7baa268b6ab20c617e7b6c72475e3b6a85973e61",
+      "doc_type": "plan",
+      "status": "current",
+      "replaces": null,
+      "superseded_by": null,
+      "last_verified": "2026-07-27T15:38:03Z"
     }
   }
 }

@@ -10,6 +10,7 @@ Welcome to the technical specifications registry. All major features, solver imp
 | Spec ID | Name | Status | Summary |
 | :--- | :--- | :--- | :--- |
 | **[SPEC-GOCART-001](SPEC-GOCART-001-poc-design.md)** | GOCART Proof of Concept Design | Approved | Design document detailing dynamic species mapping, memory layout, Kohler wet sizing, and dual-mode optics. |
+| **[SPEC-EMISSIONS-002](SPEC-EMISSIONS-002-emissions-mapping-engine.md)** | EX-aero Emissions Mapping Engine | Approved Draft | Design document specifying 3D grid emissions mapping, unit conversions, and modal mass-to-number conversions. |
 
 ---
 

@@ -484,4 +484,80 @@ namespace exaero {
         Kokkos::fence();
     }
 
+    void run_gocart_emissions(
+        GocartSolverState* state,
+        int num_cells, int num_levels, int num_raw_species, int num_target_species,
+        int flux_type_code,
+        const double* thick_ptr,
+        const double* raw_emissions_ptr,
+        double* target_emissions_out_ptr) {
+
+        using MemSpace = typename Kokkos::DefaultExecutionSpace::memory_space;
+
+        auto d_thick = Kokkos::View<const double**, Kokkos::LayoutLeft, MemSpace, Kokkos::MemoryTraits<Kokkos::Unmanaged>>(
+            thick_ptr, num_cells, num_levels
+        );
+        auto d_raw = Kokkos::View<const double***, Kokkos::LayoutLeft, MemSpace, Kokkos::MemoryTraits<Kokkos::Unmanaged>>(
+            raw_emissions_ptr, num_cells, num_levels, num_raw_species
+        );
+        auto d_out = Kokkos::View<double***, Kokkos::LayoutLeft, MemSpace, Kokkos::MemoryTraits<Kokkos::Unmanaged>>(
+            target_emissions_out_ptr, num_cells, num_levels, num_target_species
+        );
+
+        auto d_species_params = state->d_species_params;
+
+        Kokkos::parallel_for("GocartEmissions_Kernel",
+            Kokkos::MDRangePolicy<Kokkos::Rank<3>>({0, 0, 0}, {num_cells, num_levels, num_target_species}),
+            KOKKOS_LAMBDA(int i_cell, int i_level, int i_spec) {
+                
+                const auto& params = d_species_params(i_spec);
+                const auto& map = params.emissions_mapping;
+                
+                if (!map.is_active || map.raw_cece_index < 0 || map.raw_cece_index >= num_raw_species) {
+                    d_out(i_cell, i_level, i_spec) = 0.0;
+                    return;
+                }
+
+                // 1. Fetch raw flux and clamp negative or NaN values
+                double raw_flux = d_raw(i_cell, i_level, map.raw_cece_index);
+                if (Kokkos::isnan(raw_flux) || !Kokkos::isfinite(raw_flux) || raw_flux < 0.0) {
+                    raw_flux = 0.0;
+                }
+
+                // 2. Perform Unit Scaling (Area Flux -> Volumetric)
+                double vol_mass_flux = 0.0;
+                if (flux_type_code == 1) { // AREA_FLUX
+                    double dz = d_thick(i_cell, i_level);
+                    if (dz > 1e-12) {
+                        vol_mass_flux = raw_flux / dz;
+                    } else {
+                        vol_mass_flux = 0.0; // Avoid division-by-zero on micro layers
+                    }
+                } else { // MASS_CONCENTRATION_RATE
+                    vol_mass_flux = raw_flux;
+                }
+
+                // 3. Apply mass split fraction
+                double final_mass_rate = vol_mass_flux * map.mass_split_fraction;
+
+                // 4. Handle Modal Number Conversion if applicable
+                if (map.is_modal_mode && map.emitted_particle_diameter > 1e-12) {
+                    double ln_sig = Kokkos::log(map.lognormal_sigma);
+                    double vol_factor = (M_PI / 6.0) * params.dry_density * 
+                                        Kokkos::pow(map.emitted_particle_diameter, 3) * 
+                                        Kokkos::exp(4.5 * ln_sig * ln_sig);
+                    
+                    if (vol_factor > 1e-30) {
+                        d_out(i_cell, i_level, i_spec) = final_mass_rate / vol_factor; // Emitted Number concentration
+                    } else {
+                        d_out(i_cell, i_level, i_spec) = 0.0;
+                    }
+                } else {
+                    d_out(i_cell, i_level, i_spec) = final_mass_rate; // Standard mass rate
+                }
+            }
+        );
+        Kokkos::fence();
+    }
+
 } // namespace exaero
