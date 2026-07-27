@@ -28,6 +28,17 @@ Our documentation is structured according to the **Diátaxis framework**, dividi
 
 ---
 
+## 🔓 The Core Innovation: A Generic, Dynamic Aerosol Engine
+
+Traditional climate and weather models (such as default CCPP physics) hardcode aerosol species, size bins, and physical constants directly into their Fortran source files. This forces a rigid model layout that is difficult to extend or modify.
+
+EX-aero represents a fundamental paradigm shift:
+*   **Generic Aerosol Combinations:** Any arbitrary combination of aerosol species, size bins, or physical constants can be loaded at runtime strictly via a YAML configuration file. No recompilation is required to add, remove, or modify bins.
+*   **Dual-Mode Optical Solver:** Supports both high-performance relative humidity lookup tables (Mode B) and analytical Anomalous Diffraction Theory (ADT) Mie scattering computed **on-the-fly** on the GPU (Mode A) for newly combined or custom species where no pre-computed lookup tables exist.
+*   **Dynamic Indexing APIs:** Bypasses compile-time index locking on the host. Host models query the package dynamically (e.g., `exaero_get_species_index(pkg, "Dust_1")`) to route parameters cleanly without hardcoded tracer offsets.
+
+---
+
 ## ⚡ High-Performance & Operational Mission
 
 As a library integrated with the **Unified Forecast System (UFS)** ecosystem and running on massive, multi-tenant clustered High-Performance Computing (HPC) systems (like NOAA's WCOSS), EX-aero is built to meet strict operational SLAs:

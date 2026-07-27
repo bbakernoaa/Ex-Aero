@@ -69,3 +69,9 @@ To eliminate translation overhead, EX-aero aligns C++ memory directly to the nat
 Operating on massive clustered HPC systems means model stability is critical. EX-aero is designed with defensive programming:
 *   **Fuzzer Hardening:** All physical and optical solvers are fuzzed with subnormal numbers, quiet NaNs, and infinities on grid input boundaries.
 *   **Defensive Clamping:** GPU kernels evaluate boundary limits defensively (e.g., clamping relative humidity between `0.0` and `0.99`, enforcing division-by-zero prevention, and clamping negative layer thicknesses), ensuring that mathematical singularities can never trigger segmentation faults or GPU memory page faults.
+
+### Pillar D: Generic, Dynamic Aerosol Engine
+To move away from compile-time-locked physical schemes (such as CCPP's hardcoded default GOCART species bins), EX-aero implements a fully dynamic configuration model:
+*   **YAML Species Registry:** Allows any arbitrary combination of species and size bins to be configured and cached on the GPU at runtime. No library recompilation is required to alter species layouts.
+*   **Dual-Mode Optics (Lookup & Analytical):** Supports traditional 1D relative humidity lookup table interpolation (Mode B) alongside analytical Anomalous Diffraction Theory (ADT) Mie scattering evaluations computed dynamically on the GPU (Mode A) for newly introduced species.
+*   **Dynamic Index Query APIs:** Public query functions (like `getSpeciesIndex`) allow host models to map and reference tracer locations dynamically instead of compile-time offset locking.
