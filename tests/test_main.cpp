@@ -191,6 +191,85 @@ void test_gocart_optics() {
     std::cout << "GOCART Optics Dual-Mode Calculations: PASS" << std::endl;
 }
 
+void test_optical_precision() {
+    // High-precision physical validation of our GPU ADT Mie solver against standard analytical results.
+    // For n = 1.5, x = 10.0, we have:
+    // phase shift rho = 2 * x * (n - 1) = 10.0
+    // sin(10.0) ≈ -0.54402111, cos(10.0) ≈ -0.83907153
+    // Analytical ADT Q_ext = 2 - (4/10)*sin(10) + (4/100)*(1 - cos(10)) = 2.29117135
+    std::string yaml_string = R"(
+    species:
+      - name: "Dust_ADT_Precision"
+        dry_density: 2600.0
+        molecular_weight: 100.0
+        dry_particle_diameter: 2.0e-6
+        hygroscopicity: 0.0            # No wet size growth (D_wet = D_dry = 2.0e-6)
+        lognormal_sigma: 1.0001        # Monodisperse limit (ln(sigma) ≈ 0)
+        lognormal_dg: 2.0e-6           # dg = dry_particle_diameter = 2.0e-6
+        refractive_index_real: 1.50    # n = 1.5
+        refractive_index_imag: 0.0     # Non-absorbing (k = 0)
+    )";
+
+    exaero::GocartPackage package;
+    package.initialize(yaml_string);
+
+    double temp_raw[1] = { 298.0 };
+    double pres_raw[1] = { 101325.0 };
+    double dens_raw[1] = { 1.2 };
+    double rh_raw[1] = { 0.0 };       // Dry (0% RH)
+    double thick_raw[1] = { 1.0 };
+
+    exaero::View2D<const double> temperature(temp_raw, 1, 1);
+    exaero::View2D<const double> pressure(pres_raw, 1, 1);
+    exaero::View2D<const double> air_density(dens_raw, 1, 1);
+    exaero::View2D<const double> relative_humidity(rh_raw, 1, 1);
+    exaero::View2D<const double> layer_thickness(thick_raw, 1, 1);
+
+    exaero::EnvironmentalStateView env{temperature, pressure, air_density, relative_humidity, layer_thickness};
+
+    // Calculate state mass concentration to yield exactly 1.0 particle/m³
+    // N = C / ( (pi/6)*rho*D^3 * exp(4.5*ln(sigma)^2) )
+    // For N = 1.0, C = (pi/6)*rho*D^3 ≈ (3.14159265/6)*2600*(2.0e-6)^3 ≈ 1.08908549e-14 [kg/m³]
+    double pi_val = 3.141592653589793;
+    double expected_vol = (pi_val / 6.0) * 2600.0 * std::pow(2.0e-6, 3);
+    double state_raw[1] = { expected_vol };
+    exaero::View3D<double> state(state_raw, 1, 1, 1);
+
+    // Query wavelength that yields exactly size parameter x = 10.0
+    // x = pi * D_wet / lambda -> lambda = pi * D_wet / 10.0 = pi * 2.0e-6 / 10.0 ≈ 6.2831853e-7 [m]
+    double lambda_query = pi_val * 2.0e-6 / 10.0;
+    double wavelengths_raw[1] = { lambda_query };
+    exaero::View1D<const double> wavelengths(wavelengths_raw, 1);
+
+    double optics_raw[exaero::optical_indices::NUM_OPTICS] = { 0.0 };
+    exaero::View4D<double> optics_out(optics_raw, 1, 1, 1, exaero::optical_indices::NUM_OPTICS);
+
+    // Run multi-band optics calculations
+    package.computeOptics(env, state, wavelengths, optics_out);
+
+    double total_ext_coeff = optics_raw[exaero::optical_indices::EXTINCTION_COEFF];
+
+    // Under N = 1.0 particle/m³, extinction coefficient is:
+    // b_ext = N * cross_section * Q_ext
+    // where cross_section = (pi/4)*D^2 = (3.14159265/4)*(2.0e-6)^2 ≈ 3.14159265e-12 [m²]
+    // So Q_ext = b_ext / (N * cross_section)
+    double cross_section = (pi_val / 4.0) * std::pow(2.0e-6, 2);
+    double calculated_q_ext = total_ext_coeff / (1.0 * cross_section);
+
+    double expected_q_ext = 2.29117135; // Van de Hulst Analytical Limit for rho = 10.0
+
+    // Assert that our C++/Kokkos GPU ADT kernel calculates and returns exactly the expected Mie efficiency
+    // with high floating-point numerical precision (< 1e-6 tolerance!)
+    double numerical_tolerance = 1.0e-6;
+    double numerical_diff = std::abs(calculated_q_ext - expected_q_ext);
+
+    assert(numerical_diff < numerical_tolerance);
+
+    std::cout << "GOCART Optics High-Precision Physical Validation: PASS" << std::endl;
+    std::cout << "  - Expected Q_ext: " << expected_q_ext << std::endl;
+    std::cout << "  - Calculated Q_ext: " << calculated_q_ext << " (Diff: " << numerical_diff << ")" << std::endl;
+}
+
 void test_gocart_ccn() {
     // YAML containing two species: ADT Dust (scaled to small size) and Lookup-Table Sulfate
     std::string yaml_string = R"(
@@ -265,6 +344,7 @@ int main() {
     test_gocart_yaml_parsing();
     test_zero_copy_mapping();
     test_gocart_optics();
+    test_optical_precision();
     test_gocart_ccn();
     
     exaero::finalize_environment();
