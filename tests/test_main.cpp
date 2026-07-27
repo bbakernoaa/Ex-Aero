@@ -329,10 +329,48 @@ void test_gocart_ccn() {
     std::cout << "GOCART Cloud CCN Activation Spectra: PASS" << std::endl;
 }
 
+void test_gocart_yaml_emissions_parsing() {
+    std::string yaml_string = R"(
+    species:
+      - name: "Dust_1"
+        dry_density: 2600.0
+        molecular_weight: 100.0
+        dry_particle_diameter: 0.15e-6
+        hygroscopicity: 0.14
+        lognormal_sigma: 1.5
+        lognormal_dg: 0.15e-6
+        refractive_index_real: 1.53
+        refractive_index_imag: 0.003
+    emissions_mapping:
+      - raw_name: "CECE_Dust"
+        mappings:
+          - target_species: "Dust_1"
+            mass_split_fraction: 0.35
+            is_modal_mode: true
+            emitted_particle_diameter: 0.25e-6
+            lognormal_sigma: 1.8
+    )";
+
+    exaero::GocartPackage package;
+    package.initialize(yaml_string);
+
+    assert(package.get_num_species() == 1);
+    auto p = package.get_species_params(0);
+    assert(p.emissions_mapping.is_active == true);
+    assert(p.emissions_mapping.raw_cece_index == 0);
+    assert(p.emissions_mapping.mass_split_fraction == 0.35);
+    assert(p.emissions_mapping.is_modal_mode == true);
+    assert(p.emissions_mapping.emitted_particle_diameter == 0.25e-6);
+    assert(p.emissions_mapping.lognormal_sigma == 1.8);
+
+    std::cout << "YAML Emissions Parsing Unit Test: PASS" << std::endl;
+}
+
 int main() {
     exaero::initialize_environment();
     
     test_gocart_yaml_parsing();
+    test_gocart_yaml_emissions_parsing();
     test_zero_copy_mapping();
     test_gocart_optics();
     test_optical_precision();

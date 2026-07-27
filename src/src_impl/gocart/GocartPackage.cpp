@@ -85,6 +85,37 @@ namespace exaero {
             h_species_params_.push_back(p);
         }
 
+        // Parse emissions mapping schemas if present (SPEC-EMISSIONS-002)
+        if (config["emissions_mapping"]) {
+            auto mapping_node = config["emissions_mapping"];
+            for (size_t s = 0; s < mapping_node.size(); ++s) {
+                std::string raw_name = mapping_node[s]["raw_name"] ? mapping_node[s]["raw_name"].as<std::string>() : "CECE_Raw_Species";
+                int raw_cece_idx = static_cast<int>(s); // sequentially map indices
+                
+                auto mappings = mapping_node[s]["mappings"];
+                if (mappings) {
+                    for (size_t m = 0; m < mappings.size(); ++m) {
+                        std::string target_spec = mappings[m]["target_species"].as<std::string>();
+                        double frac = mappings[m]["mass_split_fraction"].as<double>();
+                        
+                        int target_idx = getSpeciesIndex(target_spec);
+                        if (target_idx >= 0) {
+                            auto& params = h_species_params_[target_idx];
+                            params.emissions_mapping.is_active = true;
+                            params.emissions_mapping.raw_cece_index = raw_cece_idx;
+                            params.emissions_mapping.mass_split_fraction = frac;
+                            
+                            if (mappings[m]["is_modal_mode"] && mappings[m]["is_modal_mode"].as<bool>()) {
+                                params.emissions_mapping.is_modal_mode = true;
+                                params.emissions_mapping.emitted_particle_diameter = mappings[m]["emitted_particle_diameter"].as<double>();
+                                params.emissions_mapping.lognormal_sigma = mappings[m]["lognormal_sigma"].as<double>();
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
         // Initialize solver state (allocates and uploads parameters to GPU)
         if (solver_state_) {
             free_solver_state(solver_state_);

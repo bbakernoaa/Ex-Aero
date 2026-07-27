@@ -3,6 +3,17 @@
 
 namespace exaero {
 
+struct EmissionsMappingParams {
+  bool is_active = false;
+  int raw_cece_index = -1;
+  double mass_split_fraction = 0.0;
+  
+  // Modal Parameters for Mass-to-Number conversion
+  bool is_modal_mode = false;
+  double emitted_particle_diameter = 1.0;
+  double lognormal_sigma = 1.0;
+};
+
 struct GocartSpeciesParams {
   double dry_density;           // [kg/m³]
   double molecular_weight;      // [g/mol]
@@ -18,6 +29,8 @@ struct GocartSpeciesParams {
   double ext_lookup[8];   // Pre-tabulated mass extinction [m²/g]
   double ssa_lookup[8];   // Pre-tabulated SSA [fraction]
   double asm_lookup[8];   // Pre-tabulated asymmetry [g]
+
+  EmissionsMappingParams emissions_mapping;
 };
 
 } // namespace exaero
