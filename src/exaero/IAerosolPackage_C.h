@@ -12,33 +12,35 @@ extern "C" {
     exaero_package_t exaero_create_gocart_package();
     void exaero_free_package(exaero_package_t pkg);
 
-    // Initializer
-    void exaero_initialize_package(exaero_package_t pkg, const char* config_yaml);
+    // Initializer with CCPP-standard error flags
+    void exaero_initialize_package(exaero_package_t pkg, const char* config_yaml, char* errmsg, int* errflg);
 
-    // Diagnostics calculation wrapper (maps flat C/Fortran pointers into C++20 mdspan views zero-copy)
+    // Diagnostics calculation wrapper with CCPP-standard error flags
     void exaero_compute_diagnostics(
         exaero_package_t pkg,
         int num_cells, int num_levels, int num_species,
         const double* temp_ptr, const double* pres_ptr, const double* dens_ptr, const double* rh_ptr, const double* thick_ptr,
-        const double* state_ptr, double* diags_ptr
+        const double* state_ptr, double* diags_ptr,
+        char* errmsg, int* errflg
     );
 
-    // Optics calculation wrapper (maps flat C/Fortran pointers into C++20 mdspan views zero-copy)
+    // Optics calculation wrapper with CCPP-standard error flags
     void exaero_compute_optics(
         exaero_package_t pkg,
         int num_cells, int num_levels, int num_bands, int num_species,
         const double* wavelengths_ptr,
         const double* temp_ptr, const double* pres_ptr, const double* dens_ptr, const double* rh_ptr, const double* thick_ptr,
-        const double* state_ptr, double* optics_ptr
+        const double* state_ptr, double* optics_ptr,
+        char* errmsg, int* errflg
     );
 
-    // Cloud CCN Activation calculation wrapper (maps flat C/Fortran pointers into C++20 mdspan views zero-copy)
+    // Cloud CCN Activation calculation wrapper with CCPP-standard error flags
     void exaero_compute_ccn(
         exaero_package_t pkg,
         int num_cells, int num_levels, int num_ss, int num_species,
         const double* ss_ptr,
-        const double* temp_ptr, const double* pres_ptr, const double* dens_ptr, const double* rh_ptr, const double* thick_ptr,
-        const double* state_ptr, double* ccn_ptr
+        const double* temp_ptr, const double* rh_ptr, const double* state_ptr, double* ccn_ptr,
+        char* errmsg, int* errflg
     );
 
     // Dynamic Species-to-Index mapping query wrappers (Hole 4)
