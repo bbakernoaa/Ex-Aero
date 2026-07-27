@@ -11,14 +11,15 @@ namespace exaero {
     template <typename T>
     using View1D = exaero_mdspan::mdspan<T, exaero_mdspan::extents<size_t, std::dynamic_extent>>;
 
+    // Transition 2D, 3D, and 4D layouts to column-major (layout_left) for zero-copy Fortran/CCPP memory alignments
     template <typename T>
-    using View2D = exaero_mdspan::mdspan<T, exaero_mdspan::extents<size_t, std::dynamic_extent, std::dynamic_extent>>;
+    using View2D = exaero_mdspan::mdspan<T, exaero_mdspan::extents<size_t, std::dynamic_extent, std::dynamic_extent>, exaero_mdspan::layout_left>;
 
     template <typename T>
-    using View3D = exaero_mdspan::mdspan<T, exaero_mdspan::extents<size_t, std::dynamic_extent, std::dynamic_extent, std::dynamic_extent>>;
+    using View3D = exaero_mdspan::mdspan<T, exaero_mdspan::extents<size_t, std::dynamic_extent, std::dynamic_extent, std::dynamic_extent>, exaero_mdspan::layout_left>;
 
     template <typename T>
-    using View4D = exaero_mdspan::mdspan<T, exaero_mdspan::extents<size_t, std::dynamic_extent, std::dynamic_extent, std::dynamic_extent, std::dynamic_extent>>;
+    using View4D = exaero_mdspan::mdspan<T, exaero_mdspan::extents<size_t, std::dynamic_extent, std::dynamic_extent, std::dynamic_extent, std::dynamic_extent>, exaero_mdspan::layout_left>;
 
     struct EnvironmentalStateView {
         View2D<const double> temperature;       // [K] (cell, level)
@@ -60,6 +61,10 @@ namespace exaero {
             const View3D<const double>& state,
             const View1D<const double>& supersaturations, // [fraction 0-1] queried supersaturations (S_index)
             View4D<double>& ccn_out) = 0;                 // (cell, level, S_index, activated_ccn_number_concentration)
+
+        // Dynamic Species-to-Index mapping query APIs to avoid hardcoding on the host side
+        virtual int getSpeciesIndex(const std::string& name) const = 0;
+        virtual std::string getSpeciesName(int index) const = 0;
     };
 
 } // namespace exaero

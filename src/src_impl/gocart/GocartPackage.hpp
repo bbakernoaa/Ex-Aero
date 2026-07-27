@@ -2,6 +2,7 @@
 #include <exaero/IAerosolPackage.hpp>
 #include <gocart/GocartSpeciesParams.hpp>
 #include <vector>
+#include <string>
 
 namespace exaero {
 
@@ -11,6 +12,7 @@ namespace exaero {
     private:
         int num_species_ = 0;
         std::vector<GocartSpeciesParams> h_species_params_;
+        std::vector<std::string> species_names_; // Stores parsed YAML species names dynamically
         GocartSolverState* solver_state_ = nullptr;
 
     public:
@@ -40,6 +42,10 @@ namespace exaero {
             const View3D<const double>& state,
             const View1D<const double>& supersaturations,
             View4D<double>& ccn_out) override;
+
+        // Dynamic Species-to-Index mapping query APIs
+        int getSpeciesIndex(const std::string& name) const override;
+        std::string getSpeciesName(int index) const override;
 
         // Accessors for testing
         int get_num_species() const { return num_species_; }

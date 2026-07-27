@@ -62,14 +62,14 @@ void run_property_based_tests(exaero::GocartPackage& package) {
 
         // Mass Conservation: Column Mass must equal concentration * thickness
         double expected_col_mass = (state_raw[0] + state_raw[1]) * thickness;
-        assert(std::abs(diags_raw[exaero::diagnostic_indices::COLUMN_MASS] - expected_col_mass) / expected_col_mass < 1e-12);
+        assert(std::abs(diagnostics_out(0, 0, exaero::diagnostic_indices::COLUMN_MASS) - expected_col_mass) / expected_col_mass < 1e-12);
         
         // Mass non-negativity
-        assert(diags_raw[exaero::diagnostic_indices::PM2_5_CONCENTRATION] >= 0.0);
-        assert(diags_raw[exaero::diagnostic_indices::NUMBER_CONCENTRATION] >= 0.0);
-        assert(diags_raw[exaero::diagnostic_indices::SURFACE_AREA_DENSITY] >= 0.0);
-        assert(diags_raw[exaero::diagnostic_indices::AEROSOL_LIQUID_WATER] >= 0.0);
-        assert(diags_raw[exaero::diagnostic_indices::GRAVITATIONAL_SETTLING_VELOCITY] >= 0.0);
+        assert(diagnostics_out(0, 0, exaero::diagnostic_indices::PM2_5_CONCENTRATION) >= 0.0);
+        assert(diagnostics_out(0, 0, exaero::diagnostic_indices::NUMBER_CONCENTRATION) >= 0.0);
+        assert(diagnostics_out(0, 0, exaero::diagnostic_indices::SURFACE_AREA_DENSITY) >= 0.0);
+        assert(diagnostics_out(0, 0, exaero::diagnostic_indices::AEROSOL_LIQUID_WATER) >= 0.0);
+        assert(diagnostics_out(0, 0, exaero::diagnostic_indices::GRAVITATIONAL_SETTLING_VELOCITY) >= 0.0);
 
         // 2. Optical Property checks
         double wavelengths_raw[2] = { 550e-9, 870e-9 };
@@ -81,13 +81,9 @@ void run_property_based_tests(exaero::GocartPackage& package) {
         package.computeOptics(env, state, wavelengths, optics_out);
 
         for (int band = 0; band < 2; ++band) {
-            int ext_idx = band * exaero::optical_indices::NUM_OPTICS + exaero::optical_indices::EXTINCTION_COEFF;
-            int sca_idx = band * exaero::optical_indices::NUM_OPTICS + exaero::optical_indices::SCATTERING_COEFF;
-            int asm_idx = band * exaero::optical_indices::NUM_OPTICS + exaero::optical_indices::ASYMMETRY_FACTOR;
-
-            double extinction = optics_raw[ext_idx];
-            double scattering = optics_raw[sca_idx];
-            double asymmetry = optics_raw[asm_idx];
+            double extinction = optics_out(0, 0, band, exaero::optical_indices::EXTINCTION_COEFF);
+            double scattering = optics_out(0, 0, band, exaero::optical_indices::SCATTERING_COEFF);
+            double asymmetry = optics_out(0, 0, band, exaero::optical_indices::ASYMMETRY_FACTOR);
 
             assert(extinction >= 0.0);
             assert(scattering >= 0.0);
@@ -107,8 +103,8 @@ void run_property_based_tests(exaero::GocartPackage& package) {
         package.computeCCN(env, state, supersaturations, ccn_out);
 
         // Monotonicity: higher supersaturations must activate larger or equal droplet counts
-        assert(ccn_raw[2] >= ccn_raw[1]);
-        assert(ccn_raw[1] >= ccn_raw[0]);
+        assert(ccn_out(0, 0, 2, 0) >= ccn_out(0, 0, 1, 0));
+        assert(ccn_out(0, 0, 1, 0) >= ccn_out(0, 0, 0, 0));
     }
     std::cout << "Property-Based Invariants (1000 Trials): PASS" << std::endl;
 }
@@ -175,6 +171,63 @@ void run_fuzz_tests(exaero::GocartPackage& package) {
     std::cout << "Fuzz/Crash Resilience Boundary Testing: PASS" << std::endl;
 }
 
+void test_dynamic_queries(exaero::GocartPackage& package) {
+    // Dynamically query mapping indices to names (Hole 4)
+    int dust_idx = package.getSpeciesIndex("Dust_ADT");
+    int sulf_idx = package.getSpeciesIndex("Sulfate_Lookup");
+    int fake_idx = package.getSpeciesIndex("FakeSpecies");
+
+    assert(dust_idx == 0);
+    assert(sulf_idx == 1);
+    assert(fake_idx == -1); // Not found
+
+    std::string name_0 = package.getSpeciesName(0);
+    std::string name_1 = package.getSpeciesName(1);
+
+    assert(name_0 == "Dust_ADT");
+    assert(name_1 == "Sulfate_Lookup");
+
+    // Test dynamic out of bounds index throws cleanly
+    bool threw = false;
+    try {
+        package.getSpeciesName(99);
+    } catch (const std::out_of_range&) {
+        threw = true;
+    }
+    assert(threw);
+
+    // Test defensive boundary checks throw cleanly when malformed layouts are passed (Hole 2)
+    double temp_raw[1] = { 298.0 };
+    double pres_raw[1] = { 101325.0 };
+    double dens_raw[1] = { 1.2 };
+    double rh_raw[1] = { 0.5 };
+    double thick_raw[1] = { 100.0 };
+
+    exaero::View2D<const double> temperature(temp_raw, 1, 1);
+    exaero::View2D<const double> pressure(pres_raw, 1, 1);
+    exaero::View2D<const double> air_density(dens_raw, 1, 1);
+    exaero::View2D<const double> relative_humidity(rh_raw, 1, 1);
+    exaero::View2D<const double> layer_thickness(thick_raw, 1, 1);
+    exaero::EnvironmentalStateView env{temperature, pressure, air_density, relative_humidity, layer_thickness};
+
+    // Pass invalid state array size of 3 species (mismatch!)
+    double bad_state_raw[3] = { 1e-6, 1e-6, 1e-6 };
+    exaero::View3D<double> bad_state(bad_state_raw, 1, 1, 3);
+
+    double diags_raw[exaero::diagnostic_indices::NUM_DIAGNOSTICS] = { 0.0 };
+    exaero::View3D<double> diagnostics_out(diags_raw, 1, 1, exaero::diagnostic_indices::NUM_DIAGNOSTICS);
+
+    bool check_threw = false;
+    try {
+        package.computeDerivedDiagnostics(env, bad_state, diagnostics_out);
+    } catch (const std::runtime_error& e) {
+        check_threw = true;
+    }
+    assert(check_threw);
+
+    std::cout << "Dynamic Metadata Queries & Boundary Protections: PASS" << std::endl;
+}
+
 int main() {
     exaero::initialize_environment();
     {
@@ -211,6 +264,7 @@ int main() {
         verify_sizing_property(package);
         run_property_based_tests(package);
         run_fuzz_tests(package);
+        test_dynamic_queries(package);
     }
     exaero::finalize_environment();
     return 0;

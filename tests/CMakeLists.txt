@@ -13,3 +13,11 @@ target_include_directories(exaero_fuzz_test PRIVATE
 )
 target_link_libraries(exaero_fuzz_test PRIVATE exaero Kokkos::kokkos)
 add_test(NAME ExaeroFuzzTests COMMAND exaero_fuzz_test)
+
+# Fortran C-Interoperability Integration Test
+add_executable(exaero_fortran_test test_fortran_interface.f90)
+target_include_directories(exaero_fortran_test PRIVATE
+    ${CMAKE_BINARY_DIR}/src
+)
+target_link_libraries(exaero_fortran_test PRIVATE exaero)
+add_test(NAME ExaeroFortranTest COMMAND exaero_fortran_test)

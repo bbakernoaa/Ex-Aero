@@ -75,21 +75,21 @@ void test_zero_copy_mapping() {
     // Run diagnostic calculation step (maps raw pointers to unmanaged views zero-copy)
     package.computeDerivedDiagnostics(env, state, diagnostics_out);
 
-    // Verify 3D diagnostics
-    assert(diags_raw[exaero::diagnostic_indices::MASS_CONCENTRATION] == 1.0e-6);
-    assert(diags_raw[exaero::diagnostic_indices::PM2_5_CONCENTRATION] == 1.0e-6); // 2.0e-6 dry size is <= 2.5e-6
-    assert(diags_raw[exaero::diagnostic_indices::PM10_CONCENTRATION] == 1.0e-6);
-    assert(diags_raw[exaero::diagnostic_indices::NUMBER_CONCENTRATION] > 0.0);
-    assert(diags_raw[exaero::diagnostic_indices::SURFACE_AREA_DENSITY] > 0.0);
-    assert(diags_raw[exaero::diagnostic_indices::AEROSOL_LIQUID_WATER] > 0.0); // Absorbed ALW
-    assert(diags_raw[exaero::diagnostic_indices::GRAVITATIONAL_SETTLING_VELOCITY] > 0.0); // vg fall velocity
+    // Verify 3D diagnostics using dynamic mdspan bracket accessors
+    assert(diagnostics_out(0, 0, exaero::diagnostic_indices::MASS_CONCENTRATION) == 1.0e-6);
+    assert(diagnostics_out(0, 0, exaero::diagnostic_indices::PM2_5_CONCENTRATION) == 1.0e-6); // 2.0e-6 dry size is <= 2.5e-6
+    assert(diagnostics_out(0, 0, exaero::diagnostic_indices::PM10_CONCENTRATION) == 1.0e-6);
+    assert(diagnostics_out(0, 0, exaero::diagnostic_indices::NUMBER_CONCENTRATION) > 0.0);
+    assert(diagnostics_out(0, 0, exaero::diagnostic_indices::SURFACE_AREA_DENSITY) > 0.0);
+    assert(diagnostics_out(0, 0, exaero::diagnostic_indices::AEROSOL_LIQUID_WATER) > 0.0); // Absorbed ALW
+    assert(diagnostics_out(0, 0, exaero::diagnostic_indices::GRAVITATIONAL_SETTLING_VELOCITY) > 0.0); // vg fall velocity
 
     // Verify 2D Column Mass and Surface Mass diagnostics
     double expected_col_mass = state_raw[0] * thick_raw[0]; // 1.0e-6 kg/m³ * 100 m = 1.0e-4 kg/m²
-    assert(std::abs(diags_raw[exaero::diagnostic_indices::COLUMN_MASS] - expected_col_mass) < 1e-12);
-    assert(diags_raw[exaero::diagnostic_indices::SURFACE_MASS] == 1.0e-6);
-    assert(diags_raw[exaero::diagnostic_indices::SURFACE_PM2_5_MASS] == 1.0e-6);
-    assert(std::abs(diags_raw[exaero::diagnostic_indices::COLUMN_PM2_5_MASS] - expected_col_mass) < 1e-12);
+    assert(std::abs(diagnostics_out(0, 0, exaero::diagnostic_indices::COLUMN_MASS) - expected_col_mass) < 1e-12);
+    assert(diagnostics_out(0, 0, exaero::diagnostic_indices::SURFACE_MASS) == 1.0e-6);
+    assert(diagnostics_out(0, 0, exaero::diagnostic_indices::SURFACE_PM2_5_MASS) == 1.0e-6);
+    assert(std::abs(diagnostics_out(0, 0, exaero::diagnostic_indices::COLUMN_PM2_5_MASS) - expected_col_mass) < 1e-12);
 
     std::cout << "Memory Mapping Zero-Copy Integration Test: PASS" << std::endl;
 }
@@ -155,15 +155,6 @@ void test_gocart_optics() {
     // Run multi-band optics calculations
     package.computeOptics(env, state, wavelengths, optics_out);
 
-    // Helper lambda to index 4D optics outputs: (cell, level, band, optics)
-    auto get_optics_val = [&](int i_cell, int i_level, int i_band, int i_opt) {
-        int idx = i_cell * (1 * 2 * exaero::optical_indices::NUM_OPTICS) +
-                  i_level * (2 * exaero::optical_indices::NUM_OPTICS) +
-                  i_band * (exaero::optical_indices::NUM_OPTICS) +
-                  i_opt;
-        return optics_raw[idx];
-    };
-
     // ---- Mode B: RH Lookup Table Verification ----
     // rh_bins[2] = 0.7 (ext = 5.0), rh_bins[3] = 0.8 (ext = 6.5)
     // At RH = 75% (exactly midway), expected Sulfate MEE = 5.75 m²/g.
@@ -173,17 +164,17 @@ void test_gocart_optics() {
     // ---- Mode A: ADT Size Parameter Wavelength Scaling Verification ----
     // Longer wavelength (870 nm) has a smaller size parameter x = pi*D_wet/lambda
     // and therefore a smaller extinction coefficient than shorter wavelength (550 nm).
-    double ext_550 = get_optics_val(0, 0, 0, exaero::optical_indices::EXTINCTION_COEFF);
-    double ext_870 = get_optics_val(0, 0, 1, exaero::optical_indices::EXTINCTION_COEFF);
+    double ext_550 = optics_out(0, 0, 0, exaero::optical_indices::EXTINCTION_COEFF);
+    double ext_870 = optics_out(0, 0, 1, exaero::optical_indices::EXTINCTION_COEFF);
 
     assert(ext_550 > expected_sulfate_ext); // Total visible includes ADT Dust + Lookup Sulfate
     assert(ext_870 > 0.0);
     assert(ext_550 > ext_870); // Shorter wavelength has physically larger extinction!
-    assert(get_optics_val(0, 0, 0, exaero::optical_indices::LIDAR_BACKSCATTER) > 0.0); // Lidar backscatter populated!
+    assert(optics_out(0, 0, 0, exaero::optical_indices::LIDAR_BACKSCATTER) > 0.0); // Lidar backscatter populated!
 
     // Verify 2D Column AOT calculations
-    double aot_550 = get_optics_val(0, 0, 0, exaero::optical_indices::EXTINCTION_AOT);
-    double aot_870 = get_optics_val(0, 0, 1, exaero::optical_indices::EXTINCTION_AOT);
+    double aot_550 = optics_out(0, 0, 0, exaero::optical_indices::EXTINCTION_AOT);
+    double aot_870 = optics_out(0, 0, 1, exaero::optical_indices::EXTINCTION_AOT);
     assert(aot_550 > 0.0);
     assert(aot_870 > 0.0);
     assert(aot_550 > aot_870); // Total visible AOT is physically larger than NIR AOT
@@ -247,7 +238,7 @@ void test_optical_precision() {
     // Run multi-band optics calculations
     package.computeOptics(env, state, wavelengths, optics_out);
 
-    double total_ext_coeff = optics_raw[exaero::optical_indices::EXTINCTION_COEFF];
+    double total_ext_coeff = optics_out(0, 0, 0, exaero::optical_indices::EXTINCTION_COEFF);
 
     // Under N = 1.0 particle/m³, extinction coefficient is:
     // b_ext = N * cross_section * Q_ext
@@ -326,9 +317,9 @@ void test_gocart_ccn() {
     // Run multi-supersaturation CCN activation solver
     package.computeCCN(env, state, supersaturations, ccn_out);
 
-    double ccn_05ss = ccn_raw[0]; // Activated particles/m3 at 0.05% SS
-    double ccn_10ss = ccn_raw[1]; // Activated particles/m3 at 0.1% SS
-    double ccn_50ss = ccn_raw[2]; // Activated particles/m3 at 0.5% SS
+    double ccn_05ss = ccn_out(0, 0, 0, 0); // Activated particles/m3 at 0.05% SS
+    double ccn_10ss = ccn_out(0, 0, 1, 0); // Activated particles/m3 at 0.1% SS
+    double ccn_50ss = ccn_out(0, 0, 2, 0); // Activated particles/m3 at 0.5% SS
 
     // Verify physical activation spectrum monotonicity:
     // Higher supersaturation must activate larger or equal number concentrations!

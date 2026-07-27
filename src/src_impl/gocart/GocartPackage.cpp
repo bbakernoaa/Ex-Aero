@@ -47,11 +47,17 @@ namespace exaero {
 
         h_species_params_.clear();
         h_species_params_.reserve(num_species_);
+        species_names_.clear();
+        species_names_.reserve(num_species_);
 
         for (int i = 0; i < num_species_; ++i) {
             auto s = species_node[i];
             bool has_lookup = s["has_optics_lookup"] && s["has_optics_lookup"].as<bool>();
             
+            // Extract the dynamic species name
+            std::string name = s["name"] ? s["name"].as<std::string>() : ("Species_" + std::to_string(i));
+            species_names_.push_back(name);
+
             GocartSpeciesParams p{
                 s["dry_density"].as<double>(),
                 s["molecular_weight"].as<double>(),
@@ -102,9 +108,21 @@ namespace exaero {
             throw std::runtime_error("GocartPackage not initialized");
         }
 
-        // Extract raw data pointers and sizes from the dynamic C++20 mdspan views
+        // --- Defensive Dimension Verification Checks (Hole 2) ---
         int num_cells = state.extent(0);
         int num_levels = state.extent(1);
+        int num_species = state.extent(2);
+
+        if (num_species != num_species_) {
+            throw std::runtime_error("EX-aero State Error: State array species dimension (" + 
+                                     std::to_string(num_species) + 
+                                     ") does not match GOCART initialized species count (" + 
+                                     std::to_string(num_species_) + ")!");
+        }
+        if (env.relative_humidity.extent(0) != state.extent(0) || 
+            env.relative_humidity.extent(1) != state.extent(1)) {
+            throw std::runtime_error("EX-aero Grid Error: Environmental Relative Humidity dimensions do not match the state array spatial grid!");
+        }
 
         const double* rh_ptr = env.relative_humidity.data_handle();
         const double* thick_ptr = env.layer_thickness.data_handle();
@@ -129,9 +147,22 @@ namespace exaero {
             throw std::runtime_error("GocartPackage not initialized");
         }
 
+        // --- Defensive Dimension Verification Checks (Hole 2) ---
         int num_cells = state.extent(0);
         int num_levels = state.extent(1);
+        int num_species = state.extent(2);
         int num_bands = wavelengths.extent(0);
+
+        if (num_species != num_species_) {
+            throw std::runtime_error("EX-aero State Error: State array species dimension (" + 
+                                     std::to_string(num_species) + 
+                                     ") does not match GOCART initialized species count (" + 
+                                     std::to_string(num_species_) + ")!");
+        }
+        if (env.relative_humidity.extent(0) != state.extent(0) || 
+            env.relative_humidity.extent(1) != state.extent(1)) {
+            throw std::runtime_error("EX-aero Grid Error: Environmental Relative Humidity dimensions do not match the state array spatial grid!");
+        }
 
         const double* wavelengths_ptr = wavelengths.data_handle();
         const double* rh_ptr = env.relative_humidity.data_handle();
@@ -157,9 +188,22 @@ namespace exaero {
             throw std::runtime_error("GocartPackage not initialized");
         }
 
+        // --- Defensive Dimension Verification Checks (Hole 2) ---
         int num_cells = state.extent(0);
         int num_levels = state.extent(1);
+        int num_species = state.extent(2);
         int num_ss = supersaturations.extent(0);
+
+        if (num_species != num_species_) {
+            throw std::runtime_error("EX-aero State Error: State array species dimension (" + 
+                                     std::to_string(num_species) + 
+                                     ") does not match GOCART initialized species count (" + 
+                                     std::to_string(num_species_) + ")!");
+        }
+        if (env.relative_humidity.extent(0) != state.extent(0) || 
+            env.relative_humidity.extent(1) != state.extent(1)) {
+            throw std::runtime_error("EX-aero Grid Error: Environmental Relative Humidity dimensions do not match the state array spatial grid!");
+        }
 
         const double* ss_ptr = supersaturations.data_handle();
         const double* temp_ptr = env.temperature.data_handle();
@@ -173,6 +217,23 @@ namespace exaero {
             num_cells, num_levels, num_ss, num_species_,
             ss_ptr, temp_ptr, rh_ptr, state_ptr, ccn_ptr
         );
+    }
+
+    // --- Dynamic Species-to-Index Queries (Hole 4) ---
+    int GocartPackage::getSpeciesIndex(const std::string& name) const {
+        for (int i = 0; i < num_species_; ++i) {
+            if (species_names_[i] == name) {
+                return i;
+            }
+        }
+        return -1; // Not found
+    }
+
+    std::string GocartPackage::getSpeciesName(int index) const {
+        if (index < 0 || index >= num_species_) {
+            throw std::out_of_range("EX-aero Error: Species index (" + std::to_string(index) + ") out of bounds!");
+        }
+        return species_names_[index];
     }
 
 } // namespace exaero

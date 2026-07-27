@@ -57,17 +57,17 @@ namespace exaero {
 
         using MemSpace = typename Kokkos::DefaultExecutionSpace::memory_space;
 
-        // Wrap incoming raw pointers into unmanaged Default Execution Space memory Views (zero copy!)
-        auto d_rh = Kokkos::View<const double**, Kokkos::LayoutRight, MemSpace, Kokkos::MemoryTraits<Kokkos::Unmanaged>>(
+        // Wrap incoming raw pointers into unmanaged Default Execution Space column-major (LayoutLeft) memory Views (zero copy!)
+        auto d_rh = Kokkos::View<const double**, Kokkos::LayoutLeft, MemSpace, Kokkos::MemoryTraits<Kokkos::Unmanaged>>(
             rh_ptr, num_cells, num_levels
         );
-        auto d_thick = Kokkos::View<const double**, Kokkos::LayoutRight, MemSpace, Kokkos::MemoryTraits<Kokkos::Unmanaged>>(
+        auto d_thick = Kokkos::View<const double**, Kokkos::LayoutLeft, MemSpace, Kokkos::MemoryTraits<Kokkos::Unmanaged>>(
             thick_ptr, num_cells, num_levels
         );
-        auto d_state = Kokkos::View<const double***, Kokkos::LayoutRight, MemSpace, Kokkos::MemoryTraits<Kokkos::Unmanaged>>(
+        auto d_state = Kokkos::View<const double***, Kokkos::LayoutLeft, MemSpace, Kokkos::MemoryTraits<Kokkos::Unmanaged>>(
             state_ptr, num_cells, num_levels, num_species
         );
-        auto d_diags = Kokkos::View<double***, Kokkos::LayoutRight, MemSpace, Kokkos::MemoryTraits<Kokkos::Unmanaged>>(
+        auto d_diags = Kokkos::View<double***, Kokkos::LayoutLeft, MemSpace, Kokkos::MemoryTraits<Kokkos::Unmanaged>>(
             diags_ptr, num_cells, num_levels, diagnostic_indices::NUM_DIAGNOSTICS
         );
 
@@ -206,20 +206,20 @@ namespace exaero {
 
         using MemSpace = typename Kokkos::DefaultExecutionSpace::memory_space;
 
-        // Wrap raw pointers directly to unmanaged default space Kokkos views (zero copy!)
-        auto d_wavelengths = Kokkos::View<const double*, Kokkos::LayoutRight, MemSpace, Kokkos::MemoryTraits<Kokkos::Unmanaged>>(
+        // Wrap raw pointers directly into unmanaged column-major (LayoutLeft) default space Kokkos views (zero copy!)
+        auto d_wavelengths = Kokkos::View<const double*, Kokkos::LayoutLeft, MemSpace, Kokkos::MemoryTraits<Kokkos::Unmanaged>>(
             wavelengths_ptr, num_bands
         );
-        auto d_rh = Kokkos::View<const double**, Kokkos::LayoutRight, MemSpace, Kokkos::MemoryTraits<Kokkos::Unmanaged>>(
+        auto d_rh = Kokkos::View<const double**, Kokkos::LayoutLeft, MemSpace, Kokkos::MemoryTraits<Kokkos::Unmanaged>>(
             rh_ptr, num_cells, num_levels
         );
-        auto d_thick = Kokkos::View<const double**, Kokkos::LayoutRight, MemSpace, Kokkos::MemoryTraits<Kokkos::Unmanaged>>(
+        auto d_thick = Kokkos::View<const double**, Kokkos::LayoutLeft, MemSpace, Kokkos::MemoryTraits<Kokkos::Unmanaged>>(
             thick_ptr, num_cells, num_levels
         );
-        auto d_state = Kokkos::View<const double***, Kokkos::LayoutRight, MemSpace, Kokkos::MemoryTraits<Kokkos::Unmanaged>>(
+        auto d_state = Kokkos::View<const double***, Kokkos::LayoutLeft, MemSpace, Kokkos::MemoryTraits<Kokkos::Unmanaged>>(
             state_ptr, num_cells, num_levels, num_species
         );
-        auto d_optics = Kokkos::View<double****, Kokkos::LayoutRight, MemSpace, Kokkos::MemoryTraits<Kokkos::Unmanaged>>(
+        auto d_optics = Kokkos::View<double****, Kokkos::LayoutLeft, MemSpace, Kokkos::MemoryTraits<Kokkos::Unmanaged>>(
             optics_ptr, num_cells, num_levels, num_bands, optical_indices::NUM_OPTICS
         );
 
@@ -280,7 +280,14 @@ namespace exaero {
                         rho = Kokkos::max(rho, 1e-12); // prevent division by zero
 
                         // 4. Extinction efficiency Q_ext (Anomalous Diffraction Theory)
-                        double q_ext = 2.0 - (4.0 / rho) * Kokkos::sin(rho) + (4.0 / (rho * rho)) * (1.0 - Kokkos::cos(rho));
+                        double q_ext = 0.0;
+                        if (rho < 0.01) {
+                            // --- stable Taylor series expansion to eliminate small-particle floating-point cancellation (Hole 3) ---
+                            q_ext = 0.5 * rho * rho - (4.0 / 45.0) * Kokkos::pow(rho, 4) + (1.0 / 72.0) * Kokkos::pow(rho, 6);
+                        } else {
+                            // --- Standard ADT formula ---
+                            q_ext = 2.0 - (4.0 / rho) * Kokkos::sin(rho) + (4.0 / (rho * rho)) * (1.0 - Kokkos::cos(rho));
+                        }
 
                         // 5. Scattering efficiency Q_sca (scaled based on imaginary index absorption)
                         double q_sca = q_ext * Kokkos::exp(-2.0 * x * params.refractive_index_imag);
@@ -363,7 +370,16 @@ namespace exaero {
                                                   Kokkos::pow(1.0 + params.hygroscopicity * (current_rh / (1.0 - current_rh)), 1.0/3.0);
                             double x = (M_PI * wet_diameter) / wavelength;
                             double rho = Kokkos::max(2.0 * x * (params.refractive_index_real - 1.0), 1e-12);
-                            double q_ext = 2.0 - (4.0 / rho) * Kokkos::sin(rho) + (4.0 / (rho * rho)) * (1.0 - Kokkos::cos(rho));
+                            
+                            double q_ext = 0.0;
+                            if (rho < 0.01) {
+                                // --- stable Taylor series expansion to eliminate small-particle floating-point cancellation (Hole 3) ---
+                                q_ext = 0.5 * rho * rho - (4.0 / 45.0) * Kokkos::pow(rho, 4) + (1.0 / 72.0) * Kokkos::pow(rho, 6);
+                            } else {
+                                // --- Standard ADT formula ---
+                                q_ext = 2.0 - (4.0 / rho) * Kokkos::sin(rho) + (4.0 / (rho * rho)) * (1.0 - Kokkos::cos(rho));
+                            }
+
                             double q_sca = q_ext * Kokkos::exp(-2.0 * x * params.refractive_index_imag);
                             double ln_sig = Kokkos::log(params.lognormal_sigma);
                             double vol_factor = (M_PI / 6.0) * params.dry_density * Kokkos::pow(params.lognormal_dg, 3) * Kokkos::exp(4.5 * ln_sig * ln_sig);
@@ -410,19 +426,19 @@ namespace exaero {
 
         using MemSpace = typename Kokkos::DefaultExecutionSpace::memory_space;
 
-        auto d_ss = Kokkos::View<const double*, Kokkos::LayoutRight, MemSpace, Kokkos::MemoryTraits<Kokkos::Unmanaged>>(
+        auto d_ss = Kokkos::View<const double*, Kokkos::LayoutLeft, MemSpace, Kokkos::MemoryTraits<Kokkos::Unmanaged>>(
             ss_ptr, num_ss
         );
-        auto d_temp = Kokkos::View<const double**, Kokkos::LayoutRight, MemSpace, Kokkos::MemoryTraits<Kokkos::Unmanaged>>(
+        auto d_temp = Kokkos::View<const double**, Kokkos::LayoutLeft, MemSpace, Kokkos::MemoryTraits<Kokkos::Unmanaged>>(
             temp_ptr, num_cells, num_levels
         );
-        auto d_rh = Kokkos::View<const double**, Kokkos::LayoutRight, MemSpace, Kokkos::MemoryTraits<Kokkos::Unmanaged>>(
+        auto d_rh = Kokkos::View<const double**, Kokkos::LayoutLeft, MemSpace, Kokkos::MemoryTraits<Kokkos::Unmanaged>>(
             rh_ptr, num_cells, num_levels
         );
-        auto d_state = Kokkos::View<const double***, Kokkos::LayoutRight, MemSpace, Kokkos::MemoryTraits<Kokkos::Unmanaged>>(
+        auto d_state = Kokkos::View<const double***, Kokkos::LayoutLeft, MemSpace, Kokkos::MemoryTraits<Kokkos::Unmanaged>>(
             state_ptr, num_cells, num_levels, num_species
         );
-        auto d_ccn = Kokkos::View<double***, Kokkos::LayoutRight, MemSpace, Kokkos::MemoryTraits<Kokkos::Unmanaged>>(
+        auto d_ccn = Kokkos::View<double***, Kokkos::LayoutLeft, MemSpace, Kokkos::MemoryTraits<Kokkos::Unmanaged>>(
             ccn_ptr, num_cells, num_levels, num_ss
         );
 

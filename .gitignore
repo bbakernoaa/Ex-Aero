@@ -1,7 +1,82 @@
-*~
-.sw[a-p]
-.DS_Store
+# --- Build Outputs & Cache Directories ---
 build/
 /build/
 bin/
 lib/
+*.o
+*.obj
+*.so
+*.dylib
+*.a
+*.la
+*.lo
+*.mod
+*.smod
+*.i
+*.s
+
+# --- Editor and IDE Specific Files ---
+# VS Code
+.vscode/
+*.code-workspace
+
+# CLion / JetBrains
+.idea/
+*.iws
+
+# Eclipse / CDT
+.project
+.cproject
+.settings/
+
+# Visual Studio
+.vs/
+*.sln
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+
+# Xcode (macOS)
+*.xcodeproj
+*.xcworkspace
+*.xcuserdata
+DerivedData/
+
+# --- System-Specific Temp Files ---
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# --- Pre-Commit & Local SDD Progress ---
+.pre-commit/
+.superpowers/sdd/*.diff
+.superpowers/sdd/*.md
+!.superpowers/sdd/progress.md
+
+# --- CMake Auto-Generated Files ---
+CMakeCache.txt
+CMakeFiles/
+CMakeSettings.json
+cmake_install.cmake
+Makefile
+install_manifest.txt
+
+# --- Fortran Compiler Mod Files ---
+*.mod
+*.smod
+
+# --- Python & Docs ---
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.env
+.venv
+env/
+venv/
+ENV/
