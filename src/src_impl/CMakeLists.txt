@@ -14,7 +14,7 @@ target_include_directories(exaero_solver PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}
 target_link_libraries(exaero_solver PUBLIC Kokkos::kokkos)
 
 # 1. The Package Interface Implementation (mdspan, yaml-cpp, NO Kokkos)
-add_library(exaero_impl OBJECT gocart/GocartPackage.cpp)
+add_library(exaero_impl OBJECT gocart/GocartPackage.cpp utils/LutGenerator.cpp)
 target_include_directories(exaero_impl PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}
                                                ${CMAKE_CURRENT_SOURCE_DIR}/..)
 target_link_libraries(exaero_impl PUBLIC exaero_mdspan yaml-cpp::yaml-cpp)

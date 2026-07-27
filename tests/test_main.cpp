@@ -1,4 +1,5 @@
 #include <gocart/GocartPackage.hpp>
+#include <utils/LutGenerator.hpp>
 #include <exaero/Environment.hpp>
 #include <cassert>
 #include <iostream>
@@ -469,12 +470,27 @@ void test_gocart_emissions_mapping() {
     std::cout << "GOCART Parallel GPU Emissions Mapping Solver Tests: PASS" << std::endl;
 }
 
+void test_lut_generator_stub() {
+    std::string yaml_string = R"(
+    generation_grid:
+      rh_bins: [0.0, 0.50, 0.99]
+      wavelengths: [550.0e-9]
+      legendre_moments: 16
+    )";
+    exaero::LutGenerator generator(yaml_string);
+    assert(generator.num_rh() == 3);
+    assert(generator.num_bands() == 1);
+    assert(generator.num_moments() == 16);
+    std::cout << "LutGenerator Stub test: PASS" << std::endl;
+}
+
 int main() {
     exaero::initialize_environment();
     
     test_gocart_yaml_parsing();
     test_gocart_yaml_emissions_parsing();
     test_gocart_emissions_mapping();
+    test_lut_generator_stub();
     test_zero_copy_mapping();
     test_gocart_optics();
     test_optical_precision();
