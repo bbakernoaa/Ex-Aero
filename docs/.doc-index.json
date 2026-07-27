@@ -1,32 +1,34 @@
 {
   "schema_version": 2,
   "generated_by": "doc-superpowers",
-  "generated_at": "2026-07-27T14:02:49Z",
+  "generated_at": "2026-07-27T15:08:54Z",
   "build_commit": "1acadf80c425c9217922d7cfb3c08cecb926ce20",
   "docs": {
     "docs/index.md": {
-      "content_hash": "sha256:f90839386a16a67726ff8611574adb6478dea8dc690473da0404ae21830138a9",
+      "content_hash": "sha256:503f89e1008271cf8b5ee4d045f4b9d98fcfbc5ddc25db91dc65edced5a12a34",
       "code_refs": [
         "src/"
       ],
-      "code_commit": "1acadf80c425c9217922d7cfb3c08cecb926ce20",
+      "code_commit": "7baa268b6ab20c617e7b6c72475e3b6a85973e61",
       "doc_type": "guide",
       "status": "current",
       "replaces": null,
       "superseded_by": null,
-      "last_verified": "2026-07-27T14:02:38Z"
+      "last_verified": "2026-07-27T15:08:54Z",
+      "implementation": []
     },
     "docs/architecture/system-overview.md": {
-      "content_hash": "sha256:8b0674f08276c3e18f56f43c84f72fca5dea3f8cbf95ff01aca60725927e2cb6",
+      "content_hash": "sha256:88379a41cd2623b0cfe9eecf2aa55f622790863eba15d5bb1156e2ec6b296bbb",
       "code_refs": [
         "src/"
       ],
-      "code_commit": "1acadf80c425c9217922d7cfb3c08cecb926ce20",
+      "code_commit": "7baa268b6ab20c617e7b6c72475e3b6a85973e61",
       "doc_type": "architecture",
       "status": "current",
       "replaces": null,
       "superseded_by": null,
-      "last_verified": "2026-07-27T14:02:38Z"
+      "last_verified": "2026-07-27T15:08:54Z",
+      "implementation": []
     },
     "docs/architecture/components.md": {
       "content_hash": "sha256:3fd669bf9dd43e02bb77c23ee4758edd902c7781f990307ad8bd87855d944ecc",
