@@ -83,6 +83,54 @@ extern "C" {
         }
     }
 
+    void exaero_compute_emissions(
+        exaero_package_t pkg,
+        int num_cells, int num_levels, int num_raw_species, int num_target_species,
+        int flux_type_code,
+        const double* thick_ptr,
+        const double* raw_emissions_ptr,
+        double* target_emissions_out_ptr,
+        char* errmsg, int* errflg) {
+
+        if (!pkg) {
+            if (errflg) *errflg = 1;
+            if (errmsg) std::strcpy(errmsg, "EX-aero Error: Null package handle");
+            return;
+        }
+        try {
+            auto* package = static_cast<exaero::IAerosolPackage*>(pkg);
+
+            // Stub environmental view (only layer_thickness is required for emissions scaling)
+            exaero::View2D<const double> temperature(nullptr, 0, 0);
+            exaero::View2D<const double> pressure(nullptr, 0, 0);
+            exaero::View2D<const double> air_density(nullptr, 0, 0);
+            exaero::View2D<const double> relative_humidity(nullptr, 0, 0);
+            exaero::View2D<const double> layer_thickness(thick_ptr, num_cells, num_levels);
+
+            exaero::EnvironmentalStateView env{temperature, pressure, air_density, relative_humidity, layer_thickness};
+
+            exaero::View3D<const double> flux(raw_emissions_ptr, num_cells, num_levels, num_raw_species);
+            exaero::FluxType type = (flux_type_code == 1) ? exaero::FluxType::AREA_FLUX : exaero::FluxType::MASS_CONCENTRATION_RATE;
+            exaero::EmissionsInputView emissions_in{flux, type};
+
+            exaero::View3D<double> emissions_out(target_emissions_out_ptr, num_cells, num_levels, num_target_species);
+
+            package->computeEmissions(env, emissions_in, emissions_out);
+
+            if (errflg) *errflg = 0;
+            if (errmsg) errmsg[0] = '\0';
+        } catch (const std::exception& e) {
+            if (errflg) *errflg = 1;
+            if (errmsg) {
+                std::strncpy(errmsg, e.what(), 255);
+                errmsg[255] = '\0';
+            }
+        } catch (...) {
+            if (errflg) *errflg = 1;
+            if (errmsg) std::strcpy(errmsg, "EX-aero Error: Unknown exception occurred during emissions calculation");
+        }
+    }
+
     void exaero_compute_optics(
         exaero_package_t pkg,
         int num_cells, int num_levels, int num_bands, int num_species,

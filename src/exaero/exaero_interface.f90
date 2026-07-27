@@ -46,6 +46,18 @@ module exaero_interface
       integer(c_int), intent(out) :: errflg
     end subroutine exaero_compute_diagnostics
 
+    subroutine exaero_compute_emissions(pkg, num_cells, num_levels, num_raw, num_target, &
+        flux_type_code, thick_ptr, raw_emissions_ptr, target_emissions_out_ptr, &
+        errmsg, errflg) bind(c, name="exaero_compute_emissions")
+      import :: exaero_package_t, c_int, c_double, c_char
+      type(exaero_package_t), value :: pkg
+      integer(c_int), value :: num_cells, num_levels, num_raw, num_target, flux_type_code
+      real(c_double), intent(in) :: thick_ptr(*), raw_emissions_ptr(*)
+      real(c_double), intent(out) :: target_emissions_out_ptr(*)
+      character(kind=c_char), intent(out) :: errmsg(*)
+      integer(c_int), intent(out) :: errflg
+    end subroutine exaero_compute_emissions
+
     subroutine exaero_compute_optics(pkg, num_cells, num_levels, num_bands, num_species, &
         wavelengths_ptr, temp_ptr, pres_ptr, dens_ptr, rh_ptr, thick_ptr, state_ptr, optics_ptr, &
         errmsg, errflg) bind(c, name="exaero_compute_optics")

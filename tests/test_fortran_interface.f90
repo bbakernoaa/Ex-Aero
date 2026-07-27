@@ -50,6 +50,8 @@ contains
     real(c_double) :: diags(num_cells, num_levels, 11) ! NUM_DIAGNOSTICS is 11
     real(c_double) :: optics(num_cells, num_levels, num_bands, 11) ! NUM_OPTICS is 11
     real(c_double) :: ccn(num_cells, num_levels, num_ss)
+    real(c_double) :: raw_emit(num_cells, num_levels, 2)
+    real(c_double) :: target_out(num_cells, num_levels, num_species)
 
     ! Dynamic queries
     real(c_double) :: wavelengths(num_bands)
@@ -167,6 +169,20 @@ contains
       write(*,*) "Error: Monotonicity activation spectrum failed in Fortran!"
       call exit(1)
     end if
+
+    ! Run Emissions mapping stub
+    write(*,*) "Computing emissions mapping stub..."
+    raw_emit = 1.0d-6
+    target_out = 0.0d0
+    errmsg = ""
+    errflg = 0
+    call exaero_compute_emissions(pkg, num_cells, num_levels, 2, num_species, &
+        0, thick, raw_emit, target_out, errmsg, errflg)
+    if (errflg /= 0) then
+      write(*,*) "Error: Failed to compute emissions: ", errmsg
+      call exit(1)
+    end if
+    write(*,*) "Emissions mapping stub completed successfully."
 
     ! Manually free Gocart Package instance before Kokkos finalizes
     write(*,*) "Freeing package instance..."

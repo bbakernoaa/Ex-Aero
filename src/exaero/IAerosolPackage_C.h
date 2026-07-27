@@ -24,6 +24,17 @@ extern "C" {
         char* errmsg, int* errflg
     );
 
+    // Emissions calculation wrapper with CCPP-standard error flags
+    void exaero_compute_emissions(
+        exaero_package_t pkg,
+        int num_cells, int num_levels, int num_raw_species, int num_target_species,
+        int flux_type_code,
+        const double* thick_ptr,
+        const double* raw_emissions_ptr,
+        double* target_emissions_out_ptr,
+        char* errmsg, int* errflg
+    );
+
     // Optics calculation wrapper with CCPP-standard error flags
     void exaero_compute_optics(
         exaero_package_t pkg,
