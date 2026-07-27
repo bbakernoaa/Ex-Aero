@@ -137,6 +137,16 @@ namespace exaero {
         );
     }
 
+    void GocartPackage::computeEmissions(
+        const EnvironmentalStateView& env,
+        const EmissionsInputView& emissions_in,
+        View3D<double>& emissions_out) {
+        // Stub implementation for compilation isolation
+        if (!solver_state_) {
+            throw std::runtime_error("GocartPackage not initialized");
+        }
+    }
+
     void GocartPackage::computeOptics(
         const EnvironmentalStateView& env,
         const View3D<const double>& state,

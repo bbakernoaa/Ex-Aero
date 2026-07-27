@@ -29,6 +29,16 @@ namespace exaero {
         View2D<const double> layer_thickness;   // [m] grid layer vertical thickness Delta_z (cell, level)
     };
 
+    enum class FluxType {
+        MASS_CONCENTRATION_RATE,  // [kg/m³/s]
+        AREA_FLUX                 // [kg/m²/s]
+    };
+
+    struct EmissionsInputView {
+        View3D<const double> flux;
+        FluxType flux_type;
+    };
+
     class IAerosolPackage {
     public:
         virtual ~IAerosolPackage() = default;
@@ -61,6 +71,12 @@ namespace exaero {
             const View3D<const double>& state,
             const View1D<const double>& supersaturations, // [fraction 0-1] queried supersaturations (S_index)
             View4D<double>& ccn_out) = 0;                 // (cell, level, S_index, activated_ccn_number_concentration)
+
+        // Maps raw incoming emissions to package-specific mass and number emission rates
+        virtual void computeEmissions(
+            const EnvironmentalStateView& env,
+            const EmissionsInputView& emissions_in,
+            View3D<double>& emissions_out) = 0;
 
         // Dynamic Species-to-Index mapping query APIs to avoid hardcoding on the host side
         virtual int getSpeciesIndex(const std::string& name) const = 0;

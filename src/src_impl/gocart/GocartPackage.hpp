@@ -31,6 +31,11 @@ namespace exaero {
             const View3D<const double>& state,
             View3D<double>& diagnostics_out) override;
 
+        void computeEmissions(
+            const EnvironmentalStateView& env,
+            const EmissionsInputView& emissions_in,
+            View3D<double>& emissions_out) override;
+
         void computeOptics(
             const EnvironmentalStateView& env,
             const View3D<const double>& state,
