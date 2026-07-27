@@ -1,0 +1,95 @@
+# doc-superpowers workflow v1
+# AI-powered PR doc review, update, diagram regeneration, and sync
+# Installed by doc-superpowers hooks installer
+#
+# NOTE: This workflow overlaps with doc-review-pr.yml (both trigger on PR open).
+# Install one or the other, not both. This workflow is a superset — it runs
+# review-pr AND also applies fixes, regenerates diagrams, and syncs the index.
+
+name: Doc PR Full Cycle (AI)
+
+on:
+  pull_request:
+    branches: [develop]
+    types: [opened]
+    paths:
+      - 'docs/**'
+      - 'src/**'
+      - 'scripts/**'
+      - '*.md'
+  workflow_dispatch:
+
+concurrency:
+  group: doc-pr-full-cycle-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: true
+
+env:
+  DOC_SUPERPOWERS_VERSION: "v2.13.0"
+
+jobs:
+  pr-full-cycle:
+    if: >-
+      !contains(github.event.pull_request.title, '[doc-superpowers]')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          ref: ${{ github.head_ref }}
+          fetch-depth: 0
+
+      - name: Check for doc index
+        id: precheck
+        run: |
+          if [ ! -f "docs/.doc-index.json" ]; then
+            echo "No doc-index found — init has not run. Skipping."
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Resolve Anthropic auth
+        id: auth
+        if: steps.precheck.outputs.skip != 'true'
+        env:
+          OAUTH: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: |
+          if [ -n "$OAUTH" ]; then
+            echo "use_oauth=true" >> "$GITHUB_OUTPUT"
+            if [ -n "$API_KEY" ]; then
+              echo "::notice::Both CLAUDE_CODE_OAUTH_TOKEN and ANTHROPIC_API_KEY are set; using CLAUDE_CODE_OAUTH_TOKEN."
+            fi
+          elif [ -n "$API_KEY" ]; then
+            echo "use_oauth=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "::error::Neither CLAUDE_CODE_OAUTH_TOKEN nor ANTHROPIC_API_KEY is set as a repository secret. Add one under Settings > Secrets and variables > Actions." >&2
+            exit 1
+          fi
+
+      - name: Review, update, diagram, and sync docs
+        if: steps.precheck.outputs.skip != 'true'
+        uses: anthropics/claude-code-action@1eddb334cfa79fdb21ecbe2180ca1a016e8e7d47 # v1
+        with:
+          claude_code_oauth_token: ${{ steps.auth.outputs.use_oauth == 'true' && secrets.CLAUDE_CODE_OAUTH_TOKEN || '' }}
+          anthropic_api_key: ${{ steps.auth.outputs.use_oauth == 'false' && secrets.ANTHROPIC_API_KEY || '' }}
+          prompt: |
+            Run the following doc-superpowers actions in order on this pull request:
+
+            1. Run /doc-superpowers review-pr to analyze documentation impact and
+               identify stale or missing docs. Save findings for the next step.
+
+            2. Run /doc-superpowers update to fix any stale docs found by the review.
+
+            3. Run /doc-superpowers diagram to regenerate any affected Mermaid diagrams.
+
+            4. Run /doc-superpowers sync to reconcile the doc index with the filesystem.
+
+            If any files were created or modified by steps 2-4, commit all changes
+            with the message "[doc-superpowers] pr docs: review, update, diagrams, sync".
+            Do not create a new pull request — commit directly to this PR branch.
+
+            If no files changed, post a PR comment confirming docs are current.

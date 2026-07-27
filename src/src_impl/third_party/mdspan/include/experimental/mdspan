@@ -4159,7 +4159,7 @@ private:
   MDSPAN_FORCE_INLINE_FUNCTION constexpr mapping_type const& mapping_ref() const noexcept { return m_members.second().first(); }
   MDSPAN_FORCE_INLINE_FUNCTION MDSPAN_IMPL_CONSTEXPR_14 accessor_type& accessor_ref() noexcept { return m_members.second().second(); }
   MDSPAN_FORCE_INLINE_FUNCTION constexpr accessor_type const& accessor_ref() const noexcept { return m_members.second().second(); }
-  
+
   MDSPAN_TEMPLATE_REQUIRES(
     class SizeType,
     /* requires */ (
@@ -7435,4 +7435,3 @@ namespace MDSPAN_IMPL_STANDARD_NAMESPACE {
 }
 //END_FILE_INCLUDE: /Users/barry/Documents/Ex-Aero/src/src_impl/third_party/mdspan_stable_repo/include/experimental/mdspan
 #endif // MDSPAN_SINGLE_HEADER_INCLUDE_GUARD_
-

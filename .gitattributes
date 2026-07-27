@@ -1,0 +1,2 @@
+# doc-superpowers: auto-resolve doc-index.json merge conflicts
+docs/.doc-index.json merge=doc-index

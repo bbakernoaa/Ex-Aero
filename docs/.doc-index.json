@@ -1,0 +1,217 @@
+{
+  "schema_version": 2,
+  "generated_by": "doc-superpowers",
+  "generated_at": "2026-07-27T14:02:49Z",
+  "build_commit": "1acadf80c425c9217922d7cfb3c08cecb926ce20",
+  "docs": {
+    "docs/index.md": {
+      "content_hash": "sha256:f90839386a16a67726ff8611574adb6478dea8dc690473da0404ae21830138a9",
+      "code_refs": [
+        "src/"
+      ],
+      "code_commit": "1acadf80c425c9217922d7cfb3c08cecb926ce20",
+      "doc_type": "guide",
+      "status": "current",
+      "replaces": null,
+      "superseded_by": null,
+      "last_verified": "2026-07-27T14:02:38Z"
+    },
+    "docs/architecture/system-overview.md": {
+      "content_hash": "sha256:8b0674f08276c3e18f56f43c84f72fca5dea3f8cbf95ff01aca60725927e2cb6",
+      "code_refs": [
+        "src/"
+      ],
+      "code_commit": "1acadf80c425c9217922d7cfb3c08cecb926ce20",
+      "doc_type": "architecture",
+      "status": "current",
+      "replaces": null,
+      "superseded_by": null,
+      "last_verified": "2026-07-27T14:02:38Z"
+    },
+    "docs/architecture/components.md": {
+      "content_hash": "sha256:3fd669bf9dd43e02bb77c23ee4758edd902c7781f990307ad8bd87855d944ecc",
+      "code_refs": [
+        "src/exaero/IAerosolPackage.hpp",
+        "src/exaero/MemoryMapper.hpp"
+      ],
+      "code_commit": "ab768c3848d7812d957e702530e4483d207e373e",
+      "doc_type": "architecture",
+      "status": "current",
+      "replaces": null,
+      "superseded_by": null,
+      "last_verified": "2026-07-27T14:02:38Z"
+    },
+    "docs/guides/getting-started.md": {
+      "content_hash": "sha256:9d73acf84c1d1ae063d93a504efe4bd493907cb5d4843a38a53c71ab16bab65e",
+      "code_refs": [
+        "CMakeLists.txt",
+        "tests/"
+      ],
+      "code_commit": "1acadf80c425c9217922d7cfb3c08cecb926ce20",
+      "doc_type": "guide",
+      "status": "current",
+      "replaces": null,
+      "superseded_by": null,
+      "last_verified": "2026-07-27T14:02:38Z"
+    },
+    "docs/api-contracts.md": {
+      "content_hash": "sha256:43270bb522f5cd19710fb99feee0afda2566c910757bb9f38edf1710e594f299",
+      "code_refs": [
+        "src/exaero/IAerosolPackage.hpp",
+        "src/exaero/IAerosolPackage_C.h",
+        "src/exaero/exaero_interface.f90"
+      ],
+      "code_commit": "1acadf80c425c9217922d7cfb3c08cecb926ce20",
+      "doc_type": "reference",
+      "status": "current",
+      "replaces": null,
+      "superseded_by": null,
+      "last_verified": "2026-07-27T14:02:38Z"
+    },
+    "docs/codebase-guide.md": {
+      "content_hash": "sha256:098bd8ff55ee99bd4528454ccc8857cbc5f71ac77b51736eed48298307ab7a13",
+      "code_refs": [
+        "src/"
+      ],
+      "code_commit": "1acadf80c425c9217922d7cfb3c08cecb926ce20",
+      "doc_type": "reference",
+      "status": "current",
+      "replaces": null,
+      "superseded_by": null,
+      "last_verified": "2026-07-27T14:02:38Z"
+    },
+    "docs/conventions.md": {
+      "content_hash": "sha256:caa4ef8e895b435f691965e455b18dea5e52f8cbe918073dbdb03dcaa657bd66",
+      "code_refs": [
+        ".github/copilot-instructions.md"
+      ],
+      "code_commit": "bf5478cb2249cf21e9ab9ed0b47fc30c2de359ad",
+      "doc_type": "reference",
+      "status": "current",
+      "replaces": null,
+      "superseded_by": null,
+      "last_verified": "2026-07-27T14:02:38Z"
+    },
+    "docs/ci-cd.md": {
+      "content_hash": "sha256:09931fd2e3eae702e5e6c1e230c393c7b7aef5b13643bb1152c9b4fbbb0b9e13",
+      "code_refs": [
+        "CMakeLists.txt"
+      ],
+      "code_commit": "ab768c3848d7812d957e702530e4483d207e373e",
+      "doc_type": "reference",
+      "status": "current",
+      "replaces": null,
+      "superseded_by": null,
+      "last_verified": "2026-07-27T14:02:38Z"
+    },
+    "docs/adr/README.md": {
+      "content_hash": "sha256:5fcbff62ced8af86fe33b70e38e99c13cb1dfdb329da09faa1ae748879a8a0c8",
+      "code_refs": [
+        "docs/adr/"
+      ],
+      "code_commit": null,
+      "doc_type": "adr",
+      "status": "current",
+      "replaces": null,
+      "superseded_by": null,
+      "last_verified": "2026-07-27T14:02:38Z"
+    },
+    "docs/adr/template.md": {
+      "content_hash": "sha256:a645491b428ea2957f0c56dc6dc3d22fe93bd1d88a6c5e54324dd8c3fd5298ea",
+      "code_refs": [
+        "docs/adr/"
+      ],
+      "code_commit": null,
+      "doc_type": "adr",
+      "status": "current",
+      "replaces": null,
+      "superseded_by": null,
+      "last_verified": "2026-07-27T14:02:38Z"
+    },
+    "docs/adr/ADR-001-compilation-isolation.md": {
+      "content_hash": "sha256:677b4199addbaf149e53b3c972ce032ef81a15cb27bfb622a0ab7ea1eb9de743",
+      "code_refs": [
+        "CMakeLists.txt"
+      ],
+      "code_commit": "ab768c3848d7812d957e702530e4483d207e373e",
+      "doc_type": "adr",
+      "status": "current",
+      "replaces": null,
+      "superseded_by": null,
+      "last_verified": "2026-07-27T14:02:38Z"
+    },
+    "docs/adr/ADR-002-zero-copy-interop.md": {
+      "content_hash": "sha256:1841fe67fb04280a610931e36343d83e0495a5dbc8a042424cb709179bd6e8d5",
+      "code_refs": [
+        "src/exaero/MemoryMapper.hpp",
+        "src/exaero/IAerosolPackage.hpp"
+      ],
+      "code_commit": "ab768c3848d7812d957e702530e4483d207e373e",
+      "doc_type": "adr",
+      "status": "current",
+      "replaces": null,
+      "superseded_by": null,
+      "last_verified": "2026-07-27T14:02:38Z"
+    },
+    "docs/specs/README.md": {
+      "content_hash": "sha256:1a72fd971d7b9d13be74c3479c7ea93aaaff65d9835b8ffafff5403e906807dd",
+      "code_refs": [
+        "docs/specs/"
+      ],
+      "code_commit": null,
+      "doc_type": "spec",
+      "status": "current",
+      "replaces": null,
+      "superseded_by": null,
+      "last_verified": "2026-07-27T14:02:38Z"
+    },
+    "docs/specs/template.md": {
+      "content_hash": "sha256:a93e36b2ae7002d2afc863942907e1569e50f12918b28882bfd9a208f4bf323c",
+      "code_refs": [
+        "docs/specs/"
+      ],
+      "code_commit": null,
+      "doc_type": "spec",
+      "status": "current",
+      "replaces": null,
+      "superseded_by": null,
+      "last_verified": "2026-07-27T14:02:38Z"
+    },
+    "docs/specs/SPEC-GOCART-001-poc-design.md": {
+      "content_hash": "sha256:2b91c7a9f641c1c94e749d012f6f64997b4178555c2e14bbf52c7a9e9fae7543",
+      "code_refs": [
+        "src/src_impl/gocart/"
+      ],
+      "code_commit": "ab768c3848d7812d957e702530e4483d207e373e",
+      "doc_type": "spec",
+      "status": "current",
+      "replaces": null,
+      "superseded_by": null,
+      "last_verified": "2026-07-27T14:02:38Z"
+    },
+    "docs/plans/2026-07-24-exaero-gocart-poc-implementation.md": {
+      "content_hash": "sha256:7e28a9e1e3b9d0b23d02a369257419b6c17c09e51c37195b289263e2a94c45ad",
+      "code_refs": [
+        "src/src_impl/gocart/"
+      ],
+      "code_commit": "ab768c3848d7812d957e702530e4483d207e373e",
+      "doc_type": "plan",
+      "status": "current",
+      "replaces": null,
+      "superseded_by": null,
+      "last_verified": "2026-07-27T14:02:38Z"
+    },
+    "docs/Project-Charter.md": {
+      "content_hash": "sha256:81350c56a43050eabc295a06e758de70cddfaf37ca7ddf373cd5cce7584c8632",
+      "code_refs": [
+        "src/"
+      ],
+      "code_commit": "1acadf80c425c9217922d7cfb3c08cecb926ce20",
+      "doc_type": "guide",
+      "status": "current",
+      "replaces": null,
+      "superseded_by": null,
+      "last_verified": "2026-07-27T14:02:49Z"
+    }
+  }
+}
