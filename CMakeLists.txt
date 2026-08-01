@@ -12,19 +12,14 @@ set(EXAERO_MECHANISMS "ChapmanCycle" CACHE STRING "Semicolon separated list of m
 option(EXAERO_WITH_CLOUDJ "Enable Cloud-J photolysis forcing support" OFF)
 option(EXAERO_WITH_ISORROPIALITE "Enable ISORROPIA-Lite thermodynamic support" OFF)
 
-set(REGISTRY_SRC "${CMAKE_CURRENT_BINARY_DIR}/registry_generated.cpp")
 add_custom_command(
     OUTPUT ${REGISTRY_SRC}
-    COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/generate_registry.py ${REGISTRY_SRC} "${EXAERO_MECHANISMS}"
-    DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/generate_registry.py
-    COMMENT "Generating mechanism registry for: ${EXAERO_MECHANISMS}"
 )
 
 add_library(exaero STATIC
     src/api.cpp
     ${REGISTRY_SRC}
     src/sorter.cpp
-    src/dispatcher.cpp
     src/auxiliary_engines.cpp
 )
 
