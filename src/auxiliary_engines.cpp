@@ -17,12 +17,12 @@ KOKKOS_INLINE_FUNCTION
 void AuxiliaryEngines::PhotolysisFunctor::operator()(const MemberType& team_member) const {
     const int sza_rank = team_member.league_rank();
     const int cell_idx = sorted_indices(sza_rank);
-    
+
     if (!state.meteorology.data()) {
         Kokkos::abort("FATAL ERROR: state.meteorology.data() is null in PhotolysisFunctor");
     }
 
-    // T012: Prevent thread starvation with sub-stepping calculations 
+    // T012: Prevent thread starvation with sub-stepping calculations
     Kokkos::parallel_for(Kokkos::TeamThreadRange(team_member, 1), [&](const int& s) {
         // T010: Preprocessor conditional
 #ifdef EXAERO_WITH_CLOUDJ
@@ -41,7 +41,7 @@ void AuxiliaryEngines::PhotolysisFunctor::operator()(const MemberType& team_memb
 KOKKOS_INLINE_FUNCTION
 void AuxiliaryEngines::ThermoFunctor::operator()(const MemberType& team_member) const {
     const int cell_idx = sorted_indices(team_member.league_rank());
-    
+
     if (!state.concentrations.data() || !state.meteorology.data()) {
         Kokkos::abort("FATAL ERROR: state.concentrations.data() or state.meteorology.data() is null in ThermoFunctor");
     }

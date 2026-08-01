@@ -61,4 +61,3 @@ if(BUILD_TESTING)
 endif()
 
 # Add dummy implementations for tests to link against if needed
-target_sources(exaero PRIVATE ${CMAKE_CURRENT_BINARY_DIR}/dummy_weak.cpp)
