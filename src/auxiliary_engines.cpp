@@ -23,10 +23,9 @@ void AuxiliaryEngines::PhotolysisFunctor::operator()(const MemberType& team_memb
     }
 
     // T012: Prevent thread starvation with sub-stepping calculations
-    Kokkos::parallel_for(Kokkos::TeamThreadRange(team_member, 1), [&](const int& s) {
-        // T010: Preprocessor conditional
-#ifdef EXAERO_WITH_CLOUDJ
+    Kokkos::single(Kokkos::PerTeam(team_member), [&]() {
         // T009: Extract pure .data() pointer and explicit dimensions so Fortran can accept it via bind(c)
+#ifdef EXAERO_WITH_CLOUDJ
         int extents[4] = {
             static_cast<int>(state.meteorology.extent(0)),
             static_cast<int>(state.meteorology.extent(1)),
@@ -46,7 +45,7 @@ void AuxiliaryEngines::ThermoFunctor::operator()(const MemberType& team_member) 
         Kokkos::abort("FATAL ERROR: state.concentrations.data() or state.meteorology.data() is null in ThermoFunctor");
     }
 
-    Kokkos::parallel_for(Kokkos::TeamThreadRange(team_member, 1), [&](const int& s) {
+    Kokkos::single(Kokkos::PerTeam(team_member), [&]() {
 #ifdef EXAERO_WITH_ISORROPIALITE
         int extents[4] = {
             static_cast<int>(state.concentrations.extent(0)),
