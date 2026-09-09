@@ -184,6 +184,115 @@ void test_gocart_optics() {
     std::cout << "GOCART Optics Dual-Mode Calculations: PASS" << std::endl;
 }
 
+void test_gocart_arbitrary_lookup_length() {
+    // ADR-003 R10 / invariant C12: the RH lookup path must honor ANY declared length.
+    // The retired fixed-capacity arrays capped the bracket scan at 6 points; a prime
+    // (7-point) and a short (3-point) table must now both interpolate correctly.
+    std::string yaml_string = R"(
+    species:
+      - name: "SevenPoint"
+        dry_density: 1800.0
+        molecular_weight: 98.0
+        dry_particle_diameter: 0.2e-6
+        hygroscopicity: 0.50
+        lognormal_sigma: 2.0
+        lognormal_dg: 0.15e-6
+        refractive_index_real: 1.43
+        refractive_index_imag: 1.0e-8
+        has_optics_lookup: true
+        rh_bins: [0.0, 0.2, 0.4, 0.6, 0.8, 0.9, 1.0]
+        ext_lookup: [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0]
+        ssa_lookup: [0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5]
+        asm_lookup: [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
+      - name: "ThreePoint"
+        dry_density: 1800.0
+        molecular_weight: 98.0
+        dry_particle_diameter: 0.2e-6
+        hygroscopicity: 0.50
+        lognormal_sigma: 2.0
+        lognormal_dg: 0.15e-6
+        refractive_index_real: 1.43
+        refractive_index_imag: 1.0e-8
+        has_optics_lookup: true
+        rh_bins: [0.0, 0.50, 0.99]
+        ext_lookup: [2.0, 4.0, 8.0]
+        ssa_lookup: [0.9, 0.9, 0.9]
+        asm_lookup: [0.7, 0.7, 0.7]
+    )";
+
+    exaero::GocartPackage package;
+    package.initialize(yaml_string);
+
+    // Extents are data, not capacity: 7 and 3 are both representable.
+    assert(package.get_species_params(0).n_rh == 7);
+    assert(package.get_species_params(1).n_rh == 3);
+
+    double temp_raw[1] = { 298.0 };
+    double pres_raw[1] = { 101325.0 };
+    double dens_raw[1] = { 1.2 };
+    double rh_raw[1] = { 0.5 };   // inside the 0.4-0.6 bracket of the 7-point table
+    double thick_raw[1] = { 1.0 };
+    exaero::View2D<const double> temperature(temp_raw, 1, 1);
+    exaero::View2D<const double> pressure(pres_raw, 1, 1);
+    exaero::View2D<const double> air_density(dens_raw, 1, 1);
+    exaero::View2D<const double> relative_humidity(rh_raw, 1, 1);
+    exaero::View2D<const double> layer_thickness(thick_raw, 1, 1);
+    exaero::EnvironmentalStateView env{temperature, pressure, air_density, relative_humidity, layer_thickness};
+
+    double state_raw[2] = { 1.0e-6, 1.0e-6 };
+    exaero::View3D<double> state(state_raw, 1, 1, 2);
+    double wavelengths_raw[1] = { 550.0e-9 };
+    exaero::View1D<const double> wavelengths(wavelengths_raw, 1);
+    double optics_raw[1 * 1 * 1 * exaero::optical_indices::NUM_OPTICS] = { 0.0 };
+    exaero::View4D<double> optics_out(optics_raw, 1, 1, 1, exaero::optical_indices::NUM_OPTICS);
+
+    package.computeOptics(env, state, wavelengths, optics_out);
+    double total_ext = optics_out(0, 0, 0, exaero::optical_indices::EXTINCTION_COEFF);
+    // SevenPoint @ rh=0.5: MEE = 3.5 -> 3.5e-3 m^-1. ThreePoint @ rh=0.5: MEE = 4.0 -> 4.0e-3.
+    double expected = 3.5e-3 + 4.0e-3;
+    assert(std::abs(total_ext - expected) / expected < 1e-9);
+
+    // Above the last declared edge the curve clamps to the final bracket (no extrapolation).
+    rh_raw[0] = 0.99;
+    package.computeOptics(env, state, wavelengths, optics_out);
+    total_ext = optics_out(0, 0, 0, exaero::optical_indices::EXTINCTION_COEFF);
+    // SevenPoint @ 0.99: bracket [0.9,1.0] -> 6.9e-3. ThreePoint @ 0.99: last point 8.0 -> 8.0e-3.
+    expected = 6.9e-3 + 8.0e-3;
+    assert(std::abs(total_ext - expected) / expected < 1e-9);
+
+    std::cout << "GOCART Arbitrary Lookup Length (R10/C12): PASS" << std::endl;
+}
+
+void test_gocart_lookup_length_mismatch_fails() {
+    // Fail-fast, no silent fallback (FR-009): mismatched lookup list lengths must abort.
+    std::string yaml_string = R"(
+    species:
+      - name: "Broken"
+        dry_density: 1800.0
+        molecular_weight: 98.0
+        dry_particle_diameter: 0.2e-6
+        hygroscopicity: 0.5
+        lognormal_sigma: 2.0
+        lognormal_dg: 0.15e-6
+        refractive_index_real: 1.43
+        refractive_index_imag: 1.0e-8
+        has_optics_lookup: true
+        rh_bins: [0.0, 0.5, 0.99]
+        ext_lookup: [2.0, 4.0]
+        ssa_lookup: [0.9, 0.9, 0.9]
+        asm_lookup: [0.7, 0.7, 0.7]
+    )";
+    exaero::GocartPackage package;
+    bool threw = false;
+    try {
+        package.initialize(yaml_string);
+    } catch (const std::runtime_error&) {
+        threw = true;
+    }
+    assert(threw); // must abort, never silently pad or truncate
+    std::cout << "GOCART Lookup Length Mismatch Fail-Fast: PASS" << std::endl;
+}
+
 void test_optical_precision() {
     // High-precision physical validation of our GPU ADT Mie solver against standard analytical results.
     // For n = 1.5, x = 10.0, we have:
@@ -520,6 +629,8 @@ int main() {
     test_spheroid_database_interpolation();
     test_zero_copy_mapping();
     test_gocart_optics();
+    test_gocart_arbitrary_lookup_length();
+    test_gocart_lookup_length_mismatch_fails();
     test_optical_precision();
     test_gocart_ccn();
     

@@ -5,7 +5,8 @@
 namespace exaero {
 
     // Decoupled solver helper function declarations (implemented in GocartSolver.cpp)
-    GocartSolverState* create_solver_state(int num_species, const GocartSpeciesParams* params);
+    GocartSolverState* create_solver_state(int num_species, const GocartSpeciesParams* params,
+                                           const double* pool, int pool_size);
     void free_solver_state(GocartSolverState* state);
 
     void run_gocart_diagnostics(
@@ -58,6 +59,7 @@ namespace exaero {
         h_species_params_.reserve(num_species_);
         species_names_.clear();
         species_names_.reserve(num_species_);
+        h_curve_pool_.clear(); // rebuilt from scratch each initialize (single H2D upload)
 
         for (int i = 0; i < num_species_; ++i) {
             auto s = species_node[i];
@@ -76,20 +78,39 @@ namespace exaero {
                 s["lognormal_dg"].as<double>(),
                 s["refractive_index_real"].as<double>(),
                 s["refractive_index_imag"].as<double>(),
-                has_lookup
             };
+            p.has_optics_lookup = has_lookup;
 
             if (has_lookup) {
+                // Legacy YAML RH lookups: arbitrary length, appended to the flat pool.
+                // The block layout is the documented {rh,ext,ssa,asm} x n_rh order (R10).
                 auto rh_bins = s["rh_bins"];
                 auto ext_lookup = s["ext_lookup"];
                 auto ssa_lookup = s["ssa_lookup"];
                 auto asm_lookup = s["asm_lookup"];
-                for (int j = 0; j < 8; ++j) {
-                    p.rh_bins[j] = rh_bins[j].as<double>();
-                    p.ext_lookup[j] = ext_lookup[j].as<double>();
-                    p.ssa_lookup[j] = ssa_lookup[j].as<double>();
-                    p.asm_lookup[j] = asm_lookup[j].as<double>();
+                if (!rh_bins || !ext_lookup || !ssa_lookup || !asm_lookup) {
+                    throw std::runtime_error("EX-aero Error: species '" + name +
+                        "' sets has_optics_lookup but omits a required lookup list");
                 }
+                const int n_rh = static_cast<int>(rh_bins.size());
+                if (n_rh < 2) {
+                    throw std::runtime_error("EX-aero Error: species '" + name +
+                        "' rh_bins needs at least 2 points to interpolate");
+                }
+                if (static_cast<int>(ext_lookup.size()) != n_rh ||
+                    static_cast<int>(ssa_lookup.size()) != n_rh ||
+                    static_cast<int>(asm_lookup.size()) != n_rh) {
+                    throw std::runtime_error("EX-aero Error: species '" + name +
+                        "' lookup lists have mismatched lengths (fail fast, no silent fallback)");
+                }
+                p.n_radius = 1;   // band-integrated legacy lookup: single effective bin
+                p.n_rh = n_rh;
+                p.n_lambda = 0;
+                p.curve_offset = static_cast<int>(h_curve_pool_.size());
+                for (int j = 0; j < n_rh; ++j) h_curve_pool_.push_back(rh_bins[j].as<double>());
+                for (int j = 0; j < n_rh; ++j) h_curve_pool_.push_back(ext_lookup[j].as<double>());
+                for (int j = 0; j < n_rh; ++j) h_curve_pool_.push_back(ssa_lookup[j].as<double>());
+                for (int j = 0; j < n_rh; ++j) h_curve_pool_.push_back(asm_lookup[j].as<double>());
             }
             h_species_params_.push_back(p);
         }
@@ -125,11 +146,12 @@ namespace exaero {
             }
         }
 
-        // Initialize solver state (allocates and uploads parameters to GPU)
+        // Initialize solver state (allocates and uploads parameters + flat curve pool to GPU)
         if (solver_state_) {
             free_solver_state(solver_state_);
         }
-        solver_state_ = create_solver_state(num_species_, h_species_params_.data());
+        solver_state_ = create_solver_state(num_species_, h_species_params_.data(),
+                                            h_curve_pool_.data(), static_cast<int>(h_curve_pool_.size()));
     }
 
     void GocartPackage::executeMicrophysics(

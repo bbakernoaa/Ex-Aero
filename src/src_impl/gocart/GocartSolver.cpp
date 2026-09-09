@@ -20,10 +20,14 @@ namespace exaero {
     struct GocartSolverState {
         int num_species;
         Kokkos::View<GocartSpeciesParams*, Kokkos::DefaultExecutionSpace> d_species_params;
+        // ONE flat device double pool holding every species' curve block (ADR-003 R10).
+        // Uploaded once here; never reallocated or H2D-copied inside the timestep loop.
+        Kokkos::View<double*, Kokkos::DefaultExecutionSpace> d_curve_pool;
     };
 
     // Extern C/C++ helper functions declared in GocartPackage.cpp
-    GocartSolverState* create_solver_state(int num_species, const GocartSpeciesParams* params) {
+    GocartSolverState* create_solver_state(int num_species, const GocartSpeciesParams* params,
+                                           const double* pool, int pool_size) {
         auto* state = new GocartSolverState();
         state->num_species = num_species;
 
@@ -40,6 +44,15 @@ namespace exaero {
 
         // Deep copy values to GPU Default Execution Space
         Kokkos::deep_copy(state->d_species_params, h_view);
+
+        // Single H2D upload of the flat curve pool (zero transfers in the loop, FR-015).
+        if (pool_size > 0) {
+            state->d_curve_pool = Kokkos::View<double*, Kokkos::DefaultExecutionSpace>(
+                "d_curve_pool", pool_size);
+            auto h_pool = Kokkos::create_mirror_view(state->d_curve_pool);
+            for (int i = 0; i < pool_size; ++i) h_pool(i) = pool[i];
+            Kokkos::deep_copy(state->d_curve_pool, h_pool);
+        }
 
         return state;
     }
@@ -224,6 +237,7 @@ namespace exaero {
         );
 
         auto d_species_params = state->d_species_params;
+        auto d_curve_pool = state->d_curve_pool;
 
         // 1. Calculate 3D Optical Coefficients (Extinction, Scattering, Lidar Backscatter, Asymmetry)
         Kokkos::parallel_for("GocartOptics3D_Kernel", 
@@ -249,22 +263,30 @@ namespace exaero {
 
                     if (params.has_optics_lookup) {
                         // --- MODE B: RH Lookup Table 1D Linear Interpolation ---
+                        // Curve read from the flat device pool; loop bound from n_rh extent,
+                        // never a literal (ADR-003 R10). Block layout: {rh,ext,ssa,asm} x n_rh.
+                        const double* blk = d_curve_pool.data() + params.curve_offset;
+                        const int n_rh = params.n_rh;
+                        const double* rh_axis = blk + curve_slot::RH_AXIS * n_rh;
+                        const double* ext     = blk + curve_slot::EXT * n_rh;
+                        const double* ssa     = blk + curve_slot::SSA * n_rh;
+                        const double* asm_l   = blk + curve_slot::ASM * n_rh;
                         int i_bin = 0;
-                        while (i_bin < 6 && current_rh > params.rh_bins[i_bin+1]) {
+                        while (i_bin < n_rh - 2 && current_rh > rh_axis[i_bin + 1]) {
                             i_bin++;
                         }
-                        
-                        double rh_lower = params.rh_bins[i_bin];
-                        double rh_upper = params.rh_bins[i_bin+1];
+
+                        double rh_lower = rh_axis[i_bin];
+                        double rh_upper = rh_axis[i_bin + 1];
                         double weight = (current_rh - rh_lower) / (rh_upper - rh_lower + 1e-15);
 
                         // Linear Interpolation
-                        double mee = params.ext_lookup[i_bin] + weight * (params.ext_lookup[i_bin+1] - params.ext_lookup[i_bin]);
-                        double ssa = params.ssa_lookup[i_bin] + weight * (params.ssa_lookup[i_bin+1] - params.ssa_lookup[i_bin]);
-                        asm_spec = params.asm_lookup[i_bin] + weight * (params.asm_lookup[i_bin+1] - params.asm_lookup[i_bin]);
+                        double mee = ext[i_bin] + weight * (ext[i_bin + 1] - ext[i_bin]);
+                        double ssa_v = ssa[i_bin] + weight * (ssa[i_bin + 1] - ssa[i_bin]);
+                        asm_spec = asm_l[i_bin] + weight * (asm_l[i_bin + 1] - asm_l[i_bin]);
 
                         ext_coeff_spec = mass_conc * mee * 1000.0;
-                        sca_coeff_spec = ext_coeff_spec * ssa;
+                        sca_coeff_spec = ext_coeff_spec * ssa_v;
 
                     } else {
                         // --- MODE A: Anomalous Diffraction Theory (ADT) Analytical Solver ---
@@ -355,15 +377,20 @@ namespace exaero {
                         double sca_coeff_spec = 0.0;
 
                         if (params.has_optics_lookup) {
+                            const double* blk = d_curve_pool.data() + params.curve_offset;
+                            const int n_rh = params.n_rh;
+                            const double* rh_axis = blk + curve_slot::RH_AXIS * n_rh;
+                            const double* ext     = blk + curve_slot::EXT * n_rh;
+                            const double* ssa     = blk + curve_slot::SSA * n_rh;
                             int i_bin = 0;
-                            while (i_bin < 6 && current_rh > params.rh_bins[i_bin+1]) {
+                            while (i_bin < n_rh - 2 && current_rh > rh_axis[i_bin + 1]) {
                                 i_bin++;
                             }
-                            double weight = (current_rh - params.rh_bins[i_bin]) / (params.rh_bins[i_bin+1] - params.rh_bins[i_bin] + 1e-15);
-                            double mee = params.ext_lookup[i_bin] + weight * (params.ext_lookup[i_bin+1] - params.ext_lookup[i_bin]);
-                            double ssa = params.ssa_lookup[i_bin] + weight * (params.ssa_lookup[i_bin+1] - params.ssa_lookup[i_bin]);
+                            double weight = (current_rh - rh_axis[i_bin]) / (rh_axis[i_bin + 1] - rh_axis[i_bin] + 1e-15);
+                            double mee = ext[i_bin] + weight * (ext[i_bin + 1] - ext[i_bin]);
+                            double ssa_v = ssa[i_bin] + weight * (ssa[i_bin + 1] - ssa[i_bin]);
                             ext_coeff_spec = mass_conc * mee * 1000.0;
-                            sca_coeff_spec = ext_coeff_spec * ssa;
+                            sca_coeff_spec = ext_coeff_spec * ssa_v;
                         } else {
                             // ADT values
                             double wet_diameter = params.dry_particle_diameter * 

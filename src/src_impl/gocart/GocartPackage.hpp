@@ -13,6 +13,8 @@ namespace exaero {
         int num_species_ = 0;
         std::vector<GocartSpeciesParams> h_species_params_;
         std::vector<std::string> species_names_; // Stores parsed YAML species names dynamically
+        // Host staging for the single flat curve pool uploaded to device once (ADR-003 R10).
+        std::vector<double> h_curve_pool_;
         GocartSolverState* solver_state_ = nullptr;
 
     public:
