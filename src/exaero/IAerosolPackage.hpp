@@ -1,6 +1,8 @@
 #pragma once
 #include <string>
+#include <vector>
 #include <exaero/AerosolIndices.hpp>
+#include <exaero/AttributeQuery.hpp>
 
 // Force backport to compile under exaero_mdspan namespace to prevent redefinition conflicts with system Kokkos
 #define MDSPAN_IMPL_STANDARD_NAMESPACE exaero_mdspan
@@ -81,6 +83,59 @@ namespace exaero {
         // Dynamic Species-to-Index mapping query APIs to avoid hardcoding on the host side
         virtual int getSpeciesIndex(const std::string& name) const = 0;
         virtual std::string getSpeciesName(int index) const = 0;
+
+        // --- GEOSmie MIE table attribute surface (additive, backward compatible) ---
+        // Defaults return NotActivated / do nothing so existing packages (MAM4xx wrapper,
+        // tests) compile and behave unchanged (Principle II, contract §2).
+
+        // Hot-path, device-resident bulk query mirroring computeOptics (FR-015).
+        // attributes_out: (cell, level, attribute_index) for one species + category.
+        // wavelengths is ignored for Microphysical. status_out optionally receives the
+        // AttributeStatus code per (cell, level, attribute_index).
+        virtual void computeAttributes(
+            const EnvironmentalStateView& env,
+            const View3D<const double>& state,
+            int species_index,
+            AttributeCategory category,
+            const View1D<const double>& wavelengths,
+            View3D<double>& attributes_out,
+            View3D<int>* status_out = nullptr) {
+            (void)env; (void)state; (void)species_index; (void)category;
+            (void)wavelengths; (void)attributes_out; (void)status_out;
+        }
+
+        // Scalar query for init-time / retrieval consumers (FR-001..FR-003).
+        // wavelength_m is ignored (pass NaN) for Microphysical. Returns the availability
+        // status; value_out/provenance_out are written only when the status is available
+        // or interpolated (FR-008: never a silent 0).
+        virtual AttributeStatus queryAttribute(
+            int species_index,
+            AttributeCategory category,
+            int attribute_index,
+            double rh,
+            double wavelength_m,
+            double* value_out,
+            ProvenanceInfo* provenance_out = nullptr) const {
+            (void)species_index; (void)category; (void)attribute_index;
+            (void)rh; (void)wavelength_m; (void)value_out; (void)provenance_out;
+            return AttributeStatus::NotActivated;
+        }
+
+        // Activation control (FR-010) with optional runtime extension/override file
+        // (FR-012). A file that fails validation aborts initialization with a
+        // "FATAL ERROR:" diagnostic -- no silent fallback (FR-009).
+        virtual void setAttributeActivation(
+            const std::vector<std::string>& species,
+            int categories_mask,
+            const std::string& runtime_file_path = "") {
+            (void)species; (void)categories_mask; (void)runtime_file_path;
+        }
+
+        // Curve mapping for runtime-configurable species sets (CATChem; research R9,
+        // ADR-003). Resolved during initialize(); bad config aborts with "FATAL ERROR:".
+        virtual void setSpeciesCurveConfig(const std::vector<SpeciesCurveConfig>& curves) {
+            (void)curves;
+        }
     };
 
 } // namespace exaero

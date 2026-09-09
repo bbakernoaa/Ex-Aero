@@ -1,5 +1,27 @@
 find_package(yaml-cpp REQUIRED)
 
+# --- Build-time baked-in MIE table generation (research R1, FR-016, T008) ---
+# The pinned GEOSmie RRTMG snapshot is converted into a deterministic float64 header.
+# Listing the generated header as a source makes every consumer depend on the rule.
+set(MIE_GENERATED_HEADER ${CMAKE_CURRENT_SOURCE_DIR}/data/generated/MieTableData.hpp)
+set(MIE_GENERATOR ${CMAKE_SOURCE_DIR}/tools/generate_mie_tables.py)
+set(MIE_SNAPSHOT_DIR ${CMAKE_SOURCE_DIR}/tools/geosmie_snapshot)
+
+add_custom_command(
+  OUTPUT ${MIE_GENERATED_HEADER}
+  COMMAND Python3::Interpreter ${MIE_GENERATOR} ${MIE_GENERATED_HEADER} ${MIE_SNAPSHOT_DIR}
+  DEPENDS ${MIE_GENERATOR}
+          ${MIE_SNAPSHOT_DIR}/opticsBands_DU.v15_3.RRTMG.nc
+          ${MIE_SNAPSHOT_DIR}/opticsBands_SS.v3_3.RRTMG.nc
+          ${MIE_SNAPSHOT_DIR}/opticsBands_SU.v1_3.RRTMG.nc
+          ${MIE_SNAPSHOT_DIR}/opticsBands_BC.v1_3.RRTMG.nc
+          ${MIE_SNAPSHOT_DIR}/opticsBands_OC.v1_3.RRTMG.nc
+          ${MIE_SNAPSHOT_DIR}/opticsBands_NI.v2_5.RRTMG.nc
+  COMMENT "Generating baked-in MieTableData.hpp from pinned GEOSmie snapshot"
+  VERBATIM)
+
+add_custom_target(exaero_mie_data DEPENDS ${MIE_GENERATED_HEADER})
+
 # Private Header Target for mdspan backport
 add_library(exaero_mdspan INTERFACE)
 target_include_directories(
