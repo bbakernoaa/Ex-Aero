@@ -183,9 +183,8 @@ void MieTableStore::ensure_baked_in_loaded() {
         c.radius = slice(a.radius, dims.n_radius);
         c.rh = slice(a.rh, dims.n_rh);
         c.lambda = slice(a.lambda, dims.n_lambda);
-        c.radius_resamplable = std::is_sorted(c.radius.begin(), c.radius.end()) &&
-                               std::adjacent_find(c.radius.begin(), c.radius.end(),
-                                                 std::not_equal_to<double>()) == c.radius.end() &&
+        c.radius_resamplable = std::adjacent_find(c.radius.begin(), c.radius.end(),
+                                                 [](double a, double b) { return !(b > a); }) == c.radius.end() &&
                                c.radius.size() >= 2;
         auto put = [&](const std::string& name, std::vector<double> v, int rank) {
             CurveField f; f.values = std::move(v); f.rank = rank; f.unit = unit_for_field_impl(name);
@@ -347,6 +346,12 @@ void MieTableStore::apply_curve_config(const std::vector<SpeciesCurveConfig>& cu
 
         SpeciesCurve c = base->second; // copy the merged (baked+file) curve
         c.species_name = cc.species_name;
+        if (cc.solver_radius_node >= 0) c.solver_radius_node = cc.solver_radius_node;
+
+        // A pure alias ({source: X}, no nodes/overrides) keeps the source delivery so
+        // grid-point queries stay bit-identical to the golden references (C11). Anything
+        // else is a config-modified curve (R9).
+        if (!cc.radius_nodes.empty() || !cc.overrides.empty()) c.config_modified = true;
 
         // Radius-only resample onto config nodes (R9). Disabled when the source radius axis
         // is not strictly increasing (multi-mode BC/OC): duplicate coordinates cannot define

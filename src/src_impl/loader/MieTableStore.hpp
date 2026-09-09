@@ -44,6 +44,7 @@ struct SpeciesCurve {
     std::map<std::string, CurveField> fields;  ///< attribute name -> field.
     bool radius_resamplable = false;           ///< true iff radius strictly increasing (R9).
     bool config_modified = false;              ///< radius resampled or overridden by config (status 5).
+    int solver_radius_node = 0;                ///< Default size-bin the device hot path queries (R9).
 
     int n_radius() const { return static_cast<int>(radius.size()); }
     int n_rh() const { return static_cast<int>(rh.size()); }

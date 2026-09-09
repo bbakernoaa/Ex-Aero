@@ -1,8 +1,66 @@
 #include <gocart/GocartPackage.hpp>
+#include <loader/MieTableStore.hpp>
 #include <yaml-cpp/yaml.h>
 #include <stdexcept>
+#include <string>
+#include <utility>
+#include <vector>
 
 namespace exaero {
+
+namespace {
+// Map a human-readable attribute name (YAML override key / index code) to the
+// (category, index) pair the store resolves. Names follow data-model.md; the index
+// codes mirror the *_indices constants in AttributeQuery.hpp. Returns false for an
+// unknown name so the caller can fail fast rather than silently drop an override.
+bool attribute_key(const std::string& name, AttributeCategory& cat, int& idx) {
+    using namespace exaero::microphysical_indices;
+    using namespace exaero::spectral_optical_indices;
+    static const std::vector<std::pair<std::string, std::pair<AttributeCategory, int>>> table = {
+        {"wet_particle_density", {AttributeCategory::Microphysical, WET_PARTICLE_DENSITY}},
+        {"growth_factor",        {AttributeCategory::Microphysical, GROWTH_FACTOR}},
+        {"effective_radius",     {AttributeCategory::Microphysical, EFFECTIVE_RADIUS}},
+        {"mass_mean_radius",     {AttributeCategory::Microphysical, MASS_MEAN_RADIUS}},
+        {"bin_lower_radius",     {AttributeCategory::Microphysical, BIN_LOWER_RADIUS}},
+        {"bin_upper_radius",     {AttributeCategory::Microphysical, BIN_UPPER_RADIUS}},
+        {"volume_per_mass",      {AttributeCategory::Microphysical, VOLUME_PER_MASS}},
+        {"area_per_mass",        {AttributeCategory::Microphysical, AREA_PER_MASS}},
+        {"particle_mass",        {AttributeCategory::Microphysical, PARTICLE_MASS}},
+        {"qext", {AttributeCategory::SpectralOptical, EXTINCTION_EFFICIENCY}},
+        {"qsca", {AttributeCategory::SpectralOptical, SCATTERING_EFFICIENCY}},
+        {"qabs", {AttributeCategory::SpectralOptical, ABSORPTION_EFFICIENCY}},
+        {"bext", {AttributeCategory::SpectralOptical, MASS_EXTINCTION}},
+        {"bsca", {AttributeCategory::SpectralOptical, MASS_SCATTERING}},
+        {"bbck", {AttributeCategory::SpectralOptical, MASS_BACKSCATTER}},
+        {"lidar_ratio", {AttributeCategory::SpectralOptical, LIDAR_RATIO}},
+        {"g", {AttributeCategory::SpectralOptical, ASYMMETRY_FACTOR}},
+        {"ssa", {AttributeCategory::SpectralOptical, SINGLE_SCATTERING_ALBEDO}},
+        {"refreal", {AttributeCategory::SpectralOptical, REFRACTIVE_INDEX_REAL}},
+        {"refimag", {AttributeCategory::SpectralOptical, REFRACTIVE_INDEX_IMAG}},
+    };
+    for (const auto& [key, val] : table) {
+        if (key == name) { cat = val.first; idx = val.second; return true; }
+    }
+    return false;
+}
+
+// Parse a top-level activation category token into a bitmask of (1 << AttributeCategory).
+int category_mask_from_yaml(const YAML::Node& node) {
+    int mask = 0;
+    if (!node) return mask;
+    if (node.IsSequence()) {
+        for (const auto& c : node) {
+            const std::string s = c.as<std::string>();
+            if (s == "microphysical") mask |= attribute_category_bit(AttributeCategory::Microphysical);
+            else if (s == "spectral") mask |= attribute_category_bit(AttributeCategory::SpectralOptical);
+            else if (s == "polarized") mask |= attribute_category_bit(AttributeCategory::PolarizedMoment);
+            else throw std::runtime_error("EX-aero Error: unknown activation category '" + s + "'");
+        }
+    }
+    return mask;
+}
+} // namespace
+
 
     // Decoupled solver helper function declarations (implemented in GocartSolver.cpp)
     GocartSolverState* create_solver_state(int num_species, const GocartSpeciesParams* params,
@@ -114,6 +172,61 @@ namespace exaero {
             }
             h_species_params_.push_back(p);
         }
+
+        // --- GEOSmie MIE curve mapping (ADR-003 / research R9): parse per-species
+        //     `mie_table:` block into SpeciesCurveConfig, then resolve through the store.
+        //     Order matters: reset -> optional runtime file (activation) -> config, so
+        //     precedence is config > runtime-file > baked-in. ---
+        MieTableStore& store = MieTableStore::instance();
+        store.reset_to_baked_in();
+
+        // Top-level activation (optional): species list, categories, runtime data file.
+        int activation_mask = attribute_category_bit(AttributeCategory::Microphysical) |
+                              attribute_category_bit(AttributeCategory::SpectralOptical);
+        std::vector<std::string> activated_species;
+        std::string runtime_file;
+        if (config["activation"]) {
+            auto act = config["activation"];
+            if (act["categories"]) activation_mask |= category_mask_from_yaml(act["categories"]);
+            if (act["species"]) {
+                for (const auto& sp : act["species"]) activated_species.push_back(sp.as<std::string>());
+            }
+            if (act["data_file"]) runtime_file = act["data_file"].as<std::string>();
+        }
+        // Runtime file (if any) is applied through setAttributeActivation (FR-012); a bad
+        // file aborts with FATAL ERROR and no fallback (FR-009).
+        setAttributeActivation(activated_species, activation_mask, runtime_file);
+
+        std::vector<SpeciesCurveConfig> curve_configs; // per-species mie_table: bindings (R9)
+        for (int i = 0; i < num_species_; ++i) {
+            auto s = species_node[i];
+            if (!s["mie_table"]) continue;
+            auto mt = s["mie_table"];
+            SpeciesCurveConfig cc;
+            cc.species_name = species_names_[i];
+            if (mt["source"]) cc.source_label = mt["source"].as<std::string>();
+            if (mt["interpolate"]) cc.interpolate = mt["interpolate"].as<std::string>();
+            if (mt["solver_radius_node"]) cc.solver_radius_node = mt["solver_radius_node"].as<int>();
+            if (mt["radius_nodes"]) {
+                for (const auto& rn : mt["radius_nodes"]) cc.radius_nodes.push_back(rn.as<double>());
+            }
+            if (mt["overrides"]) {
+                for (YAML::const_iterator it = mt["overrides"].begin(); it != mt["overrides"].end(); ++it) {
+                    const std::string attr = it->first.as<std::string>();
+                    AttributeCategory cat; int idx;
+                    if (!attribute_key(attr, cat, idx)) {
+                        throw std::runtime_error("EX-aero Error: species '" + cc.species_name +
+                            "' override names unknown attribute '" + attr + "' (fail fast)");
+                    }
+                    SpeciesCurveConfig::Override ov;
+                    ov.category = cat; ov.attribute_index = idx;
+                    for (const auto& v : it->second) ov.values.push_back(v.as<double>());
+                    cc.overrides.push_back(std::move(ov));
+                }
+            }
+            curve_configs.push_back(std::move(cc));
+        }
+        if (!curve_configs.empty()) setSpeciesCurveConfig(curve_configs);
 
         // Parse emissions mapping schemas if present (SPEC-EMISSIONS-002)
         if (config["emissions_mapping"]) {
@@ -337,6 +450,53 @@ namespace exaero {
             throw std::out_of_range("EX-aero Error: Species index (" + std::to_string(index) + ") out of bounds!");
         }
         return species_names_[index];
+    }
+
+    // --- GEOSmie MIE attribute surface (ADR-003 / research R9) ---
+    void GocartPackage::setSpeciesCurveConfig(const std::vector<SpeciesCurveConfig>& curves) {
+        // Resolve through the store: resample radius onto config nodes + apply overrides
+        // (precedence config > file > baked). A bad strategy/source aborts with FATAL ERROR.
+        MieTableStore::instance().apply_curve_config(curves);
+    }
+
+    void GocartPackage::setAttributeActivation(const std::vector<std::string>& species,
+                                               int categories_mask,
+                                               const std::string& runtime_file_path) {
+        auto& store = MieTableStore::instance();
+        if (!runtime_file_path.empty()) {
+            store.apply_runtime_file(runtime_file_path); // FATAL on bad file, no fallback (FR-009)
+        }
+        store.set_activation(species, categories_mask);
+    }
+
+    AttributeStatus GocartPackage::queryAttribute(int species_index, AttributeCategory category,
+                                                  int attribute_index, double rh, double wavelength_m,
+                                                  double* value_out,
+                                                  ProvenanceInfo* provenance_out) const {
+        if (species_index < 0 || species_index >= num_species_)
+            return AttributeStatus::NotInSource;
+        const std::string name = species_names_[species_index];
+        auto& store = MieTableStore::instance();
+        const SpeciesCurve* c = store.find_curve(name);
+        const int radius_node = c ? c->solver_radius_node : 0; // hot-path default bin (R9)
+
+        double local_value = 0.0;
+        Provenance prov;
+        const AttributeStatus status = store.query(
+            name, category, attribute_index, rh, wavelength_m, radius_node, &local_value, &prov);
+
+        // Write value only on an available/interpolated result (FR-008: never a silent 0).
+        const bool ok = status == AttributeStatus::Available ||
+                        status == AttributeStatus::AvailableFile ||
+                        status == AttributeStatus::AvailableConfig ||
+                        status == AttributeStatus::Interpolated;
+        if (value_out && ok) *value_out = local_value;
+        if (provenance_out) {
+            prov.status = status;
+            *provenance_out = prov.to_public(c ? c->n_radius() : 0, c ? c->n_rh() : 0,
+                                             c ? c->n_lambda() : 0);
+        }
+        return status;
     }
 
 } // namespace exaero

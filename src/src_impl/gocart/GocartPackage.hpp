@@ -54,6 +54,16 @@ namespace exaero {
         int getSpeciesIndex(const std::string& name) const override;
         std::string getSpeciesName(int index) const override;
 
+        // Attribute surface (ADR-003): resolve curve mapping + activation through the store.
+        void setSpeciesCurveConfig(const std::vector<SpeciesCurveConfig>& curves) override;
+        void setAttributeActivation(const std::vector<std::string>& species,
+                                    int categories_mask,
+                                    const std::string& runtime_file_path = "") override;
+        AttributeStatus queryAttribute(int species_index, AttributeCategory category,
+                                       int attribute_index, double rh, double wavelength_m,
+                                       double* value_out,
+                                       ProvenanceInfo* provenance_out = nullptr) const override;
+
         // Accessors for testing
         int get_num_species() const { return num_species_; }
         GocartSpeciesParams get_species_params(int i) const { return h_species_params_[i]; }
