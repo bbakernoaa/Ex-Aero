@@ -1,6 +1,7 @@
 #include <gocart/GocartPackage.hpp>
 #include <loader/MieTableStore.hpp>
 #include <yaml-cpp/yaml.h>
+#include <cmath>
 #include <stdexcept>
 #include <string>
 #include <utility>
@@ -453,6 +454,52 @@ int category_mask_from_yaml(const YAML::Node& node) {
     }
 
     // --- GEOSmie MIE attribute surface (ADR-003 / research R9) ---
+    void GocartPackage::computeAttributes(
+        const EnvironmentalStateView& env,
+        const View3D<const double>& state,
+        int species_index,
+        AttributeCategory category,
+        const View1D<const double>& wavelengths,
+        View3D<double>& attributes_out,
+        View3D<int>* status_out) {
+
+        if (species_index < 0 || species_index >= num_species_) {
+            throw std::runtime_error("EX-aero Error: computeAttributes species index out of range");
+        }
+        const std::string name = species_names_[species_index];
+        auto& store = MieTableStore::instance();
+        const SpeciesCurve* c = store.find_curve(name);
+        const int radius_node = c ? c->solver_radius_node : 0;
+
+        // Attribute count is derived from the category, never a fixed literal (R10).
+        int num_attr = 0;
+        switch (category) {
+            case AttributeCategory::Microphysical:   num_attr = microphysical_indices::NUM_ATTRIBUTES; break;
+            case AttributeCategory::SpectralOptical: num_attr = spectral_optical_indices::NUM_ATTRIBUTES; break;
+            case AttributeCategory::PolarizedMoment: num_attr = polarized_moment_indices::NUM_ATTRIBUTES; break;
+            default: num_attr = 0;
+        }
+
+        const int num_cells = static_cast<int>(state.extent(0));
+        const int num_levels = static_cast<int>(state.extent(1));
+        // Spectral uses the first requested band; Microphysical ignores wavelength (NaN).
+        const double wavelength = (category == AttributeCategory::SpectralOptical &&
+                                   wavelengths.extent(0) > 0) ? wavelengths(0) : std::nan("");
+
+        for (int ic = 0; ic < num_cells; ++ic) {
+            for (int il = 0; il < num_levels; ++il) {
+                const double rh = env.relative_humidity(ic, il);
+                for (int ia = 0; ia < num_attr; ++ia) {
+                    double value = 0.0;
+                    const AttributeStatus st = store.query(
+                        name, category, ia, rh, wavelength, radius_node, &value, nullptr);
+                    attributes_out(ic, il, ia) = value; // 0 only when status says unavailable
+                    if (status_out) (*status_out)(ic, il, ia) = static_cast<int>(st);
+                }
+            }
+        }
+    }
+
     void GocartPackage::setSpeciesCurveConfig(const std::vector<SpeciesCurveConfig>& curves) {
         // Resolve through the store: resample radius onto config nodes + apply overrides
         // (precedence config > file > baked). A bad strategy/source aborts with FATAL ERROR.

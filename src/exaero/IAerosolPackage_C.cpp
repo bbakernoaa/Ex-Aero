@@ -246,6 +246,179 @@ extern "C" {
         }
     }
 
+    // --- GEOSmie MIE attribute surface (contract §3, CCPP errmsg/errflg) ---
+    void exaero_set_attribute_activation(
+        exaero_package_t pkg,
+        const char* const* species_names, int num_species,
+        int categories_mask, const char* runtime_file_path,
+        char* errmsg, int* errflg) {
+
+        if (!pkg) {
+            if (errflg) *errflg = 1;
+            if (errmsg) std::strcpy(errmsg, "EX-aero Error: Null package handle");
+            return;
+        }
+        try {
+            std::vector<std::string> names;
+            if (species_names && num_species > 0) {
+                names.reserve(num_species);
+                for (int i = 0; i < num_species; ++i) names.emplace_back(species_names[i] ? species_names[i] : "");
+            }
+            std::string file = runtime_file_path ? std::string(runtime_file_path) : std::string();
+            static_cast<exaero::IAerosolPackage*>(pkg)->setAttributeActivation(names, categories_mask, file);
+            if (errflg) *errflg = 0;
+            if (errmsg) errmsg[0] = '\0';
+        } catch (const std::exception& e) {
+            if (errflg) *errflg = 1; // FATAL on bad file, no fallback (FR-009)
+            if (errmsg) { std::strncpy(errmsg, e.what(), 255); errmsg[255] = '\0'; }
+        } catch (...) {
+            if (errflg) *errflg = 1;
+            if (errmsg) std::strcpy(errmsg, "EX-aero Error: Unknown exception during activation");
+        }
+    }
+
+    void exaero_set_species_curve_config(
+        exaero_package_t pkg,
+        const char* const* species_names, const char* const* source_labels,
+        const double* const* radius_nodes, const int* num_radius_nodes,
+        const double* const* override_values, const int* num_override_attributes,
+        const int* const* override_attribute_ids, const char* const* interpolate,
+        int num_curves, char* errmsg, int* errflg) {
+
+        if (!pkg) {
+            if (errflg) *errflg = 1;
+            if (errmsg) std::strcpy(errmsg, "EX-aero Error: Null package handle");
+            return;
+        }
+        try {
+            std::vector<exaero::SpeciesCurveConfig> curves;
+            for (int i = 0; i < num_curves; ++i) {
+                exaero::SpeciesCurveConfig cc;
+                if (species_names && species_names[i]) cc.species_name = species_names[i];
+                if (source_labels && source_labels[i]) cc.source_label = source_labels[i];
+                if (interpolate && interpolate[i] && interpolate[i][0]) cc.interpolate = interpolate[i];
+                const int nR = (num_radius_nodes && num_radius_nodes[i] > 0) ? num_radius_nodes[i] : 0;
+                if (nR > 0 && radius_nodes && radius_nodes[i]) {
+                    cc.radius_nodes.assign(radius_nodes[i], radius_nodes[i] + nR);
+                }
+                const int nAttr = (num_override_attributes && num_override_attributes[i] > 0)
+                                      ? num_override_attributes[i] : 0;
+                if (nAttr > 0 && override_values && override_values[i] && override_attribute_ids && override_attribute_ids[i]) {
+                    const double* row = override_values[i];
+                    for (int a = 0; a < nAttr; ++a) {
+                        const int code = override_attribute_ids[i][a];
+                        exaero::SpeciesCurveConfig::Override ov;
+                        ov.category = static_cast<exaero::AttributeCategory>(code >> 8);
+                        ov.attribute_index = code & 0xff;
+                        if (nR > 0) ov.values.assign(row + static_cast<std::size_t>(a) * nR,
+                                                     row + static_cast<std::size_t>(a + 1) * nR);
+                        cc.overrides.push_back(std::move(ov));
+                    }
+                }
+                curves.push_back(std::move(cc));
+            }
+            static_cast<exaero::IAerosolPackage*>(pkg)->setSpeciesCurveConfig(curves);
+            if (errflg) *errflg = 0;
+            if (errmsg) errmsg[0] = '\0';
+        } catch (const std::exception& e) {
+            if (errflg) *errflg = 1; // FATAL on bad config, no fallback (FR-009)
+            if (errmsg) { std::strncpy(errmsg, e.what(), 255); errmsg[255] = '\0'; }
+        } catch (...) {
+            if (errflg) *errflg = 1;
+            if (errmsg) std::strcpy(errmsg, "EX-aero Error: Unknown exception during curve config");
+        }
+    }
+
+    void exaero_compute_attributes(
+        exaero_package_t pkg,
+        int num_cells, int num_levels,
+        const double* temp_ptr, const double* pres_ptr, const double* dens_ptr, const double* rh_ptr, const double* thick_ptr,
+        const double* state_ptr,
+        int species_index, int category,
+        int num_bands, const double* wavelengths_ptr,
+        double* attributes_out, int* status_out,
+        char* errmsg, int* errflg) {
+
+        if (!pkg) {
+            if (errflg) *errflg = 1;
+            if (errmsg) std::strcpy(errmsg, "EX-aero Error: Null package handle");
+            return;
+        }
+        try {
+            auto* package = static_cast<exaero::IAerosolPackage*>(pkg);
+            exaero::View2D<const double> temperature(temp_ptr, num_cells, num_levels);
+            exaero::View2D<const double> pressure(pres_ptr, num_cells, num_levels);
+            exaero::View2D<const double> air_density(dens_ptr, num_cells, num_levels);
+            exaero::View2D<const double> relative_humidity(rh_ptr, num_cells, num_levels);
+            exaero::View2D<const double> layer_thickness(thick_ptr, num_cells, num_levels);
+            exaero::EnvironmentalStateView env{temperature, pressure, air_density, relative_humidity, layer_thickness};
+
+            exaero::View3D<const double> state(state_ptr, num_cells, num_levels, 1);
+            exaero::View1D<const double> wavelengths(wavelengths_ptr, num_bands);
+
+            // num_attributes derived from category (never a fixed literal, R10).
+            int num_attr = 0;
+            switch (static_cast<exaero::AttributeCategory>(category)) {
+                case exaero::AttributeCategory::Microphysical:   num_attr = exaero::microphysical_indices::NUM_ATTRIBUTES; break;
+                case exaero::AttributeCategory::SpectralOptical: num_attr = exaero::spectral_optical_indices::NUM_ATTRIBUTES; break;
+                case exaero::AttributeCategory::PolarizedMoment: num_attr = exaero::polarized_moment_indices::NUM_ATTRIBUTES; break;
+                default: num_attr = 0;
+            }
+            exaero::View3D<double> attrs_out(attributes_out, num_cells, num_levels, num_attr);
+            exaero::View3D<int> stat_out;
+            exaero::View3D<int>* stat_ptr = nullptr;
+            if (status_out) {
+                stat_out = exaero::View3D<int>(status_out, num_cells, num_levels, num_attr);
+                stat_ptr = &stat_out;
+            }
+            package->computeAttributes(env, state, species_index,
+                                       static_cast<exaero::AttributeCategory>(category),
+                                       wavelengths, attrs_out, stat_ptr);
+            if (errflg) *errflg = 0;
+            if (errmsg) errmsg[0] = '\0';
+        } catch (const std::exception& e) {
+            if (errflg) *errflg = 1;
+            if (errmsg) { std::strncpy(errmsg, e.what(), 255); errmsg[255] = '\0'; }
+        } catch (...) {
+            if (errflg) *errflg = 1;
+            if (errmsg) std::strcpy(errmsg, "EX-aero Error: Unknown exception during compute_attributes");
+        }
+    }
+
+    void exaero_query_attribute(
+        exaero_package_t pkg,
+        int species_index, int category, int attribute_index,
+        double rh, double wavelength_m, double* value_out,
+        char* unit_out, int unit_max, char* version_out, int version_max,
+        int* status_out, char* errmsg, int* errflg) {
+
+        if (!pkg) {
+            if (errflg) *errflg = 1;
+            if (errmsg) std::strcpy(errmsg, "EX-aero Error: Null package handle");
+            return;
+        }
+        try {
+            auto* package = static_cast<exaero::IAerosolPackage*>(pkg);
+            exaero::ProvenanceInfo prov{};
+            double value = 0.0;
+            const exaero::AttributeStatus st = package->queryAttribute(
+                species_index, static_cast<exaero::AttributeCategory>(category), attribute_index,
+                rh, wavelength_m, &value, &prov);
+            if (value_out) *value_out = value;
+            if (status_out) *status_out = static_cast<int>(st);
+            if (unit_out && unit_max > 0) { std::strncpy(unit_out, prov.unit, unit_max - 1); unit_out[unit_max - 1] = '\0'; }
+            if (version_out && version_max > 0) { std::strncpy(version_out, prov.source_version, version_max - 1); version_out[version_max - 1] = '\0'; }
+            if (errflg) *errflg = 0;
+            if (errmsg) errmsg[0] = '\0';
+        } catch (const std::exception& e) {
+            if (errflg) *errflg = 1;
+            if (errmsg) { std::strncpy(errmsg, e.what(), 255); errmsg[255] = '\0'; }
+        } catch (...) {
+            if (errflg) *errflg = 1;
+            if (errmsg) std::strcpy(errmsg, "EX-aero Error: Unknown exception during query_attribute");
+        }
+    }
+
     void exaero_init_environment() {
         exaero::initialize_environment();
     }

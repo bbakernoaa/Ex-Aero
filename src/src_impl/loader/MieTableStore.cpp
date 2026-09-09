@@ -306,6 +306,7 @@ void MieTableStore::validate_curve(const SpeciesCurve& c) const {
 
 void MieTableStore::reset_to_baked_in() {
     baked_loaded_ = false;
+    activated_species_.clear(); // drop any prior species filter; baseline = all bound
     ensure_baked_in_loaded();
 }
 

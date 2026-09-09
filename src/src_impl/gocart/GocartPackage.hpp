@@ -55,6 +55,14 @@ namespace exaero {
         std::string getSpeciesName(int index) const override;
 
         // Attribute surface (ADR-003): resolve curve mapping + activation through the store.
+        void computeAttributes(
+            const EnvironmentalStateView& env,
+            const View3D<const double>& state,
+            int species_index,
+            AttributeCategory category,
+            const View1D<const double>& wavelengths,
+            View3D<double>& attributes_out,
+            View3D<int>* status_out = nullptr) override;
         void setSpeciesCurveConfig(const std::vector<SpeciesCurveConfig>& curves) override;
         void setAttributeActivation(const std::vector<std::string>& species,
                                     int categories_mask,
