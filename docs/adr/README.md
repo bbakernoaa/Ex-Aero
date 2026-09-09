@@ -11,6 +11,7 @@ Welcome to EX-aero's Architectural Decision Records directory. We utilize ADRs t
 | :--- | :--- | :--- | :--- |
 | **[ADR-001](ADR-001-compilation-isolation.md)** | Target-Level Compilation Isolation | Approved | Separates public API definitions from raw Kokkos and GPU device code compilation. |
 | **[ADR-002](ADR-002-zero-copy-interop.md)** | Column-Major Zero-Copy Memory Interop | Approved | Enforces `layout_left` column-major standard mdspan views to align directly with Fortran. |
+| **[ADR-003](ADR-003-curve-mapping-config.md)** | Table-as-Curve Mapping for Runtime-Configurable Species | Accepted | Tables are dynamic-axis curves; config binds species, redefines radius nodes, overrides values; dynamic device pool replaces fixed `[8]` arrays. |
 
 ---
 
