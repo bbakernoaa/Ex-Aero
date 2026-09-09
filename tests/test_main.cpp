@@ -5,6 +5,8 @@
 #include <cassert>
 #include <iostream>
 #include <cmath>
+#include <cstring>
+#include <string>
 
 void test_gocart_yaml_parsing() {
     std::string yaml_string = R"(
@@ -291,6 +293,247 @@ void test_gocart_lookup_length_mismatch_fails() {
     }
     assert(threw); // must abort, never silently pad or truncate
     std::cout << "GOCART Lookup Length Mismatch Fail-Fast: PASS" << std::endl;
+}
+
+// --- GEOSmie MIE attribute surface: US1 microphysical golden tests (T015, T016) ---
+// Golden values are the pinned snapshot's float64-widened grid values (FR-005, C1);
+// provenance must carry unit + version + citation + delivery source on every value (C5).
+
+// Relative tolerance for grid-point reproduction (FR-005).
+static const double kGridTol = 1e-7;
+
+// Six baked species configured by their source labels so the package resolves each
+// name straight to its baked curve (no mie_table binding needed for the golden path).
+static const char* const kMieSixYaml = R"YAML(
+    species:
+      - name: "DU"
+        dry_density: 2600.0
+        molecular_weight: 100.0
+        dry_particle_diameter: 2.0e-6
+        hygroscopicity: 0.1
+        lognormal_sigma: 1.5
+        lognormal_dg: 1.0e-6
+        refractive_index_real: 1.55
+        refractive_index_imag: 0.002
+      - name: "SS"
+        dry_density: 1800.0
+        molecular_weight: 98.0
+        dry_particle_diameter: 0.2e-6
+        hygroscopicity: 0.5
+        lognormal_sigma: 2.0
+        lognormal_dg: 0.15e-6
+        refractive_index_real: 1.43
+        refractive_index_imag: 1.0e-8
+      - name: "SU"
+        dry_density: 1800.0
+        molecular_weight: 98.0
+        dry_particle_diameter: 0.2e-6
+        hygroscopicity: 0.5
+        lognormal_sigma: 2.0
+        lognormal_dg: 0.15e-6
+        refractive_index_real: 1.43
+        refractive_index_imag: 1.0e-8
+      - name: "BC"
+        dry_density: 1800.0
+        molecular_weight: 12.0
+        dry_particle_diameter: 0.1e-6
+        hygroscopicity: 0.0
+        lognormal_sigma: 1.8
+        lognormal_dg: 0.05e-6
+        refractive_index_real: 1.85
+        refractive_index_imag: 0.75
+      - name: "OC"
+        dry_density: 1300.0
+        molecular_weight: 150.0
+        dry_particle_diameter: 0.1e-6
+        hygroscopicity: 0.1
+        lognormal_sigma: 1.8
+        lognormal_dg: 0.05e-6
+        refractive_index_real: 1.55
+        refractive_index_imag: 0.0
+      - name: "NI"
+        dry_density: 2150.0
+        molecular_weight: 85.0
+        dry_particle_diameter: 0.3e-6
+        hygroscopicity: 0.6
+        lognormal_sigma: 1.6
+        lognormal_dg: 0.1e-6
+        refractive_index_real: 1.52
+        refractive_index_imag: 0.01
+)YAML";
+
+namespace mie_micro {
+struct Golden {
+    const char* species;
+    int index;                 // package species index
+    double reff00;             // rEff(bin0, rh=0)      [m]
+    double mass00;             // rMass(bin0, rh=0)     [kg]
+    double rlow0, rupp0;       // bin boundaries        [m]
+    double growth_rh50;        // rEff(bin0, rh=0.5) / rEff(bin0, rh=0)
+    double wetdens00;          // rMass/(4/3 pi rEff^3) at (bin0, rh=0) [kg m^-3]
+    double volmass00, areamass00;
+};
+// Golden values read from the pinned snapshot (tools/geosmie_snapshot) at full float64.
+static const Golden GOLDEN[6] = {
+    {"DU", 0, 6.358845325848961e-07, 5.644337028201749e-15, 1.0000000116860974e-07,
+     9.999999974752427e-07, 1.0, 5240.70296164897, 0.00019081409637560404, 225.0574828419758},
+    {"SS", 1, 7.841114069151445e-08, 4.9905266329105316e-18, 2.999999892949745e-08,
+     1.0000000116860974e-07, 1.2618481798599361, 2471.2942166388125, 0.0004046462753269791,
+     3870.4284087538726},
+    {"SU", 2, 1.5664450359054172e-07, 4.6720689626767e-17, 4.999999969612645e-09,
+     3.000000106112566e-07, 1.3904448902042543, 2901.8512928604996, 0.00034460759669536687,
+     1649.9506308699547},
+    {"BC", 3, 3.921032032394578e-08, 9.94582633186942e-19, 4.999999969612645e-09,
+     3.000000106112566e-07, 1.0, 3938.683571448429, 0.00025389193669910767, 4856.347791885845},
+    {"OC", 4, 8.765797332443981e-08, 1.6408043966108013e-17, 4.999999969612645e-09,
+     3.000000106112566e-07, 1.0, 5815.591933351836, 0.0001719515418998194, 1471.2142151352748},
+    {"NI", 5, 1.560005102874129e-07, 1.234258558954136e-16, 4.999999969612645e-09,
+     0.0, 1.4733953629039604, 7761.389545995164, 0.0001288429080996192, 619.4350319539391},
+};
+} // namespace mie_micro
+
+static void check_close(double got, double want, const char* what) {
+    const double tol = kGridTol * (std::abs(want) > 0.0 ? std::abs(want) : 1.0);
+    assert(std::abs(got - want) <= tol);
+    (void)what;
+}
+
+void test_mie_baked_in_microphysical() {
+    using namespace exaero::microphysical_indices;
+    exaero::GocartPackage package;
+    package.initialize(kMieSixYaml);
+
+    for (const auto& g : mie_micro::GOLDEN) {
+        double v = 0.0;
+        exaero::ProvenanceInfo p{};
+        auto st = package.queryAttribute(g.index, exaero::AttributeCategory::Microphysical,
+                                         EFFECTIVE_RADIUS, 0.0, 0.0, &v, &p);
+        assert(st == exaero::AttributeStatus::Available);
+        check_close(v, g.reff00, g.species);
+
+        st = package.queryAttribute(g.index, exaero::AttributeCategory::Microphysical,
+                                    PARTICLE_MASS, 0.0, 0.0, &v, &p);
+        assert(st == exaero::AttributeStatus::Available);
+        check_close(v, g.mass00, g.species);
+
+        st = package.queryAttribute(g.index, exaero::AttributeCategory::Microphysical,
+                                    BIN_LOWER_RADIUS, 0.0, 0.0, &v, &p);
+        assert(st == exaero::AttributeStatus::Available);
+        check_close(v, g.rlow0, g.species);
+
+        st = package.queryAttribute(g.index, exaero::AttributeCategory::Microphysical,
+                                    BIN_UPPER_RADIUS, 0.0, 0.0, &v, &p);
+        assert(st == exaero::AttributeStatus::Available);
+        check_close(v, g.rupp0, g.species);
+
+        // rh = 0.5 is an exact source grid point (rh[10] == 0.5): no interpolation.
+        st = package.queryAttribute(g.index, exaero::AttributeCategory::Microphysical,
+                                    GROWTH_FACTOR, 0.5, 0.0, &v, &p);
+        assert(st == exaero::AttributeStatus::Available);
+        assert(p.interpolated == 0);
+        check_close(v, g.growth_rh50, g.species);
+
+        st = package.queryAttribute(g.index, exaero::AttributeCategory::Microphysical,
+                                    WET_PARTICLE_DENSITY, 0.0, 0.0, &v, &p);
+        assert(st == exaero::AttributeStatus::Available);
+        check_close(v, g.wetdens00, g.species);
+
+        st = package.queryAttribute(g.index, exaero::AttributeCategory::Microphysical,
+                                    VOLUME_PER_MASS, 0.0, 0.0, &v, &p);
+        assert(st == exaero::AttributeStatus::Available);
+        check_close(v, g.volmass00, g.species);
+
+        st = package.queryAttribute(g.index, exaero::AttributeCategory::Microphysical,
+                                    AREA_PER_MASS, 0.0, 0.0, &v, &p);
+        assert(st == exaero::AttributeStatus::Available);
+        check_close(v, g.areamass00, g.species);
+    }
+    std::cout << "MIE Baked-in Microphysical Grid Values (FR-005/C1): PASS" << std::endl;
+}
+
+void test_mie_provenance() {
+    using namespace exaero::microphysical_indices;
+    exaero::GocartPackage package;
+    package.initialize(kMieSixYaml);
+
+    double v = 0.0;
+    exaero::ProvenanceInfo p{};
+    package.queryAttribute(0, exaero::AttributeCategory::Microphysical, EFFECTIVE_RADIUS,
+                           0.0, 0.0, &v, &p);
+    assert(std::string(p.unit) == "m");
+    assert(std::string(p.species) == "DU");
+    assert(std::string(p.source_version) == "ufs-regtests-input-data-20260617/GOCART/p8c_5d");
+    assert(std::strlen(p.citation) > 0);
+    assert(p.delivery_source == static_cast<int>(exaero::DeliverySource::BakedIn));
+    assert(p.interpolated == 0);
+    assert(p.num_radius == 5 && p.num_rh == 36 && p.num_lambda == 30); // DU extents are data
+
+    package.queryAttribute(0, exaero::AttributeCategory::Microphysical, WET_PARTICLE_DENSITY,
+                           0.0, 0.0, &v, &p);
+    assert(std::string(p.unit) == "kg m^-3");
+    package.queryAttribute(0, exaero::AttributeCategory::Microphysical, GROWTH_FACTOR,
+                           0.0, 0.0, &v, &p);
+    assert(std::string(p.unit) == "1");
+    package.queryAttribute(0, exaero::AttributeCategory::Microphysical, PARTICLE_MASS,
+                           0.0, 0.0, &v, &p);
+    assert(std::string(p.unit) == "kg");
+
+    // mass_mean_radius has no source variable in the pinned band tables (data-model
+    // implement-time reconciliation): explicit NotInSource, never a silent 0 (FR-008).
+    auto st = package.queryAttribute(0, exaero::AttributeCategory::Microphysical,
+                                     MASS_MEAN_RADIUS, 0.0, 0.0, &v, &p);
+    assert(st == exaero::AttributeStatus::NotInSource);
+
+    std::cout << "MIE Provenance (unit+version+citation+delivery, C5): PASS" << std::endl;
+}
+
+void test_mie_not_available() {
+    using namespace exaero::microphysical_indices;
+    // A species with no bound curve: explicit NotInSource, value untouched (FR-008/C4).
+    std::string yaml = std::string(kMieSixYaml) +
+        R"YAML(      - name: "MYSTERY"
+        dry_density: 1000.0
+        molecular_weight: 50.0
+        dry_particle_diameter: 0.1e-6
+        hygroscopicity: 0.0
+        lognormal_sigma: 1.5
+        lognormal_dg: 0.1e-6
+        refractive_index_real: 1.4
+        refractive_index_imag: 0.0
+)YAML";
+    exaero::GocartPackage package;
+    package.initialize(yaml);
+
+    double v = -777.0; // sentinel: must NOT be overwritten with a silent 0
+    exaero::ProvenanceInfo p{};
+    auto st = package.queryAttribute(6, exaero::AttributeCategory::Microphysical,
+                                     EFFECTIVE_RADIUS, 0.0, 0.0, &v, &p);
+    assert(st == exaero::AttributeStatus::NotInSource);
+    assert(v == -777.0);
+
+    // Deactivate microphysical for DU only: explicit NotActivated (FR-010/C4).
+    package.setAttributeActivation({"DU"},
+        exaero::attribute_category_bit(exaero::AttributeCategory::SpectralOptical), "");
+    st = package.queryAttribute(0, exaero::AttributeCategory::Microphysical,
+                                EFFECTIVE_RADIUS, 0.0, 0.0, &v, nullptr);
+    assert(st == exaero::AttributeStatus::NotActivated);
+    // Spectral stays active for DU.
+    st = package.queryAttribute(0, exaero::AttributeCategory::SpectralOptical,
+                                exaero::spectral_optical_indices::EXTINCTION_EFFICIENCY,
+                                0.0, 1.0, &v, nullptr);
+    assert(st == exaero::AttributeStatus::Available);
+
+    // Out-of-range species index: explicit status, no crash, no silent 0.
+    st = package.queryAttribute(999, exaero::AttributeCategory::Microphysical,
+                                EFFECTIVE_RADIUS, 0.0, 0.0, &v, nullptr);
+    assert(st == exaero::AttributeStatus::NotInSource);
+
+    // Restore full activation so later tests see the default surface.
+    package.setAttributeActivation({},
+        exaero::attribute_category_bit(exaero::AttributeCategory::Microphysical) |
+        exaero::attribute_category_bit(exaero::AttributeCategory::SpectralOptical), "");
+
+    std::cout << "MIE Explicit Not-Available Statuses (FR-008/C4): PASS" << std::endl;
 }
 
 void test_optical_precision() {
@@ -631,6 +874,9 @@ int main() {
     test_gocart_optics();
     test_gocart_arbitrary_lookup_length();
     test_gocart_lookup_length_mismatch_fails();
+    test_mie_baked_in_microphysical();
+    test_mie_provenance();
+    test_mie_not_available();
     test_optical_precision();
     test_gocart_ccn();
     
