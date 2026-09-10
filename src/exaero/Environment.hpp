@@ -7,4 +7,8 @@ namespace exaero {
 void initialize_environment();
 void finalize_environment();
 
+// Block until all previously launched device work has completed (Kokkos::fence),
+// without exposing Kokkos headers. Needed by timing/hot-path consumers.
+void fence_environment();
+
 } // namespace exaero

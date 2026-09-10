@@ -139,6 +139,10 @@ namespace {
         }
     }
 
+    void fence_environment() {
+        Kokkos::fence();
+    }
+
     // Definition of our private solver state managing GPU-allocated memory views
     struct GocartSolverState {
         int num_species;
