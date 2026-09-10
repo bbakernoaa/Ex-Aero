@@ -98,6 +98,8 @@ struct ProvenanceInfo {
     int num_radius = 0;                  ///< Resolved radius-axis length for this species (dynamic).
     int num_rh = 0;                      ///< Resolved RH-axis length for this species (dynamic).
     int num_lambda = 0;                  ///< Resolved wavelength-axis length (0 when N/A).
+    int num_pol = 0;                     ///< Polarized element count (0 unless moments exist, FR-003).
+    int num_moment = 0;                  ///< Polarized moment count (0 unless moments exist, FR-003).
 };
 
 /// @brief Runtime curve binding for one configuration species (research R9, ADR-003).

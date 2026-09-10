@@ -11,7 +11,8 @@ void copy_provenance_field(char* dst, std::size_t dst_size, const std::string& s
     dst[n] = '\0';
 }
 
-ProvenanceInfo Provenance::to_public(int num_radius, int num_rh, int num_lambda) const {
+ProvenanceInfo Provenance::to_public(int num_radius, int num_rh, int num_lambda,
+                                     int num_pol, int num_moment) const {
     ProvenanceInfo info{};
     copy_provenance_field(info.species, sizeof(info.species), species);
     copy_provenance_field(info.unit, sizeof(info.unit), unit);
@@ -23,6 +24,8 @@ ProvenanceInfo Provenance::to_public(int num_radius, int num_rh, int num_lambda)
     info.num_radius = num_radius;
     info.num_rh = num_rh;
     info.num_lambda = num_lambda;
+    info.num_pol = num_pol;
+    info.num_moment = num_moment;
     return info;
 }
 

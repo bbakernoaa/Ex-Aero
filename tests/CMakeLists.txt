@@ -26,6 +26,11 @@ target_include_directories(exaero_fortran_test PRIVATE
 )
 target_link_libraries(exaero_fortran_test PRIVATE exaero)
 add_test(NAME ExaeroFortranTest COMMAND exaero_fortran_test)
+# The moments round-trip (T034) loads the runtime-file fixture by absolute path; pass
+# the data directory through the environment so the test stays hermetic under CTest.
+set_tests_properties(ExaeroFortranTest PROPERTIES
+    ENVIRONMENT "EXAERO_TEST_DATA_DIR=${CMAKE_CURRENT_SOURCE_DIR}/data"
+)
 
 # MKPP chemistry gtest suite (added by 963d356). Gated with the chemistry
 # driver: test_registry/test_dispatcher include exaero/registry.hpp and

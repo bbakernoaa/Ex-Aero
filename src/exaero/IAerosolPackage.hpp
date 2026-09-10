@@ -136,6 +136,16 @@ namespace exaero {
         virtual void setSpeciesCurveConfig(const std::vector<SpeciesCurveConfig>& curves) {
             (void)curves;
         }
+
+        // Polarized-moment slot counts for one species (FR-003/FR-008): the number of
+        // (element, moment) slots its curve carries, sized from data. Both outputs are 0
+        // when the species ships no moments or the category is not activated (FR-010).
+        // Defaults to zeros so packages without moments compile unchanged.
+        virtual void momentCounts(int species_index, int* num_pol_out, int* num_moment_out) const {
+            (void)species_index;
+            if (num_pol_out) *num_pol_out = 0;
+            if (num_moment_out) *num_moment_out = 0;
+        }
     };
 
 } // namespace exaero

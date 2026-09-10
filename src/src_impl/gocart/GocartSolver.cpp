@@ -84,6 +84,46 @@ namespace {
         return true;
     }
 
+    // Device read of one polarized phase-function moment (T033, FR-003/FR-015). The
+    // (element, moment) pair is the documented encoding idx = moment*ELEMENT_STRIDE +
+    // element (data-model); the caller supplies element in [0,nP) and moment in [0,nM).
+    // Returns false when the species has no moment block or the band is outside the
+    // curve lambda domain (declines, never a silent wrong value). Value interpolates
+    // linearly in RH and takes the nearest grid band (matches the host store query).
+    KOKKOS_INLINE_FUNCTION bool species_moment_table(const GocartSpeciesParams& params,
+                                                     const double* pool, double rh, double band,
+                                                     int element, int moment, double& value_out) {
+        if (params.pmom_offset < 0) return false;
+        const int nH = params.n_pmom_rh;
+        const int nL = params.n_pmom_lambda;
+        const int nR = params.n_pmom_radius;
+        const int nP = params.n_pmom_pol;
+        const int nM = params.n_pmom_moment;
+        if (element < 0 || element >= nP || moment < 0 || moment >= nM) return false;
+        const double* pb = pool + params.pmom_offset;
+        const double* srh = pb;
+        const double* slam = pb + nH;
+        if (!(band >= slam[0] && band <= slam[nL - 1])) return false; // domain decline
+        int rnode = params.solver_radius_node;
+        if (rnode < 0) rnode = 0;
+        if (rnode > nR - 1) rnode = nR - 1;
+        const double* pmom = pb + nH + nL;
+        // C-order ravel over (radius,rh,lambda,pol,moment): moment is the fastest axis.
+        auto at = [&](int hh, int ll) {
+            return pmom[(((static_cast<long>(rnode) * nH + hh) * nL + ll) * nP + element) * nM
+                        + moment];
+        };
+        int h0, h1; double wh;
+        curve_locate(srh, nH, rh, 0, h0, h1, wh);
+        int l0, l1; double wl;
+        curve_locate(slam, nL, band, 1, l0, l1, wl);
+        const int l = (wl < 0.5) ? l0 : l1; // nearest grid band (grid read)
+        const double v0 = at(h0, l);
+        const double v1 = at(h1, l);
+        value_out = v0 + wh * (v1 - v0);
+        return true;
+    }
+
 } // anonymous namespace
 
     // Implement public environment lifecycle routines (declared in exaero/Environment.hpp)

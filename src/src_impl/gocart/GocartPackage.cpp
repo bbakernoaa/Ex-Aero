@@ -290,6 +290,41 @@ int category_mask_from_yaml(const YAML::Node& node) {
             h_curve_pool_.insert(h_curve_pool_.end(), git->second.values.begin(), git->second.values.end());
         }
 
+        // --- Device-resident polarized moments (T033, FR-003/FR-015, ADR-003 R10): append
+        //     each moment-bearing species' {rh, lambda, pmom} block to the same single-upload
+        //     pool. Extents (pol, moment) are data from the curve (never literals); a species
+        //     without a pmom field gets no block (pmom_offset stays -1 => FR-008 not-in-source).
+        //     Hot-path consumers read stride-1 over the fastest moment axis. ---
+        for (int i = 0; i < num_species_; ++i) {
+            const SpeciesCurve* c = store.find_curve(species_names_[i]);
+            if (!c) continue;
+            auto pit = c->fields.find("pmom");
+            if (pit == c->fields.end()) continue;
+            const int nR = c->n_radius();
+            const int nH = c->n_rh();
+            const int nL = c->n_lambda();
+            const int nP = c->n_pol();
+            const int nM = c->n_moment();
+            const std::size_t need =
+                static_cast<std::size_t>(nR) * nH * nL * nP * nM;
+            if (nP <= 0 || nM <= 0 ||
+                pit->second.values.size() != need ||
+                c->lambda.size() != static_cast<std::size_t>(nL)) {
+                throw std::runtime_error("EX-aero Error: species '" + species_names_[i] +
+                    "' polarized-moment field length does not match its axes (fail fast)");
+            }
+            auto& p = h_species_params_[i];
+            p.pmom_offset = static_cast<int>(h_curve_pool_.size());
+            p.n_pmom_radius = nR;
+            p.n_pmom_rh = nH;
+            p.n_pmom_lambda = nL;
+            p.n_pmom_pol = nP;
+            p.n_pmom_moment = nM;
+            h_curve_pool_.insert(h_curve_pool_.end(), c->rh.begin(), c->rh.end());
+            h_curve_pool_.insert(h_curve_pool_.end(), c->lambda.begin(), c->lambda.end());
+            h_curve_pool_.insert(h_curve_pool_.end(), pit->second.values.begin(), pit->second.values.end());
+        }
+
         // Parse emissions mapping schemas if present (SPEC-EMISSIONS-002)
         if (config["emissions_mapping"]) {
             auto mapping_node = config["emissions_mapping"];
@@ -532,12 +567,22 @@ int category_mask_from_yaml(const YAML::Node& node) {
         const SpeciesCurve* c = store.find_curve(name);
         const int radius_node = c ? c->solver_radius_node : 0;
 
-        // Attribute count is derived from the category, never a fixed literal (R10).
+        // Attribute count is derived from the category, never a fixed literal (R10). For
+        // polarized moments the count is the number of addressable (element, moment) slots
+        // carried by THIS species' curve (data, FR-003), gated by activation (FR-010) so it
+        // agrees with momentCounts() used to size the caller's output.
         int num_attr = 0;
+        int n_pol = 0, n_moment = 0;
         switch (category) {
             case AttributeCategory::Microphysical:   num_attr = microphysical_indices::NUM_ATTRIBUTES; break;
             case AttributeCategory::SpectralOptical: num_attr = spectral_optical_indices::NUM_ATTRIBUTES; break;
-            case AttributeCategory::PolarizedMoment: num_attr = polarized_moment_indices::NUM_ATTRIBUTES; break;
+            case AttributeCategory::PolarizedMoment:
+                if (c && store.is_activated(name, category)) {
+                    n_pol = c->n_pol();
+                    n_moment = c->n_moment();
+                }
+                num_attr = n_pol * n_moment; // 0 => no moments / not activated (FR-008/FR-010)
+                break;
             default: num_attr = 0;
         }
 
@@ -567,8 +612,16 @@ int category_mask_from_yaml(const YAML::Node& node) {
                             ? wavelengths(static_cast<std::size_t>(ib)) : std::nan("");
                     for (int ia = 0; ia < num_attr; ++ia) {
                         double value = 0.0;
+                        // For moments, slot ia enumerates (element, moment) -> the encoded
+                        // attribute_index (idx = moment*ELEMENT_STRIDE + element); the
+                        // stride is the documented encoding, ia itself is dense (no gaps).
+                        const int attr_index =
+                            (category == AttributeCategory::PolarizedMoment)
+                                ? (ia / n_pol) * polarized_moment_indices::ELEMENT_STRIDE
+                                      + (ia % n_pol)
+                                : ia;
                         const AttributeStatus st = store.query(
-                            name, category, ia, rh, wavelength, radius_node, &value, nullptr);
+                            name, category, attr_index, rh, wavelength, radius_node, &value, nullptr);
                         const int slot = ib * num_attr + ia; // band-major (T027)
                         attributes_out(ic, il, slot) = value; // 0 only when status says unavailable
                         if (status_out) (*status_out)(ic, il, slot) = static_cast<int>(st);
@@ -619,9 +672,28 @@ int category_mask_from_yaml(const YAML::Node& node) {
         if (provenance_out) {
             prov.status = status;
             *provenance_out = prov.to_public(c ? c->n_radius() : 0, c ? c->n_rh() : 0,
-                                             c ? c->n_lambda() : 0);
+                                             c ? c->n_lambda() : 0,
+                                             c ? c->n_pol() : 0, c ? c->n_moment() : 0);
         }
         return status;
+    }
+
+    void GocartPackage::momentCounts(int species_index, int* num_pol_out,
+                                     int* num_moment_out) const {
+        int n_pol = 0, n_moment = 0;
+        if (species_index >= 0 && species_index < num_species_) {
+            const std::string name = species_names_[species_index];
+            const SpeciesCurve* c = MieTableStore::instance().find_curve(name);
+            // Counts are curve data gated by activation (FR-003/FR-008/FR-010); they must
+            // agree with the slot count computeAttributes() fills for the same species.
+            if (c && MieTableStore::instance().is_activated(
+                         name, AttributeCategory::PolarizedMoment)) {
+                n_pol = c->n_pol();
+                n_moment = c->n_moment();
+            }
+        }
+        if (num_pol_out) *num_pol_out = n_pol;
+        if (num_moment_out) *num_moment_out = n_moment;
     }
 
 } // namespace exaero

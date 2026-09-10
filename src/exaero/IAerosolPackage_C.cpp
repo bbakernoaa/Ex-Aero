@@ -358,11 +358,18 @@ extern "C" {
 
             // num_attributes derived from category (never a fixed literal, R10). Spectral
             // multi-band output is band-major: num_bands * num_attributes slots (T027).
+            // PolarizedMoment slots enumerate the species' (element, moment) pairs from its
+            // curve (data, FR-003); a species without moments yields 0 slots (FR-008).
             int num_attr = 0;
             switch (static_cast<exaero::AttributeCategory>(category)) {
                 case exaero::AttributeCategory::Microphysical:   num_attr = exaero::microphysical_indices::NUM_ATTRIBUTES; break;
                 case exaero::AttributeCategory::SpectralOptical: num_attr = exaero::spectral_optical_indices::NUM_ATTRIBUTES; break;
-                case exaero::AttributeCategory::PolarizedMoment: num_attr = exaero::polarized_moment_indices::NUM_ATTRIBUTES; break;
+                case exaero::AttributeCategory::PolarizedMoment: {
+                    int n_pol = 0, n_moment = 0;
+                    package->momentCounts(species_index, &n_pol, &n_moment);
+                    num_attr = n_pol * n_moment;
+                    break;
+                }
                 default: num_attr = 0;
             }
             const int bands = (static_cast<exaero::AttributeCategory>(category) ==
@@ -409,7 +416,13 @@ extern "C" {
             const exaero::AttributeStatus st = package->queryAttribute(
                 species_index, static_cast<exaero::AttributeCategory>(category), attribute_index,
                 rh, wavelength_m, &value, &prov);
-            if (value_out) *value_out = value;
+            // FR-008: write the caller's value only on an available/interpolated result --
+            // never a silent 0 for not-activated / not-in-source.
+            const bool ok = st == exaero::AttributeStatus::Available ||
+                            st == exaero::AttributeStatus::AvailableFile ||
+                            st == exaero::AttributeStatus::AvailableConfig ||
+                            st == exaero::AttributeStatus::Interpolated;
+            if (value_out && ok) *value_out = value;
             if (status_out) *status_out = static_cast<int>(st);
             if (unit_out && unit_max > 0) { std::strncpy(unit_out, prov.unit, unit_max - 1); unit_out[unit_max - 1] = '\0'; }
             if (version_out && version_max > 0) { std::strncpy(version_out, prov.source_version, version_max - 1); version_out[version_max - 1] = '\0'; }
@@ -421,6 +434,33 @@ extern "C" {
         } catch (...) {
             if (errflg) *errflg = 1;
             if (errmsg) std::strcpy(errmsg, "EX-aero Error: Unknown exception during query_attribute");
+        }
+    }
+
+    int exaero_get_moment_counts(
+        exaero_package_t pkg, int species_index,
+        int* num_pol_out, int* num_moment_out,
+        char* errmsg, int* errflg) {
+
+        if (!pkg) {
+            if (errflg) *errflg = 1;
+            if (errmsg) std::strcpy(errmsg, "EX-aero Error: Null package handle");
+            return 1;
+        }
+        try {
+            auto* package = static_cast<exaero::IAerosolPackage*>(pkg);
+            package->momentCounts(species_index, num_pol_out, num_moment_out);
+            if (errflg) *errflg = 0;
+            if (errmsg) errmsg[0] = '\0';
+            return 0;
+        } catch (const std::exception& e) {
+            if (errflg) *errflg = 1;
+            if (errmsg) { std::strncpy(errmsg, e.what(), 255); errmsg[255] = '\0'; }
+            return 1;
+        } catch (...) {
+            if (errflg) *errflg = 1;
+            if (errmsg) std::strcpy(errmsg, "EX-aero Error: Unknown exception during get_moment_counts");
+            return 1;
         }
     }
 

@@ -71,6 +71,7 @@ namespace exaero {
                                        int attribute_index, double rh, double wavelength_m,
                                        double* value_out,
                                        ProvenanceInfo* provenance_out = nullptr) const override;
+        void momentCounts(int species_index, int* num_pol_out, int* num_moment_out) const override;
 
         // Accessors for testing
         int get_num_species() const { return num_species_; }

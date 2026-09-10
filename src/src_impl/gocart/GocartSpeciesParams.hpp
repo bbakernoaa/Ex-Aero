@@ -62,6 +62,22 @@ struct GocartSpeciesParams {
   int n_spec_rh = 0;            // RH-axis extent of the spectral block
   int n_spec_lambda = 0;        // band-axis extent of the spectral block
 
+  // Table-backed polarized phase-function moments for the device hot path (T033,
+  // FR-003/FR-015, ADR-003 R10). When pmom_offset >= 0 the rank-5 moment array is
+  // device-resident in the same single-upload pool; a polarized radiative-transfer
+  // consumer reads it with zero H2D in the timestep loop. Block layout at
+  // pool[pmom_offset ...]; extents are data (never literals):
+  //   [0, nH)                              rh axis
+  //   [nH, nH + nL)                        lambda (band coordinate) axis
+  //   [nH + nL, ... )                      pmom, C-order over (radius,rh,lambda,pol,moment)
+  //                                        i.e. (((r*nH+h)*nL+l)*nP+e)*nM+m
+  int pmom_offset = -1;         // index into the device curve pool; -1 => no moments
+  int n_pmom_radius = 0;        // radius-bin extent of the moment block
+  int n_pmom_rh = 0;            // RH-axis extent of the moment block
+  int n_pmom_lambda = 0;        // band-axis extent of the moment block
+  int n_pmom_pol = 0;           // polarized element count (P11..P44 ordering)
+  int n_pmom_moment = 0;        // moment count (M)
+
   EmissionsMappingParams emissions_mapping;
 };
 

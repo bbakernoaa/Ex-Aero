@@ -219,6 +219,19 @@ module exaero_interface
       integer(c_int), intent(out) :: errflg
     end subroutine exaero_query_attribute
 
+    ! Polarized-moment count query (FR-003): num_slots = num_pol * num_moment for the
+    ! species' curve (data, never a literal). Both are 0 for a species without moments.
+    function exaero_get_moment_counts(pkg, species_index, num_pol_out, num_moment_out, &
+        errmsg, errflg) result(rc) bind(c, name="exaero_get_moment_counts")
+      import :: exaero_package_t, c_int, c_char
+      type(exaero_package_t), value :: pkg
+      integer(c_int), value :: species_index
+      integer(c_int), intent(out) :: num_pol_out, num_moment_out
+      character(kind=c_char), intent(out) :: errmsg(*)
+      integer(c_int), intent(out) :: errflg
+      integer(c_int) :: rc
+    end function exaero_get_moment_counts
+
     subroutine exaero_init_environment() bind(c, name="exaero_init_environment")
     end subroutine exaero_init_environment
 

@@ -25,8 +25,11 @@ struct Provenance {
     /// @param num_radius Resolved radius-axis length for the queried species.
     /// @param num_rh Resolved RH-axis length for the queried species.
     /// @param num_lambda Resolved wavelength-axis length (0 for microphysical).
+    /// @param num_pol Resolved polarized element count (0 unless moments exist, FR-003).
+    /// @param num_moment Resolved polarized moment count (0 unless moments exist, FR-003).
     /// @return Populated public provenance record.
-    ProvenanceInfo to_public(int num_radius, int num_rh, int num_lambda) const;
+    ProvenanceInfo to_public(int num_radius, int num_rh, int num_lambda,
+                             int num_pol = 0, int num_moment = 0) const;
 };
 
 /// @brief Copy a string into a fixed public POD field with guaranteed NUL termination.

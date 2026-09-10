@@ -84,10 +84,14 @@ extern "C" {
 
     // Hot-path bulk query mirroring computeOptics (FR-015). attributes_out / status_out are
     // layout_left (num_cells, num_levels, num_slots). num_slots = num_attributes for
-    // Microphysical/PolarizedMoment (wavelength ignored); for SpectralOptical it is
+    // Microphysical (wavelength ignored); for SpectralOptical it is
     // num_bands * num_attributes in band-major order (slot = band * num_attributes +
-    // attribute), mirroring computeOptics. num_attributes comes from the public
-    // *_indices NUM_ATTRIBUTES constants (never a fixed literal).
+    // attribute), mirroring computeOptics. For PolarizedMoment the slots enumerate the
+    // addressable (element, moment) pairs carried by THIS species' curve in dense
+    // row-major order (element fastest), so num_slots = num_pol * num_moment (data, FR-003);
+    // call exaero_get_moment_counts to size the output, and a species without moments
+    // yields 0 slots. num_attributes comes from the public *_indices NUM_ATTRIBUTES
+    // constants (never a fixed literal).
     void exaero_compute_attributes(
         exaero_package_t pkg,
         int num_cells, int num_levels,
@@ -106,6 +110,15 @@ extern "C" {
         double rh, double wavelength_m, double* value_out,
         char* unit_out, int unit_max, char* version_out, int version_max,
         int* status_out, char* errmsg, int* errflg);
+
+    // Polarized-moment count query (FR-003): the number of (element, moment) slots a
+    // species carries, sized from the curve (data, never a literal). num_pol_out /
+    // num_moment_out are 0 for a species with no moments (FR-008). Returns 0 on success,
+    // 1 on error (bad handle / species index) with errflg set.
+    int exaero_get_moment_counts(
+        exaero_package_t pkg, int species_index,
+        int* num_pol_out, int* num_moment_out,
+        char* errmsg, int* errflg);
 
     // Public environment helpers
     void exaero_init_environment();
