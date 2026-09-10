@@ -207,9 +207,14 @@ def fixture_dust7():
     # qext[b,h,l] = (b+1) + 0.1*h + 0.01*l  -> distinct, monotone, finite everywhere.
     qe = np.array([[[ (b + 1) + 0.1 * h + 0.01 * l for l in range(nL)]
                     for h in range(nH)] for b in range(nR)])
-    qs = qe * 0.5
     emit_field(lines, "qext", qe)
-    emit_field(lines, "qsca", qs)
+    emit_field(lines, "qsca", qe * 0.5)
+    # Mass cross-sections + asymmetry so the derived-field pass (qabs/ssa/lidar) and the
+    # device spectral-block wiring have complete raw inputs on this prime-count axis.
+    emit_field(lines, "bext", qe * 2.0e-11)
+    emit_field(lines, "bsca", qe * 1.0e-11)
+    emit_field(lines, "bbck", qe * 1.0e-13)
+    emit_field(lines, "g", np.full(qe.shape, 0.6))
     return "\n".join(lines) + "\n"
 
 

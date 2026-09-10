@@ -8,6 +8,7 @@
 #include <cmath>
 #include <cstring>
 #include <string>
+#include <regex>
 
 void test_gocart_yaml_parsing() {
     std::string yaml_string = R"(
@@ -1000,6 +1001,199 @@ void test_mie_default_set() {
     std::cout << "MIE Default Baked Set (FR-017/C9/T037): PASS" << std::endl;
 }
 
+void test_mie_config_curves() {
+    using namespace exaero::microphysical_indices;
+    using namespace exaero::spectral_optical_indices;
+    auto& store = exaero::MieTableStore::instance();
+    const std::string dir(EXAERO_TEST_DATA_DIR);
+
+    // ---- C11 config-invariance (research R9/R10, ADR-003) ---------------------------
+    // A config species bound to DU that declares its OWN radius nodes -- the five source
+    // nodes PLUS one inserted node (1.8e-6, between source bins 1 and 2) -- must reproduce
+    // the baked curve bit-for-bit AT every source node (resample weight is exactly 0 there),
+    // while still carrying the extra node. Delivery stays baked (resample is not an
+    // override), so a source-node query reports Available, never Config/file.
+    {
+        std::string yaml = R"YAML(species:
+      - name: "dust_cfg"
+        dry_density: 2600.0
+        molecular_weight: 100.0
+        dry_particle_diameter: 2.0e-6
+        hygroscopicity: 0.1
+        lognormal_sigma: 1.5
+        lognormal_dg: 1.0e-6
+        refractive_index_real: 1.55
+        refractive_index_imag: 0.002
+        mie_table:
+          source: DU
+          radius_nodes: [6.358845325848961e-07, 1.324423010373721e-06, 1.8e-06,
+                         2.301213726241258e-06, 4.1672033148643095e-06, 7.670712875551544e-06]
+)YAML";
+        exaero::GocartPackage package;
+        package.initialize(yaml);
+
+        // The inserted node sits at new index 2, so the five source nodes map to new
+        // indices {0,1,3,4,5} (a data-derived remap, not a hardcoded count).
+        const int src_to_new[5] = {0, 1, 3, 4, 5};
+        for (int b = 0; b < 5; ++b) {
+            const int nb = src_to_new[b];
+            // Microphysical (rank-2 radius,rh) at the dry-ish grid RH 0.5.
+            double cfg_v = 0.0, du_v = -1.0;
+            auto s1 = store.query("dust_cfg", exaero::AttributeCategory::Microphysical,
+                                  EFFECTIVE_RADIUS, 0.5, 0.0, nb, &cfg_v, nullptr);
+            auto s0 = store.query("DU", exaero::AttributeCategory::Microphysical,
+                                  EFFECTIVE_RADIUS, 0.5, 0.0, b, &du_v, nullptr);
+            assert(s1 == exaero::AttributeStatus::Available); // still baked delivery
+            assert(s0 == exaero::AttributeStatus::Available);
+            check_close(cfg_v, du_v, "C11 reff source-node invariance");
+            // Spectral (rank-3 radius,rh,lambda) at the band-3 grid point.
+            double cfg_s = 0.0, du_s = -1.0;
+            s1 = store.query("dust_cfg", exaero::AttributeCategory::SpectralOptical,
+                             EXTINCTION_EFFICIENCY, 0.5, 3.0, nb, &cfg_s, nullptr);
+            s0 = store.query("DU", exaero::AttributeCategory::SpectralOptical,
+                             EXTINCTION_EFFICIENCY, 0.5, 3.0, b, &du_s, nullptr);
+            assert(s1 == exaero::AttributeStatus::Available);
+            check_close(cfg_s, du_s, "C11 qext source-node invariance");
+        }
+        // The public surface at the default solver node (0) is likewise unchanged.
+        double v = 0.0;
+        exaero::ProvenanceInfo p{};
+        auto st = package.queryAttribute(0, exaero::AttributeCategory::Microphysical,
+                                         EFFECTIVE_RADIUS, 0.0, 0.0, &v, &p);
+        assert(st == exaero::AttributeStatus::Available);
+        check_close(v, 6.358845325848961e-07, "C11 queryAttribute bin0 baked");
+        assert(p.num_radius == 6); // the curve really carries the extra node (data, R10)
+    }
+
+    // ---- C12 no-hardcoding gate (invariant C12, R10) --------------------------------
+    // A file-only species "DUST7" (absent from the baked set) declares a PRIME radius
+    // count (7) and a NON-SOURCE RH length (7) over 3 bands -- none of these match the
+    // baked DU 5x36x30 layout. Provenance extents must report the file's own counts and
+    // every query path must resolve them, proving no bin/RH/band count is baked in.
+    {
+        std::string yaml = std::string(R"YAML(species:
+      - name: "d7"
+        dry_density: 2600.0
+        molecular_weight: 100.0
+        dry_particle_diameter: 1.0e-6
+        hygroscopicity: 0.1
+        lognormal_sigma: 1.5
+        lognormal_dg: 1.0e-6
+        refractive_index_real: 1.55
+        refractive_index_imag: 0.002
+        mie_table: {source: DUST7, solver_radius_node: 3}
+activation:
+  data_file: )YAML") + dir + "/mie_dust7.txt\n";
+        exaero::GocartPackage package;
+        package.initialize(yaml); // the 7x7x3 pool wiring + fail-fast length checks pass
+
+        double v = 0.0;
+        exaero::ProvenanceInfo p{};
+        // rh=0.495 (index 3) and band 2.0 (index 1) are exact grid points; radius node 3.
+        // qext[b,h,l] = (b+1) + 0.1*h + 0.01*l  =>  qext[3,3,1] = 4 + 0.3 + 0.01 = 4.31.
+        auto st = package.queryAttribute(0, exaero::AttributeCategory::SpectralOptical,
+                                         EXTINCTION_EFFICIENCY, 0.495, 2.0, &v, &p);
+        assert(st == exaero::AttributeStatus::AvailableFile);
+        check_close(v, 4.31, "C12 DUST7 qext grid point");
+        // The reported extents are the FILE's prime counts, not any baked literal.
+        assert(p.num_radius == 7);
+        assert(p.num_rh == 7);
+        assert(p.num_lambda == 3);
+        assert(p.delivery_source == static_cast<int>(exaero::DeliverySource::RuntimeFile));
+
+        // The bulk path resolves the same curve across all three bands (device-block
+        // consumers read the identical pool the store produced).
+        const int num_cells = 1, num_levels = 1;
+        double temp[1] = {298.0}, pres[1] = {101325.0}, dens[1] = {1.2};
+        double rh_raw[1] = {0.495}, thick[1] = {100.0}, state_raw[1] = {1.0e-6};
+        exaero::View2D<const double> temperature(temp, num_cells, num_levels);
+        exaero::View2D<const double> pressure(pres, num_cells, num_levels);
+        exaero::View2D<const double> air_density(dens, num_cells, num_levels);
+        exaero::View2D<const double> relative_humidity(rh_raw, num_cells, num_levels);
+        exaero::View2D<const double> layer_thickness(thick, num_cells, num_levels);
+        exaero::EnvironmentalStateView env{temperature, pressure, air_density,
+                                           relative_humidity, layer_thickness};
+        exaero::View3D<const double> state(state_raw, num_cells, num_levels, 1);
+        double wl_raw[3] = {1.0, 2.0, 3.0};
+        exaero::View1D<const double> wavelengths(wl_raw, 3);
+        constexpr int kSpecAttr = exaero::spectral_optical_indices::NUM_ATTRIBUTES;
+        const int slots = 3 * kSpecAttr;
+        double attrs[3 * 11];
+        for (double& x : attrs) x = -777.0;
+        exaero::View3D<double> attributes_out(attrs, num_cells, num_levels, slots);
+        package.computeAttributes(env, state, 0, exaero::AttributeCategory::SpectralOptical,
+                                  wavelengths, attributes_out, nullptr);
+        // Band 2 (index 1) at radius node 3, rh index 3: qext = 4.31 (grid point).
+        check_close(attrs[1 * kSpecAttr + EXTINCTION_EFFICIENCY], 4.31,
+                    "C12 computeAttributes band2 qext");
+    }
+
+    // ---- C13 override precedence config > file > baked (research R9, FR-012) ---------
+    // The SAME attribute (DU bext) is set at all three layers; the winning layer must be
+    // reported by provenance.delivery_source at each stage.
+    {
+        // Stage 1 -- baked only: DU mass-extinction at (bin0, rh0.5, band3).
+        double baked_v = 0.0;
+        {
+            exaero::GocartPackage pkg;
+            pkg.initialize(kMieSixYaml);
+            exaero::ProvenanceInfo p{};
+            auto st = pkg.queryAttribute(0, exaero::AttributeCategory::SpectralOptical,
+                                         MASS_EXTINCTION, 0.5, 3.0, &baked_v, &p);
+            assert(st == exaero::AttributeStatus::Available);
+            assert(p.delivery_source == static_cast<int>(exaero::DeliverySource::BakedIn));
+        }
+        // Stage 2 -- file overrides baked: runtime file redefines bext = 1234.5.
+        {
+            exaero::GocartPackage pkg;
+            pkg.initialize(mie_file_yaml(dir + "/mie_dust_override.txt"));
+            double v = 0.0;
+            exaero::ProvenanceInfo p{};
+            auto st = pkg.queryAttribute(0, exaero::AttributeCategory::SpectralOptical,
+                                         MASS_EXTINCTION, 0.5, 3.0, &v, &p);
+            assert(st == exaero::AttributeStatus::AvailableFile);
+            assert(p.delivery_source == static_cast<int>(exaero::DeliverySource::RuntimeFile));
+            check_close(v, 1234.5, "C13 file beats baked");
+            assert(v != baked_v); // file value really differs from the baked golden
+        }
+        // Stage 3 -- config overrides file: the SAME file is loaded, then a config
+        // override (bext = 999 at all 5 radius nodes) wins over the file's 1234.5.
+        {
+            std::string yaml = R"YAML(species:
+      - name: "du_ov"
+        dry_density: 2600.0
+        molecular_weight: 100.0
+        dry_particle_diameter: 2.0e-6
+        hygroscopicity: 0.1
+        lognormal_sigma: 1.5
+        lognormal_dg: 1.0e-6
+        refractive_index_real: 1.55
+        refractive_index_imag: 0.002
+        mie_table:
+          source: DU
+          overrides:
+            bext: [999.0, 999.0, 999.0, 999.0, 999.0]
+activation:
+  data_file: __OVERRIDE_FILE__
+)YAML";
+            yaml = std::regex_replace(yaml, std::regex("__OVERRIDE_FILE__"),
+                                      dir + "/mie_dust_override.txt");
+            exaero::GocartPackage pkg;
+            pkg.initialize(yaml);
+            double v = 0.0;
+            exaero::ProvenanceInfo p{};
+            auto st = pkg.queryAttribute(0, exaero::AttributeCategory::SpectralOptical,
+                                         MASS_EXTINCTION, 0.5, 3.0, &v, &p);
+            assert(st == exaero::AttributeStatus::AvailableConfig);
+            assert(p.delivery_source == static_cast<int>(exaero::DeliverySource::Config));
+            check_close(v, 999.0, "C13 config beats file beats baked");
+        }
+    }
+
+    std::cout << "MIE Config Curves: invariance + no-hardcoding + precedence "
+                 "(R9/R10/C11/C12/C13/T044): PASS" << std::endl;
+}
+
 void test_optical_precision() {
     // High-precision physical validation of our GPU ADT Mie solver against standard analytical results.
     // For n = 1.5, x = 10.0, we have:
@@ -1348,6 +1542,7 @@ int main() {
     test_mie_moments_not_available();
     test_mie_file_override_and_failfast();
     test_mie_default_set();
+    test_mie_config_curves();
     test_optical_precision();
     test_gocart_ccn();
     
