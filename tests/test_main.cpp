@@ -645,6 +645,74 @@ void test_mie_interpolation() {
     std::cout << "MIE Off-Grid Interpolation (FR-006/C2, log-wavelength): PASS" << std::endl;
 }
 
+void test_mie_compute_attributes_multiband() {
+    using namespace exaero::spectral_optical_indices;
+    exaero::GocartPackage package;
+    package.initialize(kMieSixYaml);
+
+    // Three bands: two exact grid points (band 3, band 4) and one off-grid (3.5).
+    // Output is band-major: slot = band * NUM_ATTRIBUTES + attribute (T027).
+    const int num_cells = 1, num_levels = 1;
+    double temp[1] = {298.0}, pres[1] = {101325.0}, dens[1] = {1.2};
+    double rh_raw[1] = {0.5}, thick[1] = {100.0}, state_raw[1] = {1.0e-6};
+    exaero::View2D<const double> temperature(temp, num_cells, num_levels);
+    exaero::View2D<const double> pressure(pres, num_cells, num_levels);
+    exaero::View2D<const double> air_density(dens, num_cells, num_levels);
+    exaero::View2D<const double> relative_humidity(rh_raw, num_cells, num_levels);
+    exaero::View2D<const double> layer_thickness(thick, num_cells, num_levels);
+    exaero::EnvironmentalStateView env{temperature, pressure, air_density,
+                                       relative_humidity, layer_thickness};
+    exaero::View3D<const double> state(state_raw, num_cells, num_levels, 1);
+
+    const int num_bands = 3;
+    double wavelengths_raw[num_bands] = {3.0, 4.0, 3.5};
+    exaero::View1D<const double> wavelengths(wavelengths_raw, num_bands);
+
+    const int slots = num_bands * NUM_ATTRIBUTES;
+    double attrs[3 * 11];
+    int statuses[3 * 11];
+    for (double& x : attrs) x = -777.0;
+    for (int& s : statuses) s = -1;
+    exaero::View3D<double> attributes_out(attrs, num_cells, num_levels, slots);
+    exaero::View3D<int> status_out(statuses, num_cells, num_levels, slots);
+
+    package.computeAttributes(env, state, /*species_index=*/1 /*SS*/,
+                              exaero::AttributeCategory::SpectralOptical,
+                              wavelengths, attributes_out, &status_out);
+
+    // Band 3 (grid): SS qext at (bin0, rh=0.5, band 3) golden.
+    check_close(attrs[0 * NUM_ATTRIBUTES + EXTINCTION_EFFICIENCY], 0.00227008992806077, "b3 qext");
+    assert(statuses[0 * NUM_ATTRIBUTES + EXTINCTION_EFFICIENCY] ==
+           static_cast<int>(exaero::AttributeStatus::Available));
+    // Band 4 (grid): must differ from band 3 -> proves each band is resolved, not just band 0.
+    const double qe_b4 = attrs[1 * NUM_ATTRIBUTES + EXTINCTION_EFFICIENCY];
+    assert(qe_b4 != attrs[0 * NUM_ATTRIBUTES + EXTINCTION_EFFICIENCY]);
+    assert(std::isfinite(qe_b4));
+    assert(statuses[1 * NUM_ATTRIBUTES + EXTINCTION_EFFICIENCY] ==
+           static_cast<int>(exaero::AttributeStatus::Available));
+    // Band 3.5 (off-grid): interpolated flag, between the two grid values.
+    const double qe_b35 = attrs[2 * NUM_ATTRIBUTES + EXTINCTION_EFFICIENCY];
+    assert(statuses[2 * NUM_ATTRIBUTES + EXTINCTION_EFFICIENCY] ==
+           static_cast<int>(exaero::AttributeStatus::Interpolated));
+    // log-space blend weight between bands 3 and 4 is 0.5358..., so the value sits just
+    // above the arithmetic midpoint of the two grid values.
+    const double qe_b3 = attrs[0 * NUM_ATTRIBUTES + EXTINCTION_EFFICIENCY];
+    assert(qe_b35 > qe_b3 && qe_b35 > (qe_b3 + qe_b4) * 0.5);
+
+    // Microphysical category: wavelength ignored, single block, no band dimension.
+    double micro_attrs[9];
+    for (double& x : micro_attrs) x = -777.0;
+    exaero::View3D<double> micro_out(micro_attrs, num_cells, num_levels,
+                                     exaero::microphysical_indices::NUM_ATTRIBUTES);
+    package.computeAttributes(env, state, 1, exaero::AttributeCategory::Microphysical,
+                              wavelengths, micro_out, nullptr);
+    // rh=0.5 grid point: SS bin-0 effective radius is the grown value (not the dry golden).
+    check_close(micro_attrs[exaero::microphysical_indices::EFFECTIVE_RADIUS],
+                9.894295516232887e-08, "SS reff @ rh=0.5");
+
+    std::cout << "MIE Multi-Band computeAttributes (FR-002/T027): PASS" << std::endl;
+}
+
 void test_optical_precision() {
     // High-precision physical validation of our GPU ADT Mie solver against standard analytical results.
     // For n = 1.5, x = 10.0, we have:
@@ -988,6 +1056,7 @@ int main() {
     test_mie_not_available();
     test_mie_rrtmg_spectral();
     test_mie_interpolation();
+    test_mie_compute_attributes_multiband();
     test_optical_precision();
     test_gocart_ccn();
     

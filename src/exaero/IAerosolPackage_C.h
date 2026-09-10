@@ -83,8 +83,11 @@ extern "C" {
         int num_curves, char* errmsg, int* errflg);
 
     // Hot-path bulk query mirroring computeOptics (FR-015). attributes_out / status_out are
-    // (num_cells, num_levels, num_attributes) layout_left; num_attributes is derived from
-    // category by the caller via the public *_indices NUM_ATTRIBUTES constants.
+    // layout_left (num_cells, num_levels, num_slots). num_slots = num_attributes for
+    // Microphysical/PolarizedMoment (wavelength ignored); for SpectralOptical it is
+    // num_bands * num_attributes in band-major order (slot = band * num_attributes +
+    // attribute), mirroring computeOptics. num_attributes comes from the public
+    // *_indices NUM_ATTRIBUTES constants (never a fixed literal).
     void exaero_compute_attributes(
         exaero_package_t pkg,
         int num_cells, int num_levels,

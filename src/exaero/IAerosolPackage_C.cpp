@@ -356,7 +356,8 @@ extern "C" {
             exaero::View3D<const double> state(state_ptr, num_cells, num_levels, 1);
             exaero::View1D<const double> wavelengths(wavelengths_ptr, num_bands);
 
-            // num_attributes derived from category (never a fixed literal, R10).
+            // num_attributes derived from category (never a fixed literal, R10). Spectral
+            // multi-band output is band-major: num_bands * num_attributes slots (T027).
             int num_attr = 0;
             switch (static_cast<exaero::AttributeCategory>(category)) {
                 case exaero::AttributeCategory::Microphysical:   num_attr = exaero::microphysical_indices::NUM_ATTRIBUTES; break;
@@ -364,11 +365,15 @@ extern "C" {
                 case exaero::AttributeCategory::PolarizedMoment: num_attr = exaero::polarized_moment_indices::NUM_ATTRIBUTES; break;
                 default: num_attr = 0;
             }
-            exaero::View3D<double> attrs_out(attributes_out, num_cells, num_levels, num_attr);
+            const int bands = (static_cast<exaero::AttributeCategory>(category) ==
+                               exaero::AttributeCategory::SpectralOptical && num_bands > 0)
+                                  ? num_bands : 1;
+            const int num_slots = bands * num_attr;
+            exaero::View3D<double> attrs_out(attributes_out, num_cells, num_levels, num_slots);
             exaero::View3D<int> stat_out;
             exaero::View3D<int>* stat_ptr = nullptr;
             if (status_out) {
-                stat_out = exaero::View3D<int>(status_out, num_cells, num_levels, num_attr);
+                stat_out = exaero::View3D<int>(status_out, num_cells, num_levels, num_slots);
                 stat_ptr = &stat_out;
             }
             package->computeAttributes(env, state, species_index,

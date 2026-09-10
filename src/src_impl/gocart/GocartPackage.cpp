@@ -509,19 +509,36 @@ int category_mask_from_yaml(const YAML::Node& node) {
 
         const int num_cells = static_cast<int>(state.extent(0));
         const int num_levels = static_cast<int>(state.extent(1));
-        // Spectral uses the first requested band; Microphysical ignores wavelength (NaN).
-        const double wavelength = (category == AttributeCategory::SpectralOptical &&
-                                   wavelengths.extent(0) > 0) ? wavelengths(0) : std::nan("");
+        // Multi-band spectral path (T027, FR-002): one column per (band, attribute) in
+        // band-major order matching computeOptics memory layout; Microphysical ignores
+        // the wavelength axis entirely (single block, NaN wavelength).
+        int num_bands = (category == AttributeCategory::SpectralOptical)
+                            ? static_cast<int>(wavelengths.extent(0)) : 1;
+        if (num_bands < 1) num_bands = 1;
+        if (static_cast<int>(attributes_out.extent(2)) < num_bands * num_attr) {
+            throw std::runtime_error("EX-aero Error: computeAttributes output extent (" +
+                std::to_string(attributes_out.extent(2)) + ") < num_bands * num_attributes (" +
+                std::to_string(num_bands * num_attr) + ")");
+        }
+        if (status_out && static_cast<int>(status_out->extent(2)) < num_bands * num_attr) {
+            throw std::runtime_error("EX-aero Error: computeAttributes status extent too small");
+        }
 
         for (int ic = 0; ic < num_cells; ++ic) {
             for (int il = 0; il < num_levels; ++il) {
                 const double rh = env.relative_humidity(ic, il);
-                for (int ia = 0; ia < num_attr; ++ia) {
-                    double value = 0.0;
-                    const AttributeStatus st = store.query(
-                        name, category, ia, rh, wavelength, radius_node, &value, nullptr);
-                    attributes_out(ic, il, ia) = value; // 0 only when status says unavailable
-                    if (status_out) (*status_out)(ic, il, ia) = static_cast<int>(st);
+                for (int ib = 0; ib < num_bands; ++ib) {
+                    const double wavelength =
+                        (category == AttributeCategory::SpectralOptical)
+                            ? wavelengths(static_cast<std::size_t>(ib)) : std::nan("");
+                    for (int ia = 0; ia < num_attr; ++ia) {
+                        double value = 0.0;
+                        const AttributeStatus st = store.query(
+                            name, category, ia, rh, wavelength, radius_node, &value, nullptr);
+                        const int slot = ib * num_attr + ia; // band-major (T027)
+                        attributes_out(ic, il, slot) = value; // 0 only when status says unavailable
+                        if (status_out) (*status_out)(ic, il, slot) = static_cast<int>(st);
+                    }
                 }
             }
         }
