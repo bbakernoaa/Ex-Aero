@@ -17,6 +17,11 @@ namespace exaero {
         std::vector<double> h_curve_pool_;
         GocartSolverState* solver_state_ = nullptr;
 
+        // Shared orchestration for both entry points (design 2026-09-10, Approach A):
+        // species params -> store reset -> activation -> curve configs -> pool wiring
+        // -> emissions -> solver-state upload. Reads config ONLY through the reader.
+        void initializeImpl(struct PackageConfigReader& reader);
+
     public:
         GocartPackage();
         ~GocartPackage() override;

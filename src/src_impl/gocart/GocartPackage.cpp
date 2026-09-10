@@ -9,6 +9,29 @@
 
 namespace exaero {
 
+// Semantic view over a package configuration (YAML node or GocartConfig struct).
+// initializeImpl() consumes ONLY this interface — it never touches YAML nodes or
+// GocartConfig fields directly, so both entry points share one code path and the
+// precedence order (reset -> file -> config) cannot drift between them.
+// Impl-private: declared in GocartPackage.hpp (elaborated type-specifier), defined
+// here at exaero:: scope so the member declaration binds to exactly this type.
+struct PackageConfigReader {
+    virtual ~PackageConfigReader() = default;
+    virtual int numSpecies() const = 0;
+    virtual std::string speciesName(int i) const = 0;
+    virtual GocartSpeciesParams speciesScalars(int i) const = 0; // 8 doubles + has_optics_lookup; offsets filled by impl
+    virtual bool hasOpticsLookup(int i) const = 0;
+    virtual GocartLegacyOpticsLookup opticsLookup(int i) const = 0;      // validated: n>=2, equal lengths
+    virtual bool hasMieTable(int i) const = 0;
+    virtual SpeciesCurveConfig mieTable(int i) const = 0;                // species_name pre-filled
+    virtual bool hasActivation() const = 0;
+    virtual int activationExtraMask() const = 0;                          // category bits OR-ed on default
+    virtual std::vector<std::string> activationSpecies() const = 0;
+    virtual std::string activationDataFile() const = 0;
+    virtual int numEmissionsMappings() const = 0;
+    virtual GocartEmissionsMappingConfig emissionsMapping(int s) const = 0; // raw_name ignored downstream (parity)
+};
+
 namespace {
 // Map a human-readable attribute name (YAML override key / index code) to the
 // (category, index) pair the store resolves. Names follow data-model.md; the index
@@ -60,6 +83,161 @@ int category_mask_from_yaml(const YAML::Node& node) {
     }
     return mask;
 }
+
+// PackageConfigReader over a parsed YAML document. Each method is a direct port of
+// the inline YAML access initialize() used before the seam refactor; error strings
+// and fail-fast checks are preserved verbatim, and missing-scalar `.as<T>()`
+// exceptions propagate unchanged (no catch, no softening).
+class YamlReader final : public PackageConfigReader {
+public:
+    explicit YamlReader(YAML::Node config) : config_(std::move(config)) {
+        if (!config_["species"]) {
+            throw std::runtime_error("GOCART YAML config missing 'species' field");
+        }
+        species_ = config_["species"];
+    }
+
+    int numSpecies() const override { return static_cast<int>(species_.size()); }
+
+    std::string speciesName(int i) const override {
+        auto s = species_[i];
+        return s["name"] ? s["name"].as<std::string>() : ("Species_" + std::to_string(i));
+    }
+
+    GocartSpeciesParams speciesScalars(int i) const override {
+        auto s = species_[i];
+        GocartSpeciesParams p{
+            s["dry_density"].as<double>(),
+            s["molecular_weight"].as<double>(),
+            s["dry_particle_diameter"].as<double>(),
+            s["hygroscopicity"].as<double>(),
+            s["lognormal_sigma"].as<double>(),
+            s["lognormal_dg"].as<double>(),
+            s["refractive_index_real"].as<double>(),
+            s["refractive_index_imag"].as<double>(),
+        };
+        p.has_optics_lookup = s["has_optics_lookup"] && s["has_optics_lookup"].as<bool>();
+        return p;
+    }
+
+    bool hasOpticsLookup(int i) const override {
+        auto s = species_[i];
+        return s["has_optics_lookup"] && s["has_optics_lookup"].as<bool>();
+    }
+
+    GocartLegacyOpticsLookup opticsLookup(int i) const override {
+        auto s = species_[i];
+        auto rh_bins = s["rh_bins"];
+        auto ext_lookup = s["ext_lookup"];
+        auto ssa_lookup = s["ssa_lookup"];
+        auto asm_lookup = s["asm_lookup"];
+        if (!rh_bins || !ext_lookup || !ssa_lookup || !asm_lookup) {
+            throw std::runtime_error("EX-aero Error: species '" + speciesName(i) +
+                "' sets has_optics_lookup but omits a required lookup list");
+        }
+        const int n_rh = static_cast<int>(rh_bins.size());
+        if (n_rh < 2) {
+            throw std::runtime_error("EX-aero Error: species '" + speciesName(i) +
+                "' rh_bins needs at least 2 points to interpolate");
+        }
+        if (static_cast<int>(ext_lookup.size()) != n_rh ||
+            static_cast<int>(ssa_lookup.size()) != n_rh ||
+            static_cast<int>(asm_lookup.size()) != n_rh) {
+            throw std::runtime_error("EX-aero Error: species '" + speciesName(i) +
+                "' lookup lists have mismatched lengths (fail fast, no silent fallback)");
+        }
+        GocartLegacyOpticsLookup lut;
+        for (int j = 0; j < n_rh; ++j) lut.rh.push_back(rh_bins[j].as<double>());
+        for (int j = 0; j < n_rh; ++j) lut.ext.push_back(ext_lookup[j].as<double>());
+        for (int j = 0; j < n_rh; ++j) lut.ssa.push_back(ssa_lookup[j].as<double>());
+        for (int j = 0; j < n_rh; ++j) lut.asm_.push_back(asm_lookup[j].as<double>());
+        return lut;
+    }
+
+    bool hasMieTable(int i) const override {
+        auto s = species_[i];
+        return static_cast<bool>(s["mie_table"]);
+    }
+
+    SpeciesCurveConfig mieTable(int i) const override {
+        auto s = species_[i];
+        auto mt = s["mie_table"];
+        SpeciesCurveConfig cc;
+        cc.species_name = speciesName(i);
+        if (mt["source"]) cc.source_label = mt["source"].as<std::string>();
+        if (mt["interpolate"]) cc.interpolate = mt["interpolate"].as<std::string>();
+        if (mt["solver_radius_node"]) cc.solver_radius_node = mt["solver_radius_node"].as<int>();
+        if (mt["radius_nodes"]) {
+            for (const auto& rn : mt["radius_nodes"]) cc.radius_nodes.push_back(rn.as<double>());
+        }
+        if (mt["overrides"]) {
+            for (YAML::const_iterator it = mt["overrides"].begin(); it != mt["overrides"].end(); ++it) {
+                const std::string attr = it->first.as<std::string>();
+                AttributeCategory cat; int idx;
+                if (!attribute_key(attr, cat, idx)) {
+                    throw std::runtime_error("EX-aero Error: species '" + cc.species_name +
+                        "' override names unknown attribute '" + attr + "' (fail fast)");
+                }
+                SpeciesCurveConfig::Override ov;
+                ov.category = cat; ov.attribute_index = idx;
+                for (const auto& v : it->second) ov.values.push_back(v.as<double>());
+                cc.overrides.push_back(std::move(ov));
+            }
+        }
+        return cc;
+    }
+
+    bool hasActivation() const override { return static_cast<bool>(config_["activation"]); }
+
+    int activationExtraMask() const override {
+        auto act = config_["activation"];
+        return act["categories"] ? category_mask_from_yaml(act["categories"]) : 0;
+    }
+
+    std::vector<std::string> activationSpecies() const override {
+        std::vector<std::string> activated_species;
+        auto act = config_["activation"];
+        if (act["species"]) {
+            for (const auto& sp : act["species"]) activated_species.push_back(sp.as<std::string>());
+        }
+        return activated_species;
+    }
+
+    std::string activationDataFile() const override {
+        auto act = config_["activation"];
+        return act["data_file"] ? act["data_file"].as<std::string>() : std::string{};
+    }
+
+    int numEmissionsMappings() const override {
+        auto mapping_node = config_["emissions_mapping"];
+        return mapping_node ? static_cast<int>(mapping_node.size()) : 0;
+    }
+
+    GocartEmissionsMappingConfig emissionsMapping(int s) const override {
+        auto mapping_node = config_["emissions_mapping"];
+        GocartEmissionsMappingConfig em;
+        em.raw_name = mapping_node[s]["raw_name"] ? mapping_node[s]["raw_name"].as<std::string>()
+                                                  : "CECE_Raw_Species";
+        auto mappings = mapping_node[s]["mappings"];
+        if (mappings) {
+            for (size_t m = 0; m < mappings.size(); ++m) {
+                GocartEmissionsMappingConfig::Mapping mp;
+                mp.target_species = mappings[m]["target_species"].as<std::string>();
+                mp.mass_split_fraction = mappings[m]["mass_split_fraction"].as<double>();
+                if (mappings[m]["is_modal_mode"] && mappings[m]["is_modal_mode"].as<bool>()) {
+                    mp.is_modal_mode = true;
+                    mp.emitted_particle_diameter = mappings[m]["emitted_particle_diameter"].as<double>();
+                    mp.lognormal_sigma = mappings[m]["lognormal_sigma"].as<double>();
+                }
+                em.mappings.push_back(std::move(mp));
+            }
+        }
+        return em;
+    }
+
+private:
+    YAML::Node config_, species_;
+};
 } // namespace
 
 
@@ -105,14 +283,13 @@ int category_mask_from_yaml(const YAML::Node& node) {
         }
     }
 
-    void GocartPackage::initialize(const std::string& config_yaml) {
-        YAML::Node config = YAML::Load(config_yaml);
-        if (!config["species"]) {
-            throw std::runtime_error("GOCART YAML config missing 'species' field");
-        }
-
-        auto species_node = config["species"];
-        num_species_ = species_node.size();
+    // Shared orchestration for both configuration entry points (design 2026-09-10,
+    // Approach A): species params -> store reset -> activation -> curve configs ->
+    // pool wiring -> emissions -> solver-state upload. Reads config ONLY through the
+    // PackageConfigReader interface, so the YAML path and the structured-config path
+    // (Task 3) share one code path and the precedence order cannot drift between them.
+    void GocartPackage::initializeImpl(PackageConfigReader& reader) {
+        num_species_ = reader.numSpecies();
 
         h_species_params_.clear();
         h_species_params_.reserve(num_species_);
@@ -121,55 +298,26 @@ int category_mask_from_yaml(const YAML::Node& node) {
         h_curve_pool_.clear(); // rebuilt from scratch each initialize (single H2D upload)
 
         for (int i = 0; i < num_species_; ++i) {
-            auto s = species_node[i];
-            bool has_lookup = s["has_optics_lookup"] && s["has_optics_lookup"].as<bool>();
-            
             // Extract the dynamic species name
-            std::string name = s["name"] ? s["name"].as<std::string>() : ("Species_" + std::to_string(i));
+            std::string name = reader.speciesName(i);
             species_names_.push_back(name);
 
-            GocartSpeciesParams p{
-                s["dry_density"].as<double>(),
-                s["molecular_weight"].as<double>(),
-                s["dry_particle_diameter"].as<double>(),
-                s["hygroscopicity"].as<double>(),
-                s["lognormal_sigma"].as<double>(),
-                s["lognormal_dg"].as<double>(),
-                s["refractive_index_real"].as<double>(),
-                s["refractive_index_imag"].as<double>(),
-            };
-            p.has_optics_lookup = has_lookup;
+            GocartSpeciesParams p = reader.speciesScalars(i);
 
-            if (has_lookup) {
-                // Legacy YAML RH lookups: arbitrary length, appended to the flat pool.
+            if (p.has_optics_lookup) {
+                // Legacy RH lookups (presence/length checks already validated by the
+                // reader): arbitrary length, appended to the flat pool.
                 // The block layout is the documented {rh,ext,ssa,asm} x n_rh order (R10).
-                auto rh_bins = s["rh_bins"];
-                auto ext_lookup = s["ext_lookup"];
-                auto ssa_lookup = s["ssa_lookup"];
-                auto asm_lookup = s["asm_lookup"];
-                if (!rh_bins || !ext_lookup || !ssa_lookup || !asm_lookup) {
-                    throw std::runtime_error("EX-aero Error: species '" + name +
-                        "' sets has_optics_lookup but omits a required lookup list");
-                }
-                const int n_rh = static_cast<int>(rh_bins.size());
-                if (n_rh < 2) {
-                    throw std::runtime_error("EX-aero Error: species '" + name +
-                        "' rh_bins needs at least 2 points to interpolate");
-                }
-                if (static_cast<int>(ext_lookup.size()) != n_rh ||
-                    static_cast<int>(ssa_lookup.size()) != n_rh ||
-                    static_cast<int>(asm_lookup.size()) != n_rh) {
-                    throw std::runtime_error("EX-aero Error: species '" + name +
-                        "' lookup lists have mismatched lengths (fail fast, no silent fallback)");
-                }
+                const GocartLegacyOpticsLookup lut = reader.opticsLookup(i);
+                const int n_rh = static_cast<int>(lut.rh.size());
                 p.n_radius = 1;   // band-integrated legacy lookup: single effective bin
                 p.n_rh = n_rh;
                 p.n_lambda = 0;
                 p.curve_offset = static_cast<int>(h_curve_pool_.size());
-                for (int j = 0; j < n_rh; ++j) h_curve_pool_.push_back(rh_bins[j].as<double>());
-                for (int j = 0; j < n_rh; ++j) h_curve_pool_.push_back(ext_lookup[j].as<double>());
-                for (int j = 0; j < n_rh; ++j) h_curve_pool_.push_back(ssa_lookup[j].as<double>());
-                for (int j = 0; j < n_rh; ++j) h_curve_pool_.push_back(asm_lookup[j].as<double>());
+                for (int j = 0; j < n_rh; ++j) h_curve_pool_.push_back(lut.rh[j]);
+                for (int j = 0; j < n_rh; ++j) h_curve_pool_.push_back(lut.ext[j]);
+                for (int j = 0; j < n_rh; ++j) h_curve_pool_.push_back(lut.ssa[j]);
+                for (int j = 0; j < n_rh; ++j) h_curve_pool_.push_back(lut.asm_[j]);
             }
             h_species_params_.push_back(p);
         }
@@ -182,17 +330,16 @@ int category_mask_from_yaml(const YAML::Node& node) {
         store.reset_to_baked_in();
 
         // Top-level activation (optional): species list, categories, runtime data file.
+        // The default mask (microphysical + spectral-optical) is the impl's, not the
+        // reader's: the reader only supplies extra category bits OR-ed onto it.
         int activation_mask = attribute_category_bit(AttributeCategory::Microphysical) |
                               attribute_category_bit(AttributeCategory::SpectralOptical);
         std::vector<std::string> activated_species;
         std::string runtime_file;
-        if (config["activation"]) {
-            auto act = config["activation"];
-            if (act["categories"]) activation_mask |= category_mask_from_yaml(act["categories"]);
-            if (act["species"]) {
-                for (const auto& sp : act["species"]) activated_species.push_back(sp.as<std::string>());
-            }
-            if (act["data_file"]) runtime_file = act["data_file"].as<std::string>();
+        if (reader.hasActivation()) {
+            activation_mask |= reader.activationExtraMask();
+            activated_species = reader.activationSpecies();
+            runtime_file = reader.activationDataFile();
         }
         // Runtime file (if any) is applied through setAttributeActivation (FR-012); a bad
         // file aborts with FATAL ERROR and no fallback (FR-009).
@@ -200,32 +347,8 @@ int category_mask_from_yaml(const YAML::Node& node) {
 
         std::vector<SpeciesCurveConfig> curve_configs; // per-species mie_table: bindings (R9)
         for (int i = 0; i < num_species_; ++i) {
-            auto s = species_node[i];
-            if (!s["mie_table"]) continue;
-            auto mt = s["mie_table"];
-            SpeciesCurveConfig cc;
-            cc.species_name = species_names_[i];
-            if (mt["source"]) cc.source_label = mt["source"].as<std::string>();
-            if (mt["interpolate"]) cc.interpolate = mt["interpolate"].as<std::string>();
-            if (mt["solver_radius_node"]) cc.solver_radius_node = mt["solver_radius_node"].as<int>();
-            if (mt["radius_nodes"]) {
-                for (const auto& rn : mt["radius_nodes"]) cc.radius_nodes.push_back(rn.as<double>());
-            }
-            if (mt["overrides"]) {
-                for (YAML::const_iterator it = mt["overrides"].begin(); it != mt["overrides"].end(); ++it) {
-                    const std::string attr = it->first.as<std::string>();
-                    AttributeCategory cat; int idx;
-                    if (!attribute_key(attr, cat, idx)) {
-                        throw std::runtime_error("EX-aero Error: species '" + cc.species_name +
-                            "' override names unknown attribute '" + attr + "' (fail fast)");
-                    }
-                    SpeciesCurveConfig::Override ov;
-                    ov.category = cat; ov.attribute_index = idx;
-                    for (const auto& v : it->second) ov.values.push_back(v.as<double>());
-                    cc.overrides.push_back(std::move(ov));
-                }
-            }
-            curve_configs.push_back(std::move(cc));
+            if (!reader.hasMieTable(i)) continue;
+            curve_configs.push_back(reader.mieTable(i));
         }
         if (!curve_configs.empty()) setSpeciesCurveConfig(curve_configs);
 
@@ -325,32 +448,26 @@ int category_mask_from_yaml(const YAML::Node& node) {
             h_curve_pool_.insert(h_curve_pool_.end(), pit->second.values.begin(), pit->second.values.end());
         }
 
-        // Parse emissions mapping schemas if present (SPEC-EMISSIONS-002)
-        if (config["emissions_mapping"]) {
-            auto mapping_node = config["emissions_mapping"];
-            for (size_t s = 0; s < mapping_node.size(); ++s) {
-                std::string raw_name = mapping_node[s]["raw_name"] ? mapping_node[s]["raw_name"].as<std::string>() : "CECE_Raw_Species";
-                int raw_cece_idx = static_cast<int>(s); // sequentially map indices
-                
-                auto mappings = mapping_node[s]["mappings"];
-                if (mappings) {
-                    for (size_t m = 0; m < mappings.size(); ++m) {
-                        std::string target_spec = mappings[m]["target_species"].as<std::string>();
-                        double frac = mappings[m]["mass_split_fraction"].as<double>();
-                        
-                        int target_idx = getSpeciesIndex(target_spec);
-                        if (target_idx >= 0) {
-                            auto& params = h_species_params_[target_idx];
-                            params.emissions_mapping.is_active = true;
-                            params.emissions_mapping.raw_cece_index = raw_cece_idx;
-                            params.emissions_mapping.mass_split_fraction = frac;
-                            
-                            if (mappings[m]["is_modal_mode"] && mappings[m]["is_modal_mode"].as<bool>()) {
-                                params.emissions_mapping.is_modal_mode = true;
-                                params.emissions_mapping.emitted_particle_diameter = mappings[m]["emitted_particle_diameter"].as<double>();
-                                params.emissions_mapping.lognormal_sigma = mappings[m]["lognormal_sigma"].as<double>();
-                            }
-                        }
+        // Parse emissions mapping schemas if present (SPEC-EMISSIONS-002).
+        // raw_name is diagnostics-only downstream (parity); the sequential mapping
+        // index s is the raw CECE index.
+        const int num_raw_species = reader.numEmissionsMappings();
+        for (int s = 0; s < num_raw_species; ++s) {
+            const GocartEmissionsMappingConfig em = reader.emissionsMapping(s);
+            const int raw_cece_idx = s; // sequentially map indices
+
+            for (const auto& mp : em.mappings) {
+                int target_idx = getSpeciesIndex(mp.target_species);
+                if (target_idx >= 0) {
+                    auto& params = h_species_params_[target_idx];
+                    params.emissions_mapping.is_active = true;
+                    params.emissions_mapping.raw_cece_index = raw_cece_idx;
+                    params.emissions_mapping.mass_split_fraction = mp.mass_split_fraction;
+
+                    if (mp.is_modal_mode) {
+                        params.emissions_mapping.is_modal_mode = true;
+                        params.emissions_mapping.emitted_particle_diameter = mp.emitted_particle_diameter;
+                        params.emissions_mapping.lognormal_sigma = mp.lognormal_sigma;
                     }
                 }
             }
@@ -362,6 +479,11 @@ int category_mask_from_yaml(const YAML::Node& node) {
         }
         solver_state_ = create_solver_state(num_species_, h_species_params_.data(),
                                             h_curve_pool_.data(), static_cast<int>(h_curve_pool_.size()));
+    }
+
+    void GocartPackage::initialize(const std::string& config_yaml) {
+        YamlReader reader{YAML::Load(config_yaml)};
+        initializeImpl(reader);
     }
 
     void GocartPackage::executeMicrophysics(
