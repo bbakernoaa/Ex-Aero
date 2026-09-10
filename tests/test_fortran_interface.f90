@@ -27,6 +27,12 @@ contains
     character(len=32, kind=c_char) :: queried_name
     integer(c_int) :: resolved_idx
 
+    ! GEOSmie MIE attribute round-trip (T022)
+    real(c_double) :: mie_value
+    character(len=32, kind=c_char) :: mie_unit
+    character(len=128, kind=c_char) :: mie_version
+    integer(c_int) :: mie_status
+
     ! CCPP-standard error variables
     character(len=256, kind=c_char) :: errmsg
     integer(c_int) :: errflg
@@ -67,7 +73,7 @@ contains
     write(*,*) "Package instance created successfully."
 
     ! Prepare YAML string - written as a single, flat, continuous line of kind=c_char with no concatenations or trims!
-    yaml_string = c_char_"species: [{name: 'Dust', dry_density: 2600.0, molecular_weight: 100.0, dry_particle_diameter: 0.15e-6, hygroscopicity: 0.1, lognormal_sigma: 1.5, lognormal_dg: 0.1e-6, refractive_index_real: 1.55, refractive_index_imag: 0.002}]" // c_null_char
+    yaml_string = c_char_"species: [{name: 'Dust', dry_density: 2600.0, molecular_weight: 100.0, dry_particle_diameter: 0.15e-6, hygroscopicity: 0.1, lognormal_sigma: 1.5, lognormal_dg: 0.1e-6, refractive_index_real: 1.55, refractive_index_imag: 0.002, mie_table: {source: DU}}]" // c_null_char
 
     ! Initialize package from Fortran
     write(*,*) "Initializing package from YAML..."
@@ -94,6 +100,33 @@ contains
       call exit(1)
     end if
     write(*,*) "Dynamic metadata queries completed successfully."
+
+    ! --- GEOSmie MIE microphysical round-trip (T022): query effective radius of the
+    !     DU-bound Dust species at the dry grid point through the C boundary. ---
+    write(*,*) "Querying MIE microphysical attribute..."
+    errmsg = ""
+    errflg = 0
+    mie_value = -1.0d0
+    call exaero_query_attribute(pkg, 0, exaero_CAT_MICROPHYSICAL, exaero_EFFECTIVE_RADIUS, &
+        0.0d0, 0.0d0, mie_value, mie_unit, 32, mie_version, 128, mie_status, errmsg, errflg)
+    if (errflg /= 0) then
+      write(*,*) "Error: MIE query failed: ", errmsg
+      call exit(1)
+    end if
+    if (mie_status /= exaero_STATUS_AVAILABLE) then
+      write(*,*) "Error: MIE status not Available:", mie_status
+      call exit(1)
+    end if
+    ! DU bin0 dry effective radius = 6.358845325848961e-07 m (pinned snapshot).
+    if (abs(mie_value - 6.358845325848961d-07) > 1d-13) then
+      write(*,*) "Error: MIE effective radius mismatch:", mie_value
+      call exit(1)
+    end if
+    if (mie_unit(1:1) /= 'm') then
+      write(*,*) "Error: MIE unit not meters:", mie_unit
+      call exit(1)
+    end if
+    write(*,*) "MIE microphysical round-trip completed successfully."
 
     ! Populate mock inputs
     temp = 298.0d0

@@ -229,6 +229,33 @@ int category_mask_from_yaml(const YAML::Node& node) {
         }
         if (!curve_configs.empty()) setSpeciesCurveConfig(curve_configs);
 
+        // --- Device-resident microphysical curves (T021, ADR-003 R10): append each
+        //     curve-bound species' {rh, growth_factor, wet_particle_density} block to the
+        //     same flat pool the optics kernels use. Extents are data, never literals;
+        //     the diagnostics kernel reads them on-device with zero H2D in the loop. ---
+        for (int i = 0; i < num_species_; ++i) {
+            const SpeciesCurve* c = store.find_curve(species_names_[i]);
+            if (!c) continue;
+            auto git = c->fields.find("growth_factor");
+            auto dit = c->fields.find("wet_particle_density");
+            if (git == c->fields.end() || dit == c->fields.end()) continue;
+            const int nR = c->n_radius();
+            const int nH = c->n_rh();
+            if (static_cast<int>(git->second.values.size()) != nR * nH ||
+                static_cast<int>(dit->second.values.size()) != nR * nH) {
+                throw std::runtime_error("EX-aero Error: species '" + species_names_[i] +
+                    "' microphysical field length does not match its axes (fail fast)");
+            }
+            auto& p = h_species_params_[i];
+            p.micro_offset = static_cast<int>(h_curve_pool_.size());
+            p.n_micro_radius = nR;
+            p.n_micro_rh = nH;
+            p.solver_radius_node = c->solver_radius_node;
+            h_curve_pool_.insert(h_curve_pool_.end(), c->rh.begin(), c->rh.end());
+            h_curve_pool_.insert(h_curve_pool_.end(), git->second.values.begin(), git->second.values.end());
+            h_curve_pool_.insert(h_curve_pool_.end(), dit->second.values.begin(), dit->second.values.end());
+        }
+
         // Parse emissions mapping schemas if present (SPEC-EMISSIONS-002)
         if (config["emissions_mapping"]) {
             auto mapping_node = config["emissions_mapping"];

@@ -85,6 +85,7 @@ namespace exaero {
         );
 
         auto d_species_params = state->d_species_params;
+        auto d_curve_pool = state->d_curve_pool;
 
         // Execute parallel diagnostics calculation on the GPU
         Kokkos::parallel_for("GocartDiagnosticsKernel", 
@@ -106,6 +107,29 @@ namespace exaero {
                     
                     if (mass_conc <= 0.0) continue;
 
+                    // 0. GEOSmie table-backed microphysics (T021): when this species is
+                    //    curve-bound, growth factor and wet particle density are read from
+                    //    the flat device pool (RH-linear, extent-driven scan — no literals).
+                    double gf_table = -1.0;   // wet/dry effective-radius growth factor
+                    double wd_table = -1.0;   // wet particle density [kg/m^3]
+                    if (params.micro_offset >= 0) {
+                        const double* mb = d_curve_pool.data() + params.micro_offset;
+                        const int nH = params.n_micro_rh;
+                        const int nR = params.n_micro_radius;
+                        const double* mrh = mb;                       // [nH]
+                        const double* mgf = mb + nH;                  // [nR*nH]
+                        const double* mwd = mb + nH + nR * nH;        // [nR*nH]
+                        int rnode = Kokkos::min(Kokkos::max(params.solver_radius_node, 0), nR - 1);
+                        int i_bin = 0;
+                        while (i_bin < nH - 2 && current_rh > mrh[i_bin + 1]) {
+                            i_bin++;
+                        }
+                        double w = (current_rh - mrh[i_bin]) / (mrh[i_bin + 1] - mrh[i_bin] + 1e-15);
+                        w = Kokkos::min(Kokkos::max(w, 0.0), 1.0); // clamp: never extrapolate (FR-007)
+                        gf_table = mgf[rnode * nH + i_bin] + w * (mgf[rnode * nH + i_bin + 1] - mgf[rnode * nH + i_bin]);
+                        wd_table = mwd[rnode * nH + i_bin] + w * (mwd[rnode * nH + i_bin + 1] - mwd[rnode * nH + i_bin]);
+                    }
+
                     // 1. Derived Number Concentration from Bulk Mass (lognormal population)
                     double ln_sig = Kokkos::log(params.lognormal_sigma);
                     double vol_factor = (M_PI / 6.0) * params.dry_density * 
@@ -114,9 +138,12 @@ namespace exaero {
                     double num_conc = mass_conc / vol_factor; // [particles/m³]
                     total_number_3d += num_conc;
 
-                    // 2. Wet size calculation (Kohler hygroscopic growth approximation)
-                    double wet_diameter = params.dry_particle_diameter * 
-                                          Kokkos::pow(1.0 + params.hygroscopicity * (current_rh / (1.0 - current_rh)), 1.0/3.0);
+                    // 2. Wet size calculation: GEOSmie growth factor (table-backed, T021)
+                    //    when available, else the kappa-Kohler approximation.
+                    double growth = (gf_table > 0.0)
+                        ? gf_table
+                        : Kokkos::pow(1.0 + params.hygroscopicity * (current_rh / (1.0 - current_rh)), 1.0/3.0);
+                    double wet_diameter = params.dry_particle_diameter * growth;
 
                     // 3. Surface Area Density (SAD) [m²/m³]
                     double sad_factor = M_PI * Kokkos::pow(params.lognormal_dg, 2) * Kokkos::exp(2.0 * ln_sig * ln_sig);
@@ -129,10 +156,11 @@ namespace exaero {
                     total_alw_3d += alw_mass_spec;
 
                     // 5. Gravitational Settling Fall Velocity (vg) [m/s] (Stokes Settling)
-                    // Wet density calculation
+                    // Wet density: GEOSmie table value (T021) when curve-bound, else the
+                    // dry-volume + condensate-mass mixture approximation.
                     double dry_mass = dry_vol * params.dry_density;
                     double water_mass = (wet_vol - dry_vol) * 1000.0;
-                    double wet_density = (dry_mass + water_mass) / wet_vol;
+                    double wet_density = (wd_table > 0.0) ? wd_table : (dry_mass + water_mass) / wet_vol;
 
                     double g_acc = 9.80665;       // [m/s²]
                     double dyn_visc = 1.825e-5;   // [kg/m-s] air dynamic viscosity

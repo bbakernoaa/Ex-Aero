@@ -34,6 +34,18 @@ struct GocartSpeciesParams {
   int  n_rh         = 0;  // RH-axis length (arbitrary, from config or table)
   int  n_lambda     = 0;  // wavelength/band extent (0 for band-integrated legacy lookup)
 
+  // Table-backed microphysical curves for the device hot path (T021, ADR-003 R10).
+  // When micro_offset >= 0 the diagnostics kernel reads hygroscopic growth and wet
+  // particle density from the GEOSmie curve instead of the kappa-Kohler approximation.
+  // Block layout at pool[micro_offset ...] (documented order, extents are data):
+  //   [0, nH)                     rh axis
+  //   [nH, nH + nR*nH)            growth_factor   (radius-major: r*nH + h)
+  //   [nH + nR*nH, nH + 2*nR*nH)  wet_particle_density (same layout)
+  int micro_offset = -1;       // index into the device curve pool; -1 => no micro curve
+  int n_micro_radius = 0;      // radius-bin extent of the micro block
+  int n_micro_rh = 0;          // RH-axis extent of the micro block
+  int solver_radius_node = 0;  // size-bin the hot path queries (clamped to n_micro_radius-1)
+
   EmissionsMappingParams emissions_mapping;
 };
 
