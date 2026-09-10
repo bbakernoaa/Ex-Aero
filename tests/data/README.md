@@ -21,13 +21,23 @@ CTest working directory (`tests/`), never by absolute path.
 
 | File | Species | Purpose |
 |------|---------|---------|
-| `mie_dust_monochromatic.txt` | DU | Valid file extending baked-in RRTMG bands with monochromatic wavelengths + polarized phase-function moments (US2 T029, US3 T031/T034). Proves file values *extend* baked bands (invariant C7). |
-| `mie_dust_override.txt` | DU | Valid file overriding a key that also exists baked-in; query must report `delivery_source=runtime-file` (invariant C7). |
-| `mie_nitrate_rhop.txt` | NI | Valid file supplying `rhop` + `growth_factor`, which the pinned RRTMG tables do not carry, proving config/file-supplied microphysics are surfaced (FR-001, US1). |
-| `mie_corrupt_schema.txt` | DU | Missing required variable/dimension ordering wrong → must abort with `FATAL ERROR:` and no silent fallback (invariant C6, FR-009). |
-| `mie_corrupt_unit.txt` | DU | Declares `bext` in `m2 g-1` instead of `m2 (kg dry mass)-1` → unit-mismatch abort (FR-009). |
-| `mie_corrupt_version.txt` | DU | Empty/absent `source_version` → provenance abort (FR-016). |
-| `mie_truncated.txt` | DU | Declares more records than present → truncation abort (FR-009). |
+| `mie_dust_monochromatic.txt` | DU | Valid file replacing the baked-in 30-band RRTMG λ axis with a 3-wavelength monochromatic set (0.355/0.55/1.33 µm) + polarized phase-function moments (rank-5, 6 elements × 3 moments; a file-only category). Proves file values *extend* baked bands (US2 T029, US3 T031/T034, invariant C7). |
+| `mie_dust_override.txt` | DU | Valid file overriding `bext` (constant 1234.5) on the SAME 30-band axis; query must report `delivery_source=runtime-file` (invariant C7). Doubles as the file layer of the C13 precedence test. |
+| `mie_nitrate_density.txt` | NI | Valid file supplying `wet_particle_density` + `growth_factor` (rank-2 radius,rh), which the pinned RRTMG band tables do not carry, proving config/file-supplied microphysics are surfaced (FR-001, US1). |
+| `mie_dust7.txt` | DUST7 | Valid file for a species ABSENT from the baked set, declaring PRIME/non-source extents: 7 radius × 7 RH × 3 bands. Because the label is new, the file fully defines the curve — the no-hardcoding gate (invariant C12, T044). |
+| `mie_corrupt_schema.txt` | DU | Unknown `# @bogus` directive → must abort with `FATAL ERROR:` and no silent fallback (invariant C6, FR-009). |
+| `mie_corrupt_unit.txt` | DU | Declares `qext` in `m` instead of the canonical `1` → unit-mismatch abort (FR-009). |
+| `mie_corrupt_version.txt` | DU | Missing `@source_version` → provenance abort (FR-016). |
+| `mie_truncated.txt` | DU | Declares 2×2 axes but supplies 3 field values → truncation abort (FR-009). |
+
+## Format notes
+
+Files are self-describing: the loader derives each field's element count from the axes
+declared **in the file** (`# @axis <name> <units> <n> [vals...]`), so valid fixtures emit
+radius/rh even when identical to baked. The store merge keeps baked radius/rh and replaces
+only what the file redefines; a file that changes the λ axis drops stale rank-3 fields it
+does not re-supply (FR-012). The trailing count token on `# @field` lines is informational
+readability only.
 
 ## Generating / refreshing
 

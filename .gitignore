@@ -1,6 +1,7 @@
 # --- Build Outputs & Cache Directories ---
 build/
 /build/
+build*/
 bin/
 lib/
 *.o
