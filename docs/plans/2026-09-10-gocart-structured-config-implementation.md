@@ -13,6 +13,7 @@
 - C++23; every public class/struct/method has Doxygen `///` docs with `@brief` (`.github/instructions/cpp.instructions.md` §5).
 - Public headers under `src/exaero/` MUST NOT include `Kokkos_Core.hpp` or define mdspan namespaces beyond the existing `IAerosolPackage.hpp` pattern (ADR-001, SC-002). `GocartConfig.hpp` includes only `<optional>`, `<string>`, `<vector>`, `<exaero/AttributeQuery.hpp>`.
 - Fail fast, loudly: every validation error throws `std::runtime_error` with an `"EX-aero Error: "` prefix and the species name (never a silent fallback).
+- New structured-config tests use explicit throw-based gates — the `gate(bool, const char*)` helper defined in Task 1 that throws `std::runtime_error("FATAL ERROR: ...")` — never bare `assert`, which compiles out under NDEBUG and would make Release runs assert nothing (T038 precedent). Existing assert-based tests are left as-is.
 - Precedence is invariant on BOTH paths: `reset_to_baked_in → runtime file → config curves` (config > file > baked-in).
 - Axis lengths are data, never literals (ADR-003): no hardcoded bin/RH/band counts in new code.
 - Overloads: `initialize(const std::string&)` and `initialize(const GocartConfig&)` are unambiguous (a `GocartConfig` never converts to `std::string`).
@@ -68,13 +69,22 @@ struct UnsupportedPkg : public exaero::IAerosolPackage {
     std::string getSpeciesName(int) const override { return {}; }
 };
 
+// Explicit throw-based gate: bare assert() compiles out under NDEBUG and would
+// make Release runs a no-op (T038 precedent). ALL structured-config tests use it.
+static void gate(bool ok, const char* what) {
+    if (!ok) throw std::runtime_error(std::string("FATAL ERROR: structured-config test: ") + what);
+}
+
 void test_structured_config_unsupported_package() {
     UnsupportedPkg pkg;
     exaero::GocartConfig cfg;
     cfg.species.push_back(exaero::GocartSpeciesConfig{});
     bool threw = false;
-    try { pkg.initialize(cfg); } catch (const std::logic_error&) { threw = true; }
-    assert(threw && "default structured initialize must throw logic_error");
+    try { pkg.initialize(cfg); }
+    catch (const std::logic_error& e) {
+        threw = std::string(e.what()).find("does not support structured configuration") != std::string::npos;
+    }
+    gate(threw, "default structured initialize must throw logic_error with the contract message");
     std::cout << "Structured config unsupported-package guard: PASS" << std::endl;
 }
 ```
@@ -362,22 +372,25 @@ void test_structured_config_species_parity() {
     pkg_yaml.initialize(kMieSixYaml);
     pkg_cfg.initialize(kMieSixConfig());
 
-    assert(pkg_cfg.get_num_species() == 6);
+    gate(pkg_cfg.get_num_species() == 6, "six species configured");
     for (int i = 0; i < 6; ++i) {
         auto a = pkg_yaml.get_species_params(i);
         auto b = pkg_cfg.get_species_params(i);
-        assert(pkg_cfg.getSpeciesName(i) == pkg_yaml.getSpeciesName(i));
+        gate(pkg_cfg.getSpeciesName(i) == pkg_yaml.getSpeciesName(i), "species name parity");
         // Bit-identical scalars and pool wiring (offsets/extents included).
-        assert(b.dry_density == a.dry_density && b.molecular_weight == a.molecular_weight);
-        assert(b.dry_particle_diameter == a.dry_particle_diameter);
-        assert(b.hygroscopicity == a.hygroscopicity && b.lognormal_sigma == a.lognormal_sigma);
-        assert(b.lognormal_dg == a.lognormal_dg);
-        assert(b.refractive_index_real == a.refractive_index_real);
-        assert(b.refractive_index_imag == a.refractive_index_imag);
-        assert(b.has_optics_lookup == a.has_optics_lookup);
-        assert(b.curve_offset == a.curve_offset && b.n_rh == a.n_rh);
-        assert(b.micro_offset == a.micro_offset && b.spec_offset == a.spec_offset);
-        assert(b.pmom_offset == a.pmom_offset);
+        gate(b.dry_density == a.dry_density && b.molecular_weight == a.molecular_weight,
+             "density/molecular-weight parity");
+        gate(b.dry_particle_diameter == a.dry_particle_diameter, "dpg parity");
+        gate(b.hygroscopicity == a.hygroscopicity && b.lognormal_sigma == a.lognormal_sigma,
+             "kappa/sigma parity");
+        gate(b.lognormal_dg == a.lognormal_dg, "dg parity");
+        gate(b.refractive_index_real == a.refractive_index_real, "n parity");
+        gate(b.refractive_index_imag == a.refractive_index_imag, "k parity");
+        gate(b.has_optics_lookup == a.has_optics_lookup, "lookup flag parity");
+        gate(b.curve_offset == a.curve_offset && b.n_rh == a.n_rh, "legacy curve wiring parity");
+        gate(b.micro_offset == a.micro_offset && b.spec_offset == a.spec_offset,
+             "micro/spectral wiring parity");
+        gate(b.pmom_offset == a.pmom_offset, "pmom wiring parity");
     }
     std::cout << "Structured config species parity: PASS" << std::endl;
 }
@@ -507,7 +520,7 @@ git commit -m "feat(gocart): structured initialize via StructReader (species par
 
 - [ ] **Step 1: Full-feature equivalence test**
 
-`test_structured_config_full_equivalence()`: build BOTH a YAML string and a `GocartConfig` that exercise every block at once — one species with `optics_lookup` (reuse the 4-point lookup from `test_gocart_arbitrary_lookup_length`), one species with `mie_table` (source `DU`, one inserted `radius_nodes` + one `bext` override, mirroring the C11/C13 blocks in `test_mie_config_curves`), `activation` (categories `[polarized]`, species `["DU"]`... note: YAML `categories` are strings, struct uses `AttributeCategory` — same bits), and an `emissions_mapping` with one modal mapping (mirror test_main.cpp:1503). Initialize two `GocartPackage`s and assert:
+`test_structured_config_full_equivalence()`: build BOTH a YAML string and a `GocartConfig` that exercise every block at once — one species with `optics_lookup` (reuse the 4-point lookup from `test_gocart_arbitrary_lookup_length`), one species with `mie_table` (source `DU`, one inserted `radius_nodes` + one `bext` override, mirroring the C11/C13 blocks in `test_mie_config_curves`), `activation` (categories `[polarized]`, species `["DU"]`... note: YAML `categories` are strings, struct uses `AttributeCategory` — same bits), and an `emissions_mapping` with one modal mapping (mirror test_main.cpp:1503). Initialize two `GocartPackage`s and gate every check with Task 1's `gate()` helper (throw-based, holds under NDEBUG):
 
 1. All `get_species_params(i)` fields bit-identical (as Task 3, plus `emissions_mapping` subfields).
 2. `queryAttribute` over a fixed probe matrix (species × category × attribute_index × {rh=0, 0.495, 0.99} × {1e-6, 2e-6, 5e-6} m) returns identical status codes and bit-identical values.
@@ -531,7 +544,7 @@ auto expect_throw = [](const exaero::GocartConfig& cfg, const char* what) {
     try { pkg.initialize(cfg); } catch (const std::runtime_error& e) {
         threw = std::string(e.what()).rfind("EX-aero Error:", 0) == 0;
     }
-    assert(threw && what);
+    gate(threw, what);
 };
 ```
 
@@ -590,3 +603,4 @@ git commit -m "docs: specify structured (no-YAML) GOCART configuration contract"
 - Spec coverage: design §3.1 structs → Task 1; §3.2 overload → Task 1; §4 seam → Task 2; §4 struct path + validation → Task 3/4; §6 tests 1–4 → Tasks 1/3/4; §8 file list → Tasks 1–5. No gaps.
 - No placeholder language ("TBD", "similar to Task N") in code steps — every code block is complete or a direct port instruction with the source line range.
 - Type names consistent across tasks: `GocartLegacyOpticsLookup::asm_`, `PackageConfigReader` virtuals identical in Task 2 declaration and Task 3 implementation.
+- Gate discipline: every new structured-config test check goes through `gate()` (throw-based), never bare `assert` (user decision 2026-09-10, reviewer plan-mandated finding).
