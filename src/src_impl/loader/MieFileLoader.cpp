@@ -166,7 +166,19 @@ std::vector<SpeciesCurve> MieFileLoader::load(const std::string& path) {
                 std::string d;
                 while (std::getline(dss, d, ',')) dims.push_back(d);
             }
-            const std::string units = tk[3];
+            // Reassemble the (possibly multi-word) unit string from tk[3] to the end.
+            // A trailing all-integer token is the informational element count (the
+            // loader derives the real count from the declared axes) and is dropped.
+            std::vector<std::string> utok(tk.begin() + 3, tk.end());
+            if (utok.size() > 1) {
+                const std::string& last = utok.back();
+                const bool all_digits = !last.empty() && std::all_of(
+                    last.begin(), last.end(),
+                    [](unsigned char c) { return std::isdigit(c) != 0; });
+                if (all_digits) utok.pop_back();
+            }
+            std::string units;
+            for (const auto& t : utok) { if (!units.empty()) units += " "; units += t; }
             std::size_t count = 1;
             int rank = 1;
             for (const auto& d : dims) {
@@ -175,6 +187,12 @@ std::vector<SpeciesCurve> MieFileLoader::load(const std::string& path) {
                 count *= len;
             }
             rank = static_cast<int>(dims.size());
+            // Unit-set validation (FR-009): a declared unit that disagrees with the
+            // canonical unit for this attribute aborts load -- never a silent fallback.
+            const std::string canonical = MieTableStore::unit_for_field(name);
+            if (units != canonical)
+                loader_fatal("@field " + name + ": unit '" + units +
+                             "' disagrees with expected '" + canonical + "' (FR-009)");
             CurveField f;
             f.unit = units;
             f.rank = rank;

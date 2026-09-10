@@ -1,0 +1,8 @@
+# @format exaero_mie_v1
+# @source_version ufs-regtests-input-data-20260617/GOCART/p8c_5d
+# @citation NASA GOCART2G GEOSmie optics tables (Kemppinen et al. 2022; Colarco/Tsigaridis Chin GOCART); UFS regression-test input-data-20260617
+# @species DU
+# @axis radius m 2 1e-06 2e-06
+# @axis rh fraction 2 0.0 0.5
+# @field qext radius,rh 1 4
+1.0 2.0 3.0

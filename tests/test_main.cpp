@@ -886,6 +886,120 @@ activation:
     std::cout << "MIE Polarized Moments (FR-003/FR-008/T030): PASS" << std::endl;
 }
 
+// Build a DU-bound package whose activation loads `file` as the runtime data file.
+static std::string mie_file_yaml(const std::string& file) {
+    return std::string(R"YAML(species:
+      - name: "DU"
+        dry_density: 2600.0
+        molecular_weight: 100.0
+        dry_particle_diameter: 2.0e-6
+        hygroscopicity: 0.1
+        lognormal_sigma: 1.5
+        lognormal_dg: 1.0e-6
+        refractive_index_real: 1.55
+        refractive_index_imag: 0.002
+        mie_table: {source: DU}
+activation:
+  data_file: )YAML") + file + "\n";
+}
+
+void test_mie_file_override_and_failfast() {
+    using namespace exaero::spectral_optical_indices;
+    const std::string dir(EXAERO_TEST_DATA_DIR);
+
+    // (1) Valid override (C7/FR-012): the DU override file redefines bext on the SAME
+    //     30-band axis with a distinct constant. The query must report the FILE value
+    //     with delivery=file, proving file overrides baked for the same key.
+    {
+        exaero::GocartPackage package;
+        package.initialize(mie_file_yaml(dir + "/mie_dust_override.txt"));
+        double v = 0.0;
+        exaero::ProvenanceInfo p{};
+        auto st = package.queryAttribute(0, exaero::AttributeCategory::SpectralOptical,
+                                         MASS_EXTINCTION, 0.5, 3.0, &v, &p);
+        assert(st == exaero::AttributeStatus::AvailableFile);
+        check_close(v, 1234.5, "override bext");
+        assert(p.delivery_source == static_cast<int>(exaero::DeliverySource::RuntimeFile));
+    }
+
+    // (2) Fail-fast (C6/FR-009): each corrupt file must abort initialize() with a
+    //     "FATAL ERROR:" diagnostic and NO silent fallback to baked-in data.
+    struct CorruptCase { const char* file; const char* why; };
+    const CorruptCase cases[] = {
+        {"mie_corrupt_schema.txt",  "unknown directive"},
+        {"mie_corrupt_unit.txt",    "unit mismatch"},
+        {"mie_corrupt_version.txt", "missing source_version"},
+        {"mie_truncated.txt",       "truncated field"},
+    };
+    for (const auto& c : cases) {
+        exaero::GocartPackage package;
+        bool threw = false;
+        std::string msg;
+        try {
+            package.initialize(mie_file_yaml(dir + "/" + c.file));
+        } catch (const std::exception& e) {
+            threw = true;
+            msg = e.what();
+        }
+        assert(threw); // must abort, never silently fall back
+        assert(msg.find("FATAL ERROR:") != std::string::npos); // clear diagnostic (FR-009)
+    }
+
+    std::cout << "MIE File Override + Fail-Fast (FR-009/FR-012/C6/C7/T036): PASS" << std::endl;
+}
+
+void test_mie_default_set() {
+    using namespace exaero::microphysical_indices;
+    using namespace exaero::spectral_optical_indices;
+    // Invariant C9 / FR-017: with NO runtime file, the default activation is exactly the
+    // pinned baked-in set -- every bound species microphysical + RRTMG-band spectral --
+    // while the monochromatic spectral axis and polarized moments are file-only. The
+    // pinned release ships RRTMG band tables for six canonical species (BR has no band
+    // file in the snapshot, so it is intentionally absent and reports NotInSource).
+    exaero::GocartPackage package;
+    package.initialize(kMieSixYaml);
+
+    auto& store = exaero::MieTableStore::instance();
+    // (1) Exactly the pinned baked set is bound (data, not a literal in the query path).
+    assert(store.num_bound_species() == 6);
+
+    // (2) Every bound species answers microphysical + spectral at grid points.
+    double v = 0.0;
+    exaero::ProvenanceInfo p{};
+    for (int i = 0; i < 6; ++i) {
+        auto st = package.queryAttribute(i, exaero::AttributeCategory::Microphysical,
+                                         EFFECTIVE_RADIUS, 0.5, 0.0, &v, &p);
+        assert(st == exaero::AttributeStatus::Available);
+        assert(v > 0.0 && std::isfinite(v));
+        st = package.queryAttribute(i, exaero::AttributeCategory::SpectralOptical,
+                                    EXTINCTION_EFFICIENCY, 0.5, 3.0, &v, &p);
+        assert(st == exaero::AttributeStatus::Available);
+        assert(p.num_lambda == 30); // the full RRTMG band set is active by default
+    }
+
+    // (3) Polarized moments are OFF in the default mask (FR-010/FR-017): NotActivated.
+    auto st = package.queryAttribute(0, exaero::AttributeCategory::PolarizedMoment,
+                                     exaero::polarized_moment_indices::PHASE_FUNCTION_MOMENT,
+                                     0.5, 3.0, &v, nullptr);
+    assert(st == exaero::AttributeStatus::NotActivated);
+
+    // (4) Even with the category force-activated, the baked curves carry no pmom field:
+    //     explicit NotInSource -- moments require the runtime file (FR-008/C9).
+    package.setAttributeActivation({},
+        exaero::attribute_category_bit(exaero::AttributeCategory::Microphysical) |
+        exaero::attribute_category_bit(exaero::AttributeCategory::SpectralOptical) |
+        exaero::attribute_category_bit(exaero::AttributeCategory::PolarizedMoment), "");
+    st = package.queryAttribute(0, exaero::AttributeCategory::PolarizedMoment,
+                                exaero::polarized_moment_indices::PHASE_FUNCTION_MOMENT,
+                                0.5, 3.0, &v, nullptr);
+    assert(st == exaero::AttributeStatus::NotInSource);
+    int n_pol = -1, n_mom = -1;
+    package.momentCounts(0, &n_pol, &n_mom);
+    assert(n_pol == 0 && n_mom == 0); // no moment data => no slots (FR-003 data-driven)
+
+    std::cout << "MIE Default Baked Set (FR-017/C9/T037): PASS" << std::endl;
+}
+
 void test_optical_precision() {
     // High-precision physical validation of our GPU ADT Mie solver against standard analytical results.
     // For n = 1.5, x = 10.0, we have:
@@ -1232,6 +1346,8 @@ int main() {
     test_mie_compute_attributes_multiband();
     test_mie_monochromatic_file();
     test_mie_moments_not_available();
+    test_mie_file_override_and_failfast();
+    test_mie_default_set();
     test_optical_precision();
     test_gocart_ccn();
     

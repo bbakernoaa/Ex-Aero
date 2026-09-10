@@ -11,6 +11,18 @@ target_compile_definitions(exaero_test_runner PRIVATE
 target_link_libraries(exaero_test_runner PRIVATE exaero Kokkos::kokkos)
 add_test(NAME ExaeroUnitTests COMMAND exaero_test_runner)
 
+# Standalone public-header compile gate (T035, research R8, SC-002, invariant C8):
+# compiles the new public attribute surface with NO Kokkos include path and links
+# NOTHING (OBJECT library - the gate is compilation itself). If any public header
+# pulled <Kokkos_Core.hpp> in transitively, this target fails to build.
+add_library(exaero_standalone_public_check OBJECT standalone_public_check.cpp)
+target_compile_features(exaero_standalone_public_check PRIVATE cxx_std_23)
+target_include_directories(exaero_standalone_public_check PRIVATE
+    ${CMAKE_SOURCE_DIR}/src
+)
+# Deliberately NO target_link_libraries against exaero/Kokkos: keep the include path clean.
+add_dependencies(exaero_standalone_public_check exaero_impl)
+
 # Property-Based and Fuzz Test Runner
 add_executable(exaero_fuzz_test test_fuzzer.cpp)
 target_include_directories(exaero_fuzz_test PRIVATE

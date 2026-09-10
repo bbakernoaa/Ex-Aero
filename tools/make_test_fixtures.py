@@ -174,8 +174,90 @@ def main():
         f.write(fixture_dust_override())
     with open(os.path.join(OUT, "mie_nitrate_density.txt"), "w") as f:
         f.write(fixture_nitrate_density())
+
+    # Deliberately-malformed fixtures for the fail-fast gate (T036, FR-009/C6). Each is
+    # valid up to exactly one fault so the loader aborts on a specific check.
+    with open(os.path.join(OUT, "mie_corrupt_schema.txt"), "w") as fh:
+        fh.write(corrupt_schema())
+    with open(os.path.join(OUT, "mie_corrupt_unit.txt"), "w") as fh:
+        fh.write(corrupt_unit())
+    with open(os.path.join(OUT, "mie_corrupt_version.txt"), "w") as fh:
+        fh.write(corrupt_version())
+    with open(os.path.join(OUT, "mie_truncated.txt"), "w") as fh:
+        fh.write(corrupt_truncated())
+    with open(os.path.join(OUT, "mie_dust7.txt"), "w") as fh:
+        fh.write(fixture_dust7())
     print("wrote fixtures to", OUT)
     print("dust mono meta:", meta)
+
+
+def fixture_dust7():
+    """A NEW species label 'DUST7' (not in the baked set) declaring a PRIME bin count
+    (7 radius nodes) and a NON-SOURCE RH length (7 levels) over 3 bands. Because the
+    label is absent from baked, the file fully defines the curve -> proves no bin/RH/band
+    count is hardcoded on any path (C12/R10). Deterministic synthetic values."""
+    nR, nH, nL = 7, 7, 3
+    radius = [1.0e-7 * (i + 1) for i in range(nR)]     # 1e-7 .. 7e-7 m (strictly inc.)
+    rh = [i / (nH - 1) * 0.99 for i in range(nH)]      # 0 .. 0.99 (7 levels)
+    lam = [1.0, 2.0, 3.0]
+    lines = header("DUST7")
+    emit_axis(lines, "radius", np.asarray(radius))
+    emit_axis(lines, "rh", np.asarray(rh))
+    emit_axis(lines, "lambda", np.asarray(lam))
+    # qext[b,h,l] = (b+1) + 0.1*h + 0.01*l  -> distinct, monotone, finite everywhere.
+    qe = np.array([[[ (b + 1) + 0.1 * h + 0.01 * l for l in range(nL)]
+                    for h in range(nH)] for b in range(nR)])
+    qs = qe * 0.5
+    emit_field(lines, "qext", qe)
+    emit_field(lines, "qsca", qs)
+    return "\n".join(lines) + "\n"
+
+
+# --- corrupt-file fixtures (T036/FR-009): each carries exactly one schema/unit/version/
+#     truncation fault; the loader must abort with "FATAL ERROR:" and no silent fallback. ---
+
+def corrupt_schema():
+    """Unknown directive -> loader_fatal('unknown directive ...')."""
+    return "\n".join(header("DU") + [
+        "# @axis radius m 1 1.0e-06",
+        "# @axis rh fraction 1 0.0",
+        "# @bogus_this_is_not_a_directive oops",
+    ]) + "\n"
+
+
+def corrupt_unit():
+    """@field declares a unit disagreeing with the canonical one -> unit-mismatch abort."""
+    lines = header("DU")
+    emit_axis(lines, "radius", [1.0e-06])
+    emit_axis(lines, "rh", [0.0])
+    # qext canonical unit is "1"; declare it in metres to trip the check.
+    lines.append("# @field qext radius,rh m 1")
+    lines.append("1.0")
+    return "\n".join(lines) + "\n"
+
+
+def corrupt_version():
+    """Missing @source_version -> loader_fatal('missing @source_version (FR-016)')."""
+    return "\n".join([
+        "# @format exaero_mie_v1",
+        "# @citation no version line here",
+        "# @species DU",
+        "# @axis radius m 1 1.0e-06",
+        "# @axis rh fraction 1 0.0",
+        "# @field qext radius,rh 1 1",
+        "1.0",
+    ]) + "\n"
+
+
+def corrupt_truncated():
+    """@field supplies fewer values than the declared axes require -> truncation abort."""
+    lines = header("DU")
+    emit_axis(lines, "radius", [1.0e-06, 2.0e-06])
+    emit_axis(lines, "rh", [0.0, 0.5])
+    # qext over (radius=2, rh=2) needs 4 values; supply only 3.
+    lines.append("# @field qext radius,rh 1 4")
+    lines.append("1.0 2.0 3.0")
+    return "\n".join(lines) + "\n"
 
 
 if __name__ == "__main__":
