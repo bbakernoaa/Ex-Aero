@@ -44,6 +44,18 @@ set_tests_properties(ExaeroFortranTest PROPERTIES
     ENVIRONMENT "EXAERO_TEST_DATA_DIR=${CMAKE_CURRENT_SOURCE_DIR}/data"
 )
 
+# Generator determinism gate (T039, FR-016/SC-007): re-run the baked-in table generator
+# in --check mode and fail on ANY diff to the committed header. This is the CI-side twin
+# of the build-time custom command (which rewrites on drift); here we assert the committed
+# artifact is exactly reproducible from the pinned snapshot, so a stale/hand-edited
+# MieTableData.hpp blocks the merge rather than shipping non-deterministic physics (R6).
+add_test(NAME ExaeroMieDeterminism
+    COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/tools/generate_mie_tables.py
+            --check ${CMAKE_SOURCE_DIR}/src/src_impl/data/generated/MieTableData.hpp
+            ${CMAKE_SOURCE_DIR}/tools/geosmie_snapshot)
+set_tests_properties(ExaeroMieDeterminism PROPERTIES
+    PASS_REGULAR_EXPRESSION "deterministic \\(check mode")
+
 # MKPP chemistry gtest suite (added by 963d356). Gated with the chemistry
 # driver: test_registry/test_dispatcher include exaero/registry.hpp and
 # exaero/dispatcher.hpp, which 37f0ce5 removed, so they cannot build until

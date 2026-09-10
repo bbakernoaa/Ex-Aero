@@ -15,6 +15,8 @@ emitted in a fixed order. CI re-runs this and fails on any diff (T039).
 
 Usage:
     python3 tools/generate_mie_tables.py <output_header> [snapshot_dir]
+    python3 tools/generate_mie_tables.py --check <output_header> [snapshot_dir]
+        ^ determinism gate (T039): regenerate and compare, exit non-zero on any diff.
 """
 from __future__ import annotations
 
@@ -222,14 +224,33 @@ def generate(snapshot: Path) -> str:
 
 
 def main(argv: list[str]) -> int:
-    if len(argv) < 2:
-        sys.stderr.write("usage: generate_mie_tables.py <output_header> [snapshot_dir]\n")
+    args = [a for a in argv[1:] if a != "--check"]
+    check = "--check" in argv[1:]
+    if len(args) < 1:
+        sys.stderr.write("usage: generate_mie_tables.py [--check] <output_header> "
+                         "[snapshot_dir]\n")
         return 2
-    out_path = Path(argv[1])
+    out_path = Path(args[0])
     default_snapshot = Path(__file__).resolve().parent / "geosmie_snapshot"
-    snapshot = Path(argv[2]) if len(argv) > 2 else default_snapshot
+    snapshot = Path(args[1]) if len(args) > 1 else default_snapshot
 
     text = generate(snapshot)
+    if check:
+        # CI determinism gate (T039, FR-016/SC-007): regenerate in memory and compare
+        # against the committed header; any diff fails the gate. Never writes.
+        if not out_path.is_file():
+            sys.stderr.write(f"FATAL ERROR: {out_path} missing; regenerate with "
+                             f"tools/generate_mie_tables.py\n")
+            return 1
+        if out_path.read_text() != text:
+            digest_new = hashlib.sha256(text.encode()).hexdigest()[:12]
+            digest_old = hashlib.sha256(out_path.read_bytes()).hexdigest()[:12]
+            sys.stderr.write(f"FATAL ERROR: {out_path} is stale (sha256:{digest_old}, "
+                             f"expected sha256:{digest_new}); run "
+                             f"python3 tools/generate_mie_tables.py {out_path}\n")
+            return 1
+        sys.stderr.write("MieTableData.hpp is deterministic (check mode, no diff).\n")
+        return 0
     out_path.parent.mkdir(parents=True, exist_ok=True)
     # Only rewrite when content changed -> stable timestamps, CI-diffable (T039).
     if out_path.is_file() and out_path.read_text() == text:
