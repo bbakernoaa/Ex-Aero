@@ -105,6 +105,21 @@ void locate(const std::vector<double>& axis, double v, int& i0, int& i1, double&
     w = (span > 0.0) ? (v - axis[i0]) / span : 0.0;
 }
 
+// Same bracket/clamp as locate(), but the blend weight is computed in log space:
+//   w = (ln v - ln a0) / (ln a1 - ln a0).
+// This is the reference spectral interpolation coordinate (research R3, FR-006):
+// linear-in-log-wavelength for spectral quantities. Requires strictly-positive axes;
+// a non-positive bracket falls back to the linear weight so the seam never NaNs.
+void locate_log(const std::vector<double>& axis, double v, int& i0, int& i1, double& w) {
+    locate(axis, v, i0, i1, w);
+    if (i0 == i1 || w == 0.0) return; // grid point or clamped edge: weight is exact
+    if (axis[i0] > 0.0 && axis[i1] > 0.0 && v > 0.0) {
+        const double l0 = std::log(axis[i0]);
+        const double span = std::log(axis[i1]) - l0;
+        w = (span > 0.0) ? (std::log(v) - l0) / span : 0.0;
+    }
+}
+
 } // namespace
 
 const char* MieTableStore::unit_for_field(const std::string& field) {
@@ -488,9 +503,9 @@ AttributeStatus MieTableStore::query(const std::string& species, AttributeCatego
             return AttributeStatus::NotInSource;
         value = f.values[static_cast<std::size_t>(b)];
         interp = false;
-    } else { // rank 3: interpolate rh and lambda
+    } else { // rank 3: interpolate rh (linear) and lambda (linear-in-log, R3/FR-006)
         if (!std::isfinite(wavelength_m)) return AttributeStatus::NotInSource; // spectral needs a real band (never silent 0)
-        int l0, l1; double wl; locate(c.lambda, wavelength_m, l0, l1, wl);
+        int l0, l1; double wl; locate_log(c.lambda, wavelength_m, l0, l1, wl);
         auto at = [&](int bb, int hh, int ll) {
             return f.values[((static_cast<std::size_t>(bb) * nH) + hh) * nL + ll];
         };

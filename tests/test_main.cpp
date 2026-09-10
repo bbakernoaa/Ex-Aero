@@ -1,4 +1,5 @@
 #include <gocart/GocartPackage.hpp>
+#include <loader/MieTableStore.hpp>
 #include <utils/LutGenerator.hpp>
 #include <utils/DubovikSpheroidDatabase.hpp>
 #include <exaero/Environment.hpp>
@@ -536,6 +537,114 @@ void test_mie_not_available() {
     std::cout << "MIE Explicit Not-Available Statuses (FR-008/C4): PASS" << std::endl;
 }
 
+// Spectral RRTMG-band goldens at (radius bin 0, rh=0.5 grid point, band index 3.0),
+// read from the pinned snapshot at full float64 (ravel order b*nH*nL + h*nL + l).
+namespace mie_spectral {
+struct SpectralGolden {
+    const char* species;
+    int index;
+    double qext, qsca, qabs, bext, bsca, bbck, lidar, g, ssa, n, k;
+};
+static const SpectralGolden GOLDEN[6] = {
+    {"DU", 0, 1.9339340925216675, 1.821953296661377, 0.11198079586029053,
+     829.6609497070312, 779.1709594726562, 10.848725318908691, 76.47543147405354,
+     0.5862439870834351, 0.9420968913608229, 1.5232499837875366, -0.011869008652865887},
+    {"SS", 1, 0.00227008992806077, 0.0009156085434369743, 0.0013544813846237957,
+     15.748342514038086, 6.351870536804199, 0.723405122756958, 21.769741488724634,
+     0.017153162509202957, 0.4033358027446671, 1.3590805530548096, -0.002306509530171752},
+    {"SU", 2, 0.029475990682840347, 0.026380717754364014, 0.0030952729284763336,
+     160.50079345703125, 143.6468963623047, 10.787318229675293, 14.878655662118392,
+     0.15355892479419708, 0.8949900289431741, 1.3059253692626953, -0.002059066668152809},
+    {"BC", 3, 0.08555283397436142, 0.001218374352902174, 0.08433445962145925,
+     1636.421630859375, 23.304594039916992, 2.423806667327881, 675.1452799094094,
+     0.05321965739130974, 0.01424119221190613, 1.813500165939331, -0.5034999847412109},
+    {"OC", 4, 0.00932903029024601, 0.0036768026184290648, 0.005652227671816945,
+     44.34389877319336, 17.477035522460938, 1.7159570455551147, 25.84207972341641,
+     0.07141537964344025, 0.39412484513780116, 1.419995665550232, -0.010700000450015068},
+    {"NI", 5, 0.08747505396604538, 0.08508098870515823, 0.002394065260887146,
+     529.2645874023438, 514.7792358398438, 14.933114051818848, 35.44234548572804,
+     0.5163609981536865, 0.9726314514556752, 1.3417788743972778, -0.001385296112857759},
+};
+} // namespace mie_spectral
+
+void test_mie_rrtmg_spectral() {
+    using namespace exaero::spectral_optical_indices;
+    exaero::GocartPackage package;
+    package.initialize(kMieSixYaml);
+
+    // rh=0.5 and band index 3.0 are both exact source grid points -> Available, no interp.
+    const double rh = 0.5, band = 3.0;
+    for (const auto& g : mie_spectral::GOLDEN) {
+        double v = 0.0;
+        exaero::ProvenanceInfo p{};
+        auto q = [&](int idx, double want) {
+            auto st = package.queryAttribute(g.index, exaero::AttributeCategory::SpectralOptical,
+                                             idx, rh, band, &v, &p);
+            assert(st == exaero::AttributeStatus::Available);
+            assert(p.interpolated == 0);
+            check_close(v, want, g.species);
+        };
+        q(EXTINCTION_EFFICIENCY, g.qext);
+        q(SCATTERING_EFFICIENCY, g.qsca);
+        q(ABSORPTION_EFFICIENCY, g.qabs);
+        q(MASS_EXTINCTION, g.bext);
+        q(MASS_SCATTERING, g.bsca);
+        q(MASS_BACKSCATTER, g.bbck);
+        q(LIDAR_RATIO, g.lidar);
+        q(ASYMMETRY_FACTOR, g.g);
+        q(SINGLE_SCATTERING_ALBEDO, g.ssa);
+        q(REFRACTIVE_INDEX_REAL, g.n);
+        q(REFRACTIVE_INDEX_IMAG, g.k);
+
+        // Physical bounds (SC-005/C3): ssa in [0,1], g in [-1,1], qext/qsca/bext >= 0.
+        double ssa_v = 0.0, g_v = 0.0, qe = 0.0;
+        package.queryAttribute(g.index, exaero::AttributeCategory::SpectralOptical,
+                               SINGLE_SCATTERING_ALBEDO, rh, band, &ssa_v, nullptr);
+        package.queryAttribute(g.index, exaero::AttributeCategory::SpectralOptical,
+                               ASYMMETRY_FACTOR, rh, band, &g_v, nullptr);
+        package.queryAttribute(g.index, exaero::AttributeCategory::SpectralOptical,
+                               EXTINCTION_EFFICIENCY, rh, band, &qe, nullptr);
+        assert(ssa_v >= -1e-6 && ssa_v <= 1.0 + 1e-6);
+        assert(g_v >= -1.0 - 1e-6 && g_v <= 1.0 + 1e-6);
+        assert(qe >= 0.0);
+    }
+    std::cout << "MIE RRTMG Spectral Grid Values (FR-002/FR-005/C1): PASS" << std::endl;
+}
+
+void test_mie_interpolation() {
+    using namespace exaero::spectral_optical_indices;
+    exaero::GocartPackage package;
+    package.initialize(kMieSixYaml);
+
+    // SS radius bin 1 (solver default is 0, so address via the store directly through a
+    // config curve bound to bin 1). SS is hygroscopic: qext varies in RH and band index.
+    // Corners at (b=1, rh in {0.5,0.550000011920929}, band in {3.0,4.0}):
+    //   v00=0.1515267938375473 v10=0.15872181951999664
+    //   v01=0.22853879630565643 v11=0.24023324251174927
+    // Reference (research R3): linear in RH, LINEAR-IN-LOG band index.
+    auto& store = exaero::MieTableStore::instance();
+    double v = 0.0;
+    exaero::Provenance prov{};
+
+    struct Case { const char* what; double rh, band, want; };
+    const Case cases[] = {
+        {"rh-only (0.52, band 3.0)", 0.52, 3.0, 0.15440480342435609},
+        {"band-only log (0.5, band 3.5)", 0.5, 3.5, 0.192792669163537},
+        {"both (0.52, band 3.5)", 0.52, 3.5, 0.1966350608006735},
+    };
+    for (const auto& cse : cases) {
+        auto st = store.query("SS", exaero::AttributeCategory::SpectralOptical,
+                              EXTINCTION_EFFICIENCY, cse.rh, cse.band, /*radius_index=*/1,
+                              &v, &prov);
+        assert(st == exaero::AttributeStatus::Interpolated);
+        assert(prov.interpolated == 1);
+        // Tolerance 1e-5 RELATIVE (FR-006/C2).
+        const double tol = 1e-5 * std::abs(cse.want);
+        assert(std::abs(v - cse.want) <= tol);
+    }
+    std::cout << "MIE Off-Grid Interpolation (FR-006/C2, log-wavelength): PASS" << std::endl;
+}
+
 void test_optical_precision() {
     // High-precision physical validation of our GPU ADT Mie solver against standard analytical results.
     // For n = 1.5, x = 10.0, we have:
@@ -877,6 +986,8 @@ int main() {
     test_mie_baked_in_microphysical();
     test_mie_provenance();
     test_mie_not_available();
+    test_mie_rrtmg_spectral();
+    test_mie_interpolation();
     test_optical_precision();
     test_gocart_ccn();
     
