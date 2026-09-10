@@ -3,6 +3,7 @@
 #include <utils/LutGenerator.hpp>
 #include <utils/DubovikSpheroidDatabase.hpp>
 #include <exaero/Environment.hpp>
+#include <exaero/GocartConfig.hpp>
 #include <cassert>
 #include <iostream>
 #include <cmath>
@@ -1341,6 +1342,41 @@ void test_mie_hot_path_overhead(bool verbose) {
     std::cout << "MIE Hot-Path Overhead (SC-008/C10/T038): PASS" << std::endl;
 }
 
+// A package that does not override the structured overload must throw
+// std::logic_error (additive-surface pattern, contract §2).
+struct UnsupportedPkg : public exaero::IAerosolPackage {
+    using IAerosolPackage::initialize; // un-hide the structured overload for concrete-type calls
+    void initialize(const std::string&) override {}
+    void executeMicrophysics(const exaero::EnvironmentalStateView&,
+                             exaero::View3D<double>&, double) override {}
+    void computeDerivedDiagnostics(const exaero::EnvironmentalStateView&,
+                                   const exaero::View3D<const double>&,
+                                   exaero::View3D<double>&) override {}
+    void computeEmissions(const exaero::EnvironmentalStateView&,
+                          const exaero::EmissionsInputView&,
+                          exaero::View3D<double>&) override {}
+    void computeOptics(const exaero::EnvironmentalStateView&,
+                       const exaero::View3D<const double>&,
+                       const exaero::View1D<const double>&,
+                       exaero::View4D<double>&) override {}
+    void computeCCN(const exaero::EnvironmentalStateView&,
+                    const exaero::View3D<const double>&,
+                    const exaero::View1D<const double>&,
+                    exaero::View4D<double>&) override {}
+    int getSpeciesIndex(const std::string&) const override { return -1; }
+    std::string getSpeciesName(int) const override { return {}; }
+};
+
+void test_structured_config_unsupported_package() {
+    UnsupportedPkg pkg;
+    exaero::GocartConfig cfg;
+    cfg.species.push_back(exaero::GocartSpeciesConfig{});
+    bool threw = false;
+    try { pkg.initialize(cfg); } catch (const std::logic_error&) { threw = true; }
+    assert(threw && "default structured initialize must throw logic_error");
+    std::cout << "Structured config unsupported-package guard: PASS" << std::endl;
+}
+
 void test_optical_precision() {
     // High-precision physical validation of our GPU ADT Mie solver against standard analytical results.
     // For n = 1.5, x = 10.0, we have:
@@ -1695,6 +1731,7 @@ int main(int argc, char** argv) {
     test_mie_default_set();
     test_mie_config_curves();
     test_mie_hot_path_overhead(bench_verbose);
+    test_structured_config_unsupported_package();
     test_optical_precision();
     test_gocart_ccn();
     

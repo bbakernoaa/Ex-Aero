@@ -1,8 +1,10 @@
 #pragma once
+#include <stdexcept>
 #include <string>
 #include <vector>
 #include <exaero/AerosolIndices.hpp>
 #include <exaero/AttributeQuery.hpp>
+#include <exaero/GocartConfig.hpp>
 
 // Force backport to compile under exaero_mdspan namespace to prevent redefinition conflicts with system Kokkos
 #define MDSPAN_IMPL_STANDARD_NAMESPACE exaero_mdspan
@@ -47,6 +49,16 @@ namespace exaero {
 
         // Dynamic Initialization (Loads YAML config)
         virtual void initialize(const std::string& config_yaml) = 0;
+
+        // Structured (no-YAML) initialization: same semantics and precedence as the
+        // YAML string path — config curves > runtime file > baked-in (ADR-003).
+        // Default throws so packages without structured support (MAM4xx wrapper,
+        // test doubles) compile and behave unchanged (contract §2 additive pattern).
+        virtual void initialize(const GocartConfig& config) {
+            (void)config;
+            throw std::logic_error(
+                "EX-aero Error: this package does not support structured configuration");
+        }
 
         // Passive microphysics step
         virtual void executeMicrophysics(
