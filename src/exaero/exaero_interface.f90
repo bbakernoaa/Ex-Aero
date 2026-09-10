@@ -209,7 +209,11 @@ module exaero_interface
       type(exaero_package_t), value :: pkg
       integer(c_int), value :: species_index, category, attribute_index
       real(c_double), value :: rh, wavelength_m
-      real(c_double), intent(out) :: value_out
+      ! intent(inout), NOT intent(out): the C side writes value_out ONLY on an
+      ! available/interpolated status (FR-008, never a silent 0). intent(out) would let
+      ! an optimizing compiler assume the callee always defines it and discard the
+      ! caller's pre-call value on a not-in-source result (caught only in Release).
+      real(c_double), intent(inout) :: value_out
       character(kind=c_char), intent(out) :: unit_out(*)
       integer(c_int), value :: unit_max
       character(kind=c_char), intent(out) :: version_out(*)
