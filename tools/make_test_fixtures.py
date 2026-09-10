@@ -123,8 +123,11 @@ def fixture_dust_monochromatic():
         for m in range(n_mom):
             pm[:, :, :, p, m] = (qe[:, :, None] * (0.5 ** m) * (1.0 + 0.1 * p)) \
                 .repeat(nL, axis=2)
-    emit_axis(lines, "pol", list(range(n_pol)))
-    emit_axis(lines, "moment", list(range(n_mom)))
+    # pol element labels are the documented ordering P11,P12,P33,P34,P22,P44 -> 1..6
+    # (data-model); moment labels 0..M-1. Axis VALUES are labels; the store addresses
+    # them positionally (0-based) and treats the count as data (R10).
+    emit_axis(lines, "pol", [1, 2, 3, 4, 5, 6])
+    emit_axis(lines, "moment", [0, 1, 2])
     emit_field(lines, "pmom", pm)
     return "\n".join(lines) + "\n", dict(nR=nR, nH=nH, nL=nL, n_pol=n_pol,
                                          n_mom=n_mom, mono_lam=mono_lam,

@@ -783,6 +783,109 @@ activation:
     std::cout << "MIE Monochromatic Runtime File (FR-012/C7/T029): PASS" << std::endl;
 }
 
+void test_mie_moments_not_available() {
+    // Polarized phase-function moments (FR-003/FR-008/FR-013, T030): the DU runtime
+    // file carries a rank-5 pmom array over (radius, rh, lambda, pol, moment). The
+    // attribute_index encodes the (element, moment) pair as idx = moment*ELEMENT_STRIDE
+    // + element with the documented ordering P11,P12,P33,P34,P22,P44 (data-model).
+    // The fixture value for element e, moment m is qe00 * 0.5^m * (1 + 0.1*e) with
+    // qe00 = DU qext[bin 0, rh 0.5, band 3] - all float64-exact.
+    using namespace exaero::polarized_moment_indices;
+    const std::string file = std::string(EXAERO_TEST_DATA_DIR) + "/mie_dust_monochromatic.txt";
+    std::string yaml = R"YAML(species:
+      - name: "dust_mono"
+        dry_density: 2600.0
+        molecular_weight: 100.0
+        dry_particle_diameter: 0.15e-6
+        hygroscopicity: 0.1
+        lognormal_sigma: 1.5
+        lognormal_dg: 0.1e-6
+        refractive_index_real: 1.55
+        refractive_index_imag: 0.002
+        mie_table: {source: DU}
+      - name: "SS"
+        dry_density: 2600.0
+        molecular_weight: 100.0
+        dry_particle_diameter: 0.15e-6
+        hygroscopicity: 0.1
+        lognormal_sigma: 1.5
+        lognormal_dg: 0.1e-6
+        refractive_index_real: 1.55
+        refractive_index_imag: 0.002
+activation:
+  categories: [microphysical, spectral, polarized]
+  data_file: )YAML" + file + "\n";
+
+    exaero::GocartPackage package;
+    package.initialize(yaml);
+
+    constexpr double qe00 = 1.9339340925216675; // DU qext at (bin 0, rh 0.5, band 3)
+    constexpr double band = 5.5e-7;             // the file's central wavelength (grid point)
+    double v;
+    exaero::ProvenanceInfo p{};
+
+    // (1) Count + ordering + values: all 6 elements x 3 moments at the grid point.
+    for (int m = 0; m < 3; ++m) {
+        for (int e = 0; e < ELEMENT_STRIDE; ++e) {
+            v = -777.0;
+            const int idx = m * ELEMENT_STRIDE + e;
+            auto st = package.queryAttribute(0, exaero::AttributeCategory::PolarizedMoment,
+                                             idx, 0.5, band, &v, &p);
+            assert(st == exaero::AttributeStatus::AvailableFile);
+            check_close(v, qe00 * std::pow(0.5, m) * (1.0 + 0.1 * e), "pmom value");
+            assert(p.delivery_source == static_cast<int>(exaero::DeliverySource::RuntimeFile));
+            assert(p.interpolated == 0);
+            // The moment-0 sequence must follow the documented element ordering:
+            // values strictly increase with e (the fixture encodes e in the magnitude).
+            if (m == 0 && e > 0) assert(v > 0.0);
+        }
+    }
+
+    // (2) Out-of-range (element, moment) decomposition: moment index 3 (idx 18) does
+    // not exist in this file (M = 3) -> explicit NotInSource, value untouched (FR-008).
+    v = -777.0;
+    auto st = package.queryAttribute(0, exaero::AttributeCategory::PolarizedMoment,
+                                     3 * ELEMENT_STRIDE + 0, 0.5, band, &v, nullptr);
+    assert(st == exaero::AttributeStatus::NotInSource);
+    assert(v == -777.0);
+    st = package.queryAttribute(0, exaero::AttributeCategory::PolarizedMoment,
+                                -1, 0.5, band, &v, nullptr);
+    assert(st == exaero::AttributeStatus::NotInSource);
+
+    // (3) Off-grid RH interpolates between moment tables (FR-006). DU is RH-invariant
+    // in qext, so the value is unchanged but the provenance must flag interpolation.
+    v = -777.0;
+    st = package.queryAttribute(0, exaero::AttributeCategory::PolarizedMoment,
+                                PHASE_FUNCTION_MOMENT, 0.52, band, &v, &p);
+    assert(st == exaero::AttributeStatus::Interpolated);
+    assert(p.interpolated == 1);
+    check_close(v, qe00, "pmom RH-interpolated (DU is RH-invariant)");
+
+    // (4) NaN RH rejected, value untouched (FR-007 never silent 0).
+    v = -777.0;
+    st = package.queryAttribute(0, exaero::AttributeCategory::PolarizedMoment,
+                                PHASE_FUNCTION_MOMENT, std::nan(""), band, &v, nullptr);
+    assert(st == exaero::AttributeStatus::NotInSource);
+    assert(v == -777.0);
+
+    // (5) A spherical species with no moments: explicit NotInSource (FR-008, scenario 2).
+    v = -777.0;
+    st = package.queryAttribute(1, exaero::AttributeCategory::PolarizedMoment,
+                                PHASE_FUNCTION_MOMENT, 0.5, band, &v, nullptr);
+    assert(st == exaero::AttributeStatus::NotInSource);
+    assert(v == -777.0);
+
+    // (6) Category deselected -> explicit NotActivated even though data exists (FR-010).
+    package.setAttributeActivation({},
+        exaero::attribute_category_bit(exaero::AttributeCategory::Microphysical) |
+        exaero::attribute_category_bit(exaero::AttributeCategory::SpectralOptical), "");
+    st = package.queryAttribute(0, exaero::AttributeCategory::PolarizedMoment,
+                                PHASE_FUNCTION_MOMENT, 0.5, band, &v, nullptr);
+    assert(st == exaero::AttributeStatus::NotActivated);
+
+    std::cout << "MIE Polarized Moments (FR-003/FR-008/T030): PASS" << std::endl;
+}
+
 void test_optical_precision() {
     // High-precision physical validation of our GPU ADT Mie solver against standard analytical results.
     // For n = 1.5, x = 10.0, we have:
@@ -1128,6 +1231,7 @@ int main() {
     test_mie_interpolation();
     test_mie_compute_attributes_multiband();
     test_mie_monochromatic_file();
+    test_mie_moments_not_available();
     test_optical_precision();
     test_gocart_ccn();
     

@@ -49,6 +49,8 @@ struct SpeciesCurve {
     int n_radius() const { return static_cast<int>(radius.size()); }
     int n_rh() const { return static_cast<int>(rh.size()); }
     int n_lambda() const { return static_cast<int>(lambda.size()); }
+    int n_pol() const { return static_cast<int>(pol.size()); }       ///< 0 unless pmom.
+    int n_moment() const { return static_cast<int>(moment.size()); } ///< 0 unless pmom.
 };
 
 /// @brief Serialized flat device-uploadable view of all activated curves (research R10).

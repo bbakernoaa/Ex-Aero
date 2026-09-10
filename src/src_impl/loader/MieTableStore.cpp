@@ -356,6 +356,18 @@ void MieTableStore::apply_runtime_file(const std::string& path) {
             } else if (!c.lambda.empty()) {
                 dst.lambda = c.lambda;
             }
+            // The polarized axes ride with the pmom field: merge them too (T032), and
+            // drop a stale baked rank-5 field when the new axes change its shape.
+            if (!c.pol.empty() || !c.moment.empty()) {
+                const bool pmom_replaced = !c.pol.empty() && c.pol != dst.pol;
+                dst.pol = c.pol;
+                dst.moment = c.moment;
+                if (pmom_replaced) {
+                    auto pit = dst.fields.find("pmom");
+                    if (pit != dst.fields.end() && !c.fields.count("pmom"))
+                        dst.fields.erase(pit);
+                }
+            }
             for (auto& [name, f] : c.fields) dst.fields[name] = std::move(f);
             // New axes may change monotonicity; recompute resamplability from data (R9).
             dst.radius_resamplable = dst.radius.size() >= 2 &&
@@ -513,12 +525,38 @@ AttributeStatus MieTableStore::query(const std::string& species, AttributeCatego
         value = v0 + wh * (v1 - v0);
         interp = wh > 0.0 && h0 != h1;
     } else if (f.rank == 5) {
-        // Polarized moment (rank 5). Minimal correct grid-point read; (element, moment)
-        // decomposition + interpolation refined in T032. radius_index addresses a flat slot.
-        if (b < 0 || static_cast<std::size_t>(b) >= f.values.size())
+        // Polarized moment (T032/FR-003): attribute_index encodes (element, moment) as
+        // idx = moment * ELEMENT_STRIDE + element with the documented ordering
+        // P11,P12,P33,P34,P22,P44 (data-model). Out-of-range decomposition is an
+        // explicit NotInSource (FR-008); the value interpolates linearly in RH between
+        // the two moment tables (FR-006). The store layout is ravel-C over
+        // (radius, rh, lambda, pol, moment), so the moment index is the slowest axis.
+        const int nP = c.n_pol(), nM = c.n_moment();
+        if (nP <= 0 || nM <= 0)
+            return AttributeStatus::NotInSource; // species ships no moments (FR-008)
+        const int element = attribute_index % polarized_moment_indices::ELEMENT_STRIDE;
+        const int moment_idx = attribute_index / polarized_moment_indices::ELEMENT_STRIDE;
+        if (attribute_index < 0 || element >= nP || moment_idx >= nM)
             return AttributeStatus::NotInSource;
-        value = f.values[static_cast<std::size_t>(b)];
-        interp = false;
+        // Ravel is C-order over (radius, rh, lambda, pol, moment) - the same order the
+        // loader/generator writes - so moment is the fastest axis (SPEC-CRTM-004).
+        auto at5 = [&](int hh, int ll, int pp, int mm) {
+            return f.values[(((static_cast<std::size_t>(b) * nH + hh) * nL + ll) * nP + pp)
+                           * nM + mm];
+        };
+        // Wavelength selects the nearest grid band (pmom stays a grid read in the
+        // spectral axis; the monochromatic file has a single band anyway). NaN/Inf
+        // wavelength is rejected before this point only for rank-3; here the file's
+        // central band is a safe default so a NaN coordinate never yields garbage.
+        int l = 0;
+        if (nL > 1 && std::isfinite(wavelength_m)) {
+            int l0, l1; double wl; locate_log(c.lambda, wavelength_m, l0, l1, wl);
+            l = (wl < 0.5) ? l0 : l1;
+        }
+        double v0 = at5(h0, l, element, moment_idx);
+        double v1 = at5(h1, l, element, moment_idx);
+        value = v0 + wh * (v1 - v0);
+        interp = wh > 0.0 && h0 != h1;
     } else { // rank 3: interpolate rh (linear) and lambda (linear-in-log, R3/FR-006)
         if (!std::isfinite(wavelength_m)) return AttributeStatus::NotInSource; // spectral needs a real band (never silent 0)
         int l0, l1; double wl; locate_log(c.lambda, wavelength_m, l0, l1, wl);
