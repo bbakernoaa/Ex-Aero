@@ -238,6 +238,80 @@ public:
 private:
     YAML::Node config_, species_;
 };
+
+// Reader over an in-memory GocartConfig (design 2026-09-10 §4). Near-trivial by
+// design: the caller already supplied typed data, so there are no names to
+// validate (curve overrides carry typed (category, attribute_index) pairs).
+// Validation duplicates the YAML fail-fast guarantees with the same
+// "EX-aero Error:" style (never silent): non-empty species, non-empty names,
+// and legacy-lookup length consistency.
+class StructReader final : public PackageConfigReader {
+public:
+    explicit StructReader(const GocartConfig& config) : config_(config) {
+        if (config_.species.empty()) {
+            throw std::runtime_error("EX-aero Error: structured config has no species");
+        }
+        for (std::size_t i = 0; i < config_.species.size(); ++i) {
+            if (config_.species[i].name.empty()) {
+                throw std::runtime_error("EX-aero Error: structured config species at index " +
+                    std::to_string(i) + " has an empty name");
+            }
+        }
+    }
+    int numSpecies() const override { return static_cast<int>(config_.species.size()); }
+    std::string speciesName(int i) const override { return config_.species[i].name; }
+    GocartSpeciesParams speciesScalars(int i) const override {
+        const auto& s = config_.species[i];
+        GocartSpeciesParams p{s.dry_density, s.molecular_weight, s.dry_particle_diameter,
+                              s.hygroscopicity, s.lognormal_sigma, s.lognormal_dg,
+                              s.refractive_index_real, s.refractive_index_imag};
+        p.has_optics_lookup = s.optics_lookup.has_value();
+        return p;
+    }
+    bool hasOpticsLookup(int i) const override {
+        return config_.species[i].optics_lookup.has_value();
+    }
+    GocartLegacyOpticsLookup opticsLookup(int i) const override {
+        const auto& l = *config_.species[i].optics_lookup; // caller checked engaged
+        const int n = static_cast<int>(l.rh.size());
+        if (n < 2) {
+            throw std::runtime_error("EX-aero Error: species '" + speciesName(i) +
+                "' rh_bins needs at least 2 points to interpolate");
+        }
+        if (static_cast<int>(l.ext.size()) != n || static_cast<int>(l.ssa.size()) != n ||
+            static_cast<int>(l.asm_.size()) != n) {
+            throw std::runtime_error("EX-aero Error: species '" + speciesName(i) +
+                "' lookup lists have mismatched lengths (fail fast, no silent fallback)");
+        }
+        return l;
+    }
+    bool hasMieTable(int i) const override { return config_.species[i].mie_table.has_value(); }
+    SpeciesCurveConfig mieTable(int i) const override {
+        SpeciesCurveConfig cc = *config_.species[i].mie_table; // caller checked engaged
+        cc.species_name = config_.species[i].name;            // config name wins (R9)
+        return cc;
+    }
+    bool hasActivation() const override { return config_.activation.has_value(); }
+    int activationExtraMask() const override {
+        int mask = 0;
+        for (auto c : config_.activation->categories) mask |= attribute_category_bit(c);
+        return mask;
+    }
+    std::vector<std::string> activationSpecies() const override {
+        return config_.activation ? config_.activation->species : std::vector<std::string>{};
+    }
+    std::string activationDataFile() const override {
+        return config_.activation ? config_.activation->data_file : std::string();
+    }
+    int numEmissionsMappings() const override {
+        return static_cast<int>(config_.emissions_mapping.size());
+    }
+    GocartEmissionsMappingConfig emissionsMapping(int s) const override {
+        return config_.emissions_mapping[s];
+    }
+private:
+    const GocartConfig& config_;
+};
 } // namespace
 
 
@@ -483,6 +557,11 @@ private:
 
     void GocartPackage::initialize(const std::string& config_yaml) {
         YamlReader reader{YAML::Load(config_yaml)};
+        initializeImpl(reader);
+    }
+
+    void GocartPackage::initialize(const GocartConfig& config) {
+        StructReader reader{config};
         initializeImpl(reader);
     }
 

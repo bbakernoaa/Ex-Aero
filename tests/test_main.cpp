@@ -1386,6 +1386,61 @@ void test_structured_config_unsupported_package() {
     std::cout << "Structured config unsupported-package guard: PASS" << std::endl;
 }
 
+// Build the GocartConfig equivalent of kMieSixYaml (six species, no optional blocks).
+static exaero::GocartConfig kMieSixConfig() {
+    auto sp = [](const char* n, double dens, double mw, double dpg, double kap,
+                 double sig, double dg, double nr, double ni) {
+        exaero::GocartSpeciesConfig c;
+        c.name = n; c.dry_density = dens; c.molecular_weight = mw;
+        c.dry_particle_diameter = dpg; c.hygroscopicity = kap;
+        c.lognormal_sigma = sig; c.lognormal_dg = dg;
+        c.refractive_index_real = nr; c.refractive_index_imag = ni;
+        return c;
+    };
+    exaero::GocartConfig cfg;
+    cfg.species = {
+        sp("DU", 2600.0, 100.0, 2.0e-6, 0.1, 1.5, 1.0e-6, 1.55, 0.002),
+        sp("SS", 1800.0, 98.0, 0.2e-6, 0.5, 2.0, 0.15e-6, 1.43, 1.0e-8),
+        sp("SU", 1800.0, 98.0, 0.2e-6, 0.5, 2.0, 0.15e-6, 1.43, 1.0e-8),
+        sp("BC", 1800.0, 12.0, 0.1e-6, 0.0, 1.8, 0.05e-6, 1.85, 0.75),
+        sp("OC", 1300.0, 150.0, 0.1e-6, 0.1, 1.8, 0.05e-6, 1.55, 0.0),
+        sp("NI", 2150.0, 85.0, 0.3e-6, 0.6, 1.6, 0.1e-6, 1.52, 0.01),
+    };
+    return cfg;
+}
+
+// Task 3 (design 2026-09-10): the structured entry point must produce a package
+// state bit-identical to the YAML path for the same configuration — same scalars,
+// same lookup/curve/micro/spectral/pmom pool wiring. Throw-based gates (not assert)
+// so Release builds enforce parity too.
+void test_structured_config_species_parity() {
+    exaero::GocartPackage pkg_yaml, pkg_cfg;
+    pkg_yaml.initialize(kMieSixYaml);
+    pkg_cfg.initialize(kMieSixConfig());
+
+    gate(pkg_cfg.get_num_species() == 6, "six species configured");
+    for (int i = 0; i < 6; ++i) {
+        auto a = pkg_yaml.get_species_params(i);
+        auto b = pkg_cfg.get_species_params(i);
+        gate(pkg_cfg.getSpeciesName(i) == pkg_yaml.getSpeciesName(i), "species name parity");
+        // Bit-identical scalars and pool wiring (offsets/extents included).
+        gate(b.dry_density == a.dry_density && b.molecular_weight == a.molecular_weight,
+             "density/molecular-weight parity");
+        gate(b.dry_particle_diameter == a.dry_particle_diameter, "dpg parity");
+        gate(b.hygroscopicity == a.hygroscopicity && b.lognormal_sigma == a.lognormal_sigma,
+             "kappa/sigma parity");
+        gate(b.lognormal_dg == a.lognormal_dg, "dg parity");
+        gate(b.refractive_index_real == a.refractive_index_real, "n parity");
+        gate(b.refractive_index_imag == a.refractive_index_imag, "k parity");
+        gate(b.has_optics_lookup == a.has_optics_lookup, "lookup flag parity");
+        gate(b.curve_offset == a.curve_offset && b.n_rh == a.n_rh, "legacy curve wiring parity");
+        gate(b.micro_offset == a.micro_offset && b.spec_offset == a.spec_offset,
+             "micro/spectral wiring parity");
+        gate(b.pmom_offset == a.pmom_offset, "pmom wiring parity");
+    }
+    std::cout << "Structured config species parity: PASS" << std::endl;
+}
+
 void test_optical_precision() {
     // High-precision physical validation of our GPU ADT Mie solver against standard analytical results.
     // For n = 1.5, x = 10.0, we have:
@@ -1741,6 +1796,7 @@ int main(int argc, char** argv) {
     test_mie_config_curves();
     test_mie_hot_path_overhead(bench_verbose);
     test_structured_config_unsupported_package();
+    test_structured_config_species_parity();
     test_optical_precision();
     test_gocart_ccn();
     

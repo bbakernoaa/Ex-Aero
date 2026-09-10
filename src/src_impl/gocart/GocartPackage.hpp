@@ -28,6 +28,10 @@ namespace exaero {
 
         void initialize(const std::string& config_yaml) override;
 
+        /// @brief Structured (no-YAML) entry point (design 2026-09-10): applies an
+        /// in-memory GocartConfig through the same orchestration as the YAML path.
+        void initialize(const GocartConfig& config) override;
+
         void executeMicrophysics(
             const EnvironmentalStateView& env,
             View3D<double>& state,
