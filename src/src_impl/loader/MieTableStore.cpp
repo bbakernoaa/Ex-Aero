@@ -86,14 +86,8 @@ std::string unit_for_field_impl(const std::string& field) {
 void locate(const std::vector<double>& axis, double v, int& i0, int& i1, double& w) {
     const int n = static_cast<int>(axis.size());
     if (n == 1) { i0 = i1 = 0; w = 0.0; return; }
-    if (v <= axis.front()) {
-        i0 = 0;
-        w = (v == axis.front()) ? 0.0 : 0.0;
-        i1 = (v == axis.front()) ? 0 : 1;
-        if (v == axis.front()) { i1 = 0; }
-        return;
-    }
-    if (v >= axis.back()) { i0 = n - 1; i1 = n - 1; w = 0.0; return; }
+    if (v <= axis.front()) { i0 = 0; i1 = 0; w = 0.0; return; } // clamp to first edge
+    if (v >= axis.back()) { i0 = n - 1; i1 = n - 1; w = 0.0; return; } // clamp to last
     // binary search upper bound
     int lo = 0, hi = n - 1;
     while (hi - lo > 1) {
