@@ -1367,13 +1367,22 @@ struct UnsupportedPkg : public exaero::IAerosolPackage {
     std::string getSpeciesName(int) const override { return {}; }
 };
 
+// Explicit throw-based gate: bare assert() compiles out under NDEBUG and would
+// make Release runs a no-op (T038 precedent). ALL structured-config tests use it.
+static void gate(bool ok, const char* what) {
+    if (!ok) throw std::runtime_error(std::string("FATAL ERROR: structured-config test: ") + what);
+}
+
 void test_structured_config_unsupported_package() {
     UnsupportedPkg pkg;
     exaero::GocartConfig cfg;
     cfg.species.push_back(exaero::GocartSpeciesConfig{});
     bool threw = false;
-    try { pkg.initialize(cfg); } catch (const std::logic_error&) { threw = true; }
-    assert(threw && "default structured initialize must throw logic_error");
+    try { pkg.initialize(cfg); }
+    catch (const std::logic_error& e) {
+        threw = std::string(e.what()).find("does not support structured configuration") != std::string::npos;
+    }
+    gate(threw, "default structured initialize must throw logic_error with the contract message");
     std::cout << "Structured config unsupported-package guard: PASS" << std::endl;
 }
 
