@@ -256,6 +256,40 @@ int category_mask_from_yaml(const YAML::Node& node) {
             h_curve_pool_.insert(h_curve_pool_.end(), dit->second.values.begin(), dit->second.values.end());
         }
 
+        // --- Device-resident spectral curves (T028, ADR-003 R10): append each curve-bound
+        //     species' {rh, lambda, bext, ssa, g} block so the optics kernels read mass
+        //     extinction / albedo / asymmetry from the table (RH-linear, log-band) instead
+        //     of the ADT analytical solver. Extents are data; a band coordinate outside the
+        //     curve lambda domain declines to the fallback path (never a silent wrong value). ---
+        for (int i = 0; i < num_species_; ++i) {
+            const SpeciesCurve* c = store.find_curve(species_names_[i]);
+            if (!c) continue;
+            auto bit = c->fields.find("bext");
+            auto sit = c->fields.find("ssa");
+            auto git = c->fields.find("g");
+            if (bit == c->fields.end() || sit == c->fields.end() || git == c->fields.end()) continue;
+            const int nR = c->n_radius();
+            const int nH = c->n_rh();
+            const int nL = c->n_lambda();
+            const std::size_t need = static_cast<std::size_t>(nR) * nH * nL;
+            if (c->lambda.size() != static_cast<std::size_t>(nL) ||
+                bit->second.values.size() != need || sit->second.values.size() != need ||
+                git->second.values.size() != need) {
+                throw std::runtime_error("EX-aero Error: species '" + species_names_[i] +
+                    "' spectral field length does not match its axes (fail fast)");
+            }
+            auto& p = h_species_params_[i];
+            p.spec_offset = static_cast<int>(h_curve_pool_.size());
+            p.n_spec_radius = nR;
+            p.n_spec_rh = nH;
+            p.n_spec_lambda = nL;
+            h_curve_pool_.insert(h_curve_pool_.end(), c->rh.begin(), c->rh.end());
+            h_curve_pool_.insert(h_curve_pool_.end(), c->lambda.begin(), c->lambda.end());
+            h_curve_pool_.insert(h_curve_pool_.end(), bit->second.values.begin(), bit->second.values.end());
+            h_curve_pool_.insert(h_curve_pool_.end(), sit->second.values.begin(), sit->second.values.end());
+            h_curve_pool_.insert(h_curve_pool_.end(), git->second.values.begin(), git->second.values.end());
+        }
+
         // Parse emissions mapping schemas if present (SPEC-EMISSIONS-002)
         if (config["emissions_mapping"]) {
             auto mapping_node = config["emissions_mapping"];

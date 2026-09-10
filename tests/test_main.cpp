@@ -713,6 +713,76 @@ void test_mie_compute_attributes_multiband() {
     std::cout << "MIE Multi-Band computeAttributes (FR-002/T027): PASS" << std::endl;
 }
 
+void test_mie_monochromatic_file() {
+    using namespace exaero::spectral_optical_indices;
+    // Runtime-file path (T029/FR-012/C7): a portable file replaces the 30-band RRTMG
+    // lambda axis with a 3-wavelength monochromatic set and adds a file-only category
+    // (polarized moments). The merged curve must surface the FILE values (delivery=file)
+    // at the new wavelengths and report the old band coordinate as NotInSource (the axis
+    // no longer contains it) - proving file values EXTEND/override baked, never silently.
+    const std::string file = std::string(EXAERO_TEST_DATA_DIR) + "/mie_dust_monochromatic.txt";
+    std::string yaml = R"YAML(species:
+      - name: "dust_mono"
+        dry_density: 2600.0
+        molecular_weight: 100.0
+        dry_particle_diameter: 0.15e-6
+        hygroscopicity: 0.1
+        lognormal_sigma: 1.5
+        lognormal_dg: 0.1e-6
+        refractive_index_real: 1.55
+        refractive_index_imag: 0.002
+        mie_table: {source: DU}
+activation:
+  data_file: )YAML" + file + "\n";
+
+    exaero::GocartPackage package;
+    package.initialize(yaml);
+
+    double v = 0.0;
+    exaero::ProvenanceInfo p{};
+    // Monochromatic 0.55 um = the reused RRTMG band-3 value (DU qext[0,10,2]).
+    auto st = package.queryAttribute(0, exaero::AttributeCategory::SpectralOptical,
+                                     EXTINCTION_EFFICIENCY, 0.5, 0.55e-6, &v, &p);
+    assert(st == exaero::AttributeStatus::AvailableFile);
+    check_close(v, 1.9339340925216675, "mono 0.55um qext");
+    assert(p.delivery_source == static_cast<int>(exaero::DeliverySource::RuntimeFile));
+    assert(p.num_lambda == 3); // the file's monochromatic axis length is data (R10)
+
+    // 0.355 um = band-3 * 1.30 (shorter wavelength -> larger extinction, monotone).
+    st = package.queryAttribute(0, exaero::AttributeCategory::SpectralOptical,
+                                EXTINCTION_EFFICIENCY, 0.5, 0.355e-6, &v, &p);
+    assert(st == exaero::AttributeStatus::AvailableFile);
+    check_close(v, 2.5141143202781677, "mono 0.355um qext");
+
+    // 1.33 um = band-3 * 0.60.
+    st = package.queryAttribute(0, exaero::AttributeCategory::SpectralOptical,
+                                EXTINCTION_EFFICIENCY, 0.5, 1.33e-6, &v, &p);
+    assert(st == exaero::AttributeStatus::AvailableFile);
+    check_close(v, 1.1603604555130005, "mono 1.33um qext");
+
+    // The old RRTMG band coordinate 3.0 is far above the new axis max (1.33e-6): the
+    // documented above-max clamp returns the last point's value, never extrapolated
+    // garbage and never a silent 0 (FR-007). A NaN wavelength is rejected outright.
+    st = package.queryAttribute(0, exaero::AttributeCategory::SpectralOptical,
+                                EXTINCTION_EFFICIENCY, 0.5, 3.0, &v, nullptr);
+    assert(st == exaero::AttributeStatus::AvailableFile);
+    check_close(v, 1.1603604555130005, "above-max clamps to 1.33um edge");
+    double sentinel = -777.0;
+    st = package.queryAttribute(0, exaero::AttributeCategory::SpectralOptical,
+                                EXTINCTION_EFFICIENCY, 0.5, std::nan(""), &sentinel, nullptr);
+    assert(st == exaero::AttributeStatus::NotInSource);
+    assert(sentinel == -777.0); // NaN wavelength rejected, value untouched (FR-008)
+
+    // Microphysical fields survive the spectral-axis replacement (radius/rh inherited).
+    st = package.queryAttribute(0, exaero::AttributeCategory::Microphysical,
+                                exaero::microphysical_indices::EFFECTIVE_RADIUS,
+                                0.0, 0.0, &v, &p);
+    assert(st == exaero::AttributeStatus::Available);
+    check_close(v, 6.358845325848961e-07, "mono DU reff survives");
+
+    std::cout << "MIE Monochromatic Runtime File (FR-012/C7/T029): PASS" << std::endl;
+}
+
 void test_optical_precision() {
     // High-precision physical validation of our GPU ADT Mie solver against standard analytical results.
     // For n = 1.5, x = 10.0, we have:
@@ -1057,6 +1127,7 @@ int main() {
     test_mie_rrtmg_spectral();
     test_mie_interpolation();
     test_mie_compute_attributes_multiband();
+    test_mie_monochromatic_file();
     test_optical_precision();
     test_gocart_ccn();
     

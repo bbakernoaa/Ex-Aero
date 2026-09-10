@@ -3,6 +3,89 @@
 
 namespace exaero {
 
+namespace {
+
+    // Device-safe bracket search on a strictly-increasing coordinate axis with
+    // clamp at both edges (never extrapolates beyond declared points, FR-007).
+    // log_space != 0 blends in log coordinates (reference spectral interpolation,
+    // research R3); otherwise linear. Mirrors the host MieTableStore locate rules.
+    KOKKOS_INLINE_FUNCTION void curve_locate(const double* axis, int n, double v,
+                                             int log_space, int& i0, int& i1, double& w) {
+        if (n <= 1) { i0 = 0; i1 = 0; w = 0.0; return; }
+        if (v <= axis[0]) { i0 = 0; i1 = 0; w = 0.0; return; }
+        if (v >= axis[n - 1]) { i0 = n - 1; i1 = n - 1; w = 0.0; return; }
+        int lo = 0, hi = n - 1;
+        while (hi - lo > 1) {
+            const int mid = (lo + hi) / 2;
+            if (axis[mid] <= v) lo = mid; else hi = mid;
+        }
+        i0 = lo; i1 = hi;
+        const double v0 = axis[i0], v1 = axis[i1];
+        if (log_space && v0 > 0.0 && v1 > 0.0 && v > 0.0) {
+            const double l0 = Kokkos::log(v0);
+            const double span = Kokkos::log(v1) - l0;
+            w = (span > 0.0) ? (Kokkos::log(v) - l0) / span : 0.0;
+        } else {
+            const double span = v1 - v0;
+            w = (span > 0.0) ? (v - v0) / span : 0.0;
+        }
+    }
+
+    // GEOSmie table spectral read (T028): mass extinction [m^2/kg], single-scattering
+    // albedo and asymmetry at (rh, band coordinate) for the species' solver radius node.
+    // Block layout documented in GocartSpeciesParams; the extents are data, never literals.
+    // Returns false when the requested band coordinate lies OUTSIDE the curve's declared
+    // lambda domain (e.g. a physical wavelength in metres against a band-index axis):
+    // the caller must then fall back to its analytical path rather than silently clamping
+    // to an unrelated band (FR-007 fail-loud intent, no silent wrong physics).
+    KOKKOS_INLINE_FUNCTION bool species_spectral_table(const GocartSpeciesParams& params,
+                                                        const double* pool, double rh,
+                                                        double band, double& ext_per_mass,
+                                                        double& ssa_v, double& g_v) {
+        const double* sb = pool + params.spec_offset;
+        const int nH = params.n_spec_rh;
+        const int nL = params.n_spec_lambda;
+        const int nR = params.n_spec_radius;
+        const double* srh = sb;
+        const double* slam = sb + nH;
+        if (!(band >= slam[0] && band <= slam[nL - 1])) return false;
+        const long nfield = static_cast<long>(nR) * nH * nL;
+        const double* f_ext = sb + nH + nL;
+        const double* f_ssa = f_ext + nfield;
+        const double* f_g   = f_ssa + nfield;
+        int rnode = params.solver_radius_node;
+        if (rnode < 0) rnode = 0;
+        if (rnode > nR - 1) rnode = nR - 1;
+        int h0, h1, l0, l1; double wh, wl;
+        curve_locate(srh, nH, rh, 0, h0, h1, wh);
+        curve_locate(slam, nL, band, 1, l0, l1, wl);
+        const long base = static_cast<long>(rnode) * nH;
+        const double e00 = f_ext[(base + h0) * nL + l0];
+        const double e10 = f_ext[(base + h1) * nL + l0];
+        const double e01 = f_ext[(base + h0) * nL + l1];
+        const double e11 = f_ext[(base + h1) * nL + l1];
+        const double s00 = f_ssa[(base + h0) * nL + l0];
+        const double s10 = f_ssa[(base + h1) * nL + l0];
+        const double s01 = f_ssa[(base + h0) * nL + l1];
+        const double s11 = f_ssa[(base + h1) * nL + l1];
+        const double g00 = f_g[(base + h0) * nL + l0];
+        const double g10 = f_g[(base + h1) * nL + l0];
+        const double g01 = f_g[(base + h0) * nL + l1];
+        const double g11 = f_g[(base + h1) * nL + l1];
+        const double e_l = e00 + wh * (e10 - e00);
+        const double e_h = e01 + wh * (e11 - e01);
+        ext_per_mass = e_l + wl * (e_h - e_l);
+        const double s_l = s00 + wh * (s10 - s00);
+        const double s_h = s01 + wh * (s11 - s01);
+        ssa_v = s_l + wl * (s_h - s_l);
+        const double g_l = g00 + wh * (g10 - g00);
+        const double g_h = g01 + wh * (g11 - g01);
+        g_v = g_l + wl * (g_h - g_l);
+        return true;
+    }
+
+} // anonymous namespace
+
     // Implement public environment lifecycle routines (declared in exaero/Environment.hpp)
     void initialize_environment() {
         if (!Kokkos::is_initialized()) {
@@ -289,7 +372,19 @@ namespace exaero {
                     double sca_coeff_spec = 0.0;
                     double asm_spec = 0.0;
 
-                    if (params.has_optics_lookup) {
+                    double tbl_ext = 0.0, tbl_ssa = 0.0, tbl_g = 0.0;
+                    const bool table_hit =
+                        params.spec_offset >= 0 &&
+                        species_spectral_table(params, d_curve_pool.data(), current_rh,
+                                               wavelength, tbl_ext, tbl_ssa, tbl_g);
+                    if (table_hit) {
+                        // --- MODE C: GEOSmie table spectral read (T028) ---
+                        // Mass extinction per dry mass [m^2/kg] interpolated in RH (linear)
+                        // and band coordinate (linear-in-log), at the solver radius node.
+                        ext_coeff_spec = mass_conc * tbl_ext;
+                        sca_coeff_spec = ext_coeff_spec * tbl_ssa;
+                        asm_spec = tbl_g;
+                    } else if (params.has_optics_lookup) {
                         // --- MODE B: RH Lookup Table 1D Linear Interpolation ---
                         // Curve read from the flat device pool; loop bound from n_rh extent,
                         // never a literal (ADR-003 R10). Block layout: {rh,ext,ssa,asm} x n_rh.
@@ -404,7 +499,16 @@ namespace exaero {
                         double ext_coeff_spec = 0.0;
                         double sca_coeff_spec = 0.0;
 
-                        if (params.has_optics_lookup) {
+                        double tbl_ext = 0.0, tbl_ssa = 0.0, tbl_g = 0.0;
+                        const bool table_hit =
+                            params.spec_offset >= 0 &&
+                            species_spectral_table(params, d_curve_pool.data(), current_rh,
+                                                   wavelength, tbl_ext, tbl_ssa, tbl_g);
+                        if (table_hit) {
+                            // --- MODE C: GEOSmie table spectral read (T028) ---
+                            ext_coeff_spec = mass_conc * tbl_ext;
+                            sca_coeff_spec = ext_coeff_spec * tbl_ssa;
+                        } else if (params.has_optics_lookup) {
                             const double* blk = d_curve_pool.data() + params.curve_offset;
                             const int n_rh = params.n_rh;
                             const double* rh_axis = blk + curve_slot::RH_AXIS * n_rh;

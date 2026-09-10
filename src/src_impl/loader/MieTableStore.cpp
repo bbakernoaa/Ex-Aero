@@ -339,7 +339,23 @@ void MieTableStore::apply_runtime_file(const std::string& path) {
             curves_[c.species_name] = std::move(c);
         } else {
             SpeciesCurve& dst = it->second;
-            if (!c.lambda.empty()) { dst.lambda = c.lambda; }
+            const bool axis_replaced = !c.lambda.empty() && c.lambda != dst.lambda;
+            if (axis_replaced) {
+                // A file that redefines the spectral axis (e.g. a monochromatic set over the
+                // baked RRTMG bands) replaces it; any baked rank-3 field the file does NOT
+                // supply would keep the old axis length and index out of the new one, so we
+                // drop those stale fields first (FR-012: the file's set wins on the new axis).
+                dst.lambda = c.lambda;
+                for (auto fit = dst.fields.begin(); fit != dst.fields.end(); ) {
+                    if (fit->second.rank == 3 && !c.fields.count(fit->first)) {
+                        fit = dst.fields.erase(fit);
+                    } else {
+                        ++fit;
+                    }
+                }
+            } else if (!c.lambda.empty()) {
+                dst.lambda = c.lambda;
+            }
             for (auto& [name, f] : c.fields) dst.fields[name] = std::move(f);
             // New axes may change monotonicity; recompute resamplability from data (R9).
             dst.radius_resamplable = dst.radius.size() >= 2 &&

@@ -46,6 +46,22 @@ struct GocartSpeciesParams {
   int n_micro_rh = 0;          // RH-axis extent of the micro block
   int solver_radius_node = 0;  // size-bin the hot path queries (clamped to n_micro_radius-1)
 
+  // Table-backed spectral curves for the optics hot path (T028, ADR-003 R10). When
+  // spec_offset >= 0 the optics kernels read mass extinction, single-scattering albedo
+  // and asymmetry from the GEOSmie curve at the solver radius node, interpolating
+  // linearly in RH and linear-in-log over the band coordinate (the RRTMG lambda axis),
+  // replacing the ADT analytical solver. Block layout at pool[spec_offset ...]; the
+  // extents are data (never literals):
+  //   [0, nH)                          rh axis
+  //   [nH, nH + nL)                    lambda (band coordinate) axis
+  //   [nH + nL, ... + nR*nH*nL)        bext (mass extinction)  (r-major: (r*nH+h)*nL+l)
+  //   [... , ... + nR*nH*nL)           ssa  (single-scattering albedo)
+  //   [... , ... + nR*nH*nL)           g    (asymmetry factor)
+  int spec_offset = -1;         // index into the device curve pool; -1 => no spectral curve
+  int n_spec_radius = 0;        // radius-bin extent of the spectral block
+  int n_spec_rh = 0;            // RH-axis extent of the spectral block
+  int n_spec_lambda = 0;        // band-axis extent of the spectral block
+
   EmissionsMappingParams emissions_mapping;
 };
 
