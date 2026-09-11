@@ -184,6 +184,21 @@ public:
                 cc.overrides.push_back(std::move(ov));
             }
         }
+        // Fail-fast parity with YAML: overrides require an explicit axis.
+        if (cc.radius_nodes.empty() && !cc.overrides.empty()) {
+            throw std::runtime_error("EX-aero Error: species '" + cc.species_name +
+                "' overrides require radius_nodes (fail fast)");
+        }
+        if (!cc.radius_nodes.empty()) {
+            const std::size_t n_nodes = cc.radius_nodes.size();
+            for (const auto& ov : cc.overrides) {
+                if (ov.values.size() != n_nodes) {
+                    throw std::runtime_error("EX-aero Error: species '" + cc.species_name +
+                        "' override for attribute " + std::to_string(ov.attribute_index) +
+                        " must supply one value per radius_node (fail fast)");
+                }
+            }
+        }
         return cc;
     }
 
