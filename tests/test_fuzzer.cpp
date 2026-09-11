@@ -1,239 +1,274 @@
-#include <gocart/GocartPackage.hpp>
-#include <exaero/Environment.hpp>
 #include <cassert>
-#include <iostream>
-#include <random>
 #include <cmath>
+#include <exaero/Environment.hpp>
+#include <gocart/GocartPackage.hpp>
+#include <iostream>
 #include <limits>
+#include <random>
 
 // Verify dynamic Kohler wet sizing monotonicity
-void verify_sizing_property(exaero::GocartPackage& package) {
-    auto p = package.get_species_params(0);
+void verify_sizing_property(exaero::GocartPackage &package) {
+  auto p = package.get_species_params(0);
 
-    double rh_low = 0.0;
-    double rh_high = 0.99;
-    
-    // Formula check: D_wet must be strictly increasing with RH
-    double d_prev = 0.0;
-    for (int i = 0; i <= 100; ++i) {
-        double rh = rh_low + (rh_high - rh_low) * (i / 100.0);
-        double wet_diameter = p.dry_particle_diameter * 
-                              std::pow(1.0 + p.hygroscopicity * (rh / (1.0 - rh)), 1.0/3.0);
-        assert(wet_diameter >= d_prev); // Sizing must be monotonic increasing!
-        d_prev = wet_diameter;
-    }
+  double rh_low = 0.0;
+  double rh_high = 0.99;
+
+  // Formula check: D_wet must be strictly increasing with RH
+  double d_prev = 0.0;
+  for (int i = 0; i <= 100; ++i) {
+    double rh = rh_low + (rh_high - rh_low) * (i / 100.0);
+    double wet_diameter =
+        p.dry_particle_diameter *
+        std::pow(1.0 + p.hygroscopicity * (rh / (1.0 - rh)), 1.0 / 3.0);
+    assert(wet_diameter >= d_prev); // Sizing must be monotonic increasing!
+    d_prev = wet_diameter;
+  }
 }
 
 // Property-Based Invariant Verification (1000 randomized trials)
-void run_property_based_tests(exaero::GocartPackage& package) {
-    std::mt19937 rng(42); // fixed seed for reproducibility
-    std::uniform_real_distribution<double> rh_dist(0.0, 0.99);
-    std::uniform_real_distribution<double> thick_dist(1.0, 1000.0);
-    std::uniform_real_distribution<double> state_dist(1e-10, 1e-3);
-    std::uniform_real_distribution<double> temp_dist(200.0, 320.0); // Temperature range [K]
+void run_property_based_tests(exaero::GocartPackage &package) {
+  std::mt19937 rng(42); // fixed seed for reproducibility
+  std::uniform_real_distribution<double> rh_dist(0.0, 0.99);
+  std::uniform_real_distribution<double> thick_dist(1.0, 1000.0);
+  std::uniform_real_distribution<double> state_dist(1e-10, 1e-3);
+  std::uniform_real_distribution<double> temp_dist(
+      200.0, 320.0); // Temperature range [K]
 
-    int trials = 1000;
-    
-    double pres_raw[1] = { 101325.0 };
-    double dens_raw[1] = { 1.2 };
+  int trials = 1000;
 
-    exaero::View2D<const double> pressure(pres_raw, 1, 1);
-    exaero::View2D<const double> air_density(dens_raw, 1, 1);
+  double pres_raw[1] = {101325.0};
+  double dens_raw[1] = {1.2};
 
-    for (int t = 0; t < trials; ++t) {
-        double rh = rh_dist(rng);
-        double thickness = thick_dist(rng);
-        double concentration = state_dist(rng);
-        double temp = temp_dist(rng);
+  exaero::View2D<const double> pressure(pres_raw, 1, 1);
+  exaero::View2D<const double> air_density(dens_raw, 1, 1);
 
-        exaero::View2D<const double> temperature(&temp, 1, 1);
-        exaero::View2D<const double> relative_humidity(&rh, 1, 1);
-        exaero::View2D<const double> layer_thickness(&thickness, 1, 1);
-        exaero::EnvironmentalStateView env{temperature, pressure, air_density, relative_humidity, layer_thickness};
+  for (int t = 0; t < trials; ++t) {
+    double rh = rh_dist(rng);
+    double thickness = thick_dist(rng);
+    double concentration = state_dist(rng);
+    double temp = temp_dist(rng);
 
-        double state_raw[2] = { concentration, concentration };
-        exaero::View3D<double> state(state_raw, 1, 1, 2);
+    exaero::View2D<const double> temperature(&temp, 1, 1);
+    exaero::View2D<const double> relative_humidity(&rh, 1, 1);
+    exaero::View2D<const double> layer_thickness(&thickness, 1, 1);
+    exaero::EnvironmentalStateView env{temperature, pressure, air_density,
+                                       relative_humidity, layer_thickness};
 
-        // 1. Diagnostics Property checks
-        double diags_raw[exaero::diagnostic_indices::NUM_DIAGNOSTICS] = { 0.0 };
-        exaero::View3D<double> diagnostics_out(diags_raw, 1, 1, exaero::diagnostic_indices::NUM_DIAGNOSTICS);
+    double state_raw[2] = {concentration, concentration};
+    exaero::View3D<double> state(state_raw, 1, 1, 2);
 
-        package.computeDerivedDiagnostics(env, state, diagnostics_out);
+    // 1. Diagnostics Property checks
+    double diags_raw[exaero::diagnostic_indices::NUM_DIAGNOSTICS] = {0.0};
+    exaero::View3D<double> diagnostics_out(
+        diags_raw, 1, 1, exaero::diagnostic_indices::NUM_DIAGNOSTICS);
 
-        // Mass Conservation: Column Mass must equal concentration * thickness
-        double expected_col_mass = (state_raw[0] + state_raw[1]) * thickness;
-        assert(std::abs(diagnostics_out(0, 0, exaero::diagnostic_indices::COLUMN_MASS) - expected_col_mass) / expected_col_mass < 1e-12);
-        
-        // Mass non-negativity
-        assert(diagnostics_out(0, 0, exaero::diagnostic_indices::PM2_5_CONCENTRATION) >= 0.0);
-        assert(diagnostics_out(0, 0, exaero::diagnostic_indices::NUMBER_CONCENTRATION) >= 0.0);
-        assert(diagnostics_out(0, 0, exaero::diagnostic_indices::SURFACE_AREA_DENSITY) >= 0.0);
-        assert(diagnostics_out(0, 0, exaero::diagnostic_indices::AEROSOL_LIQUID_WATER) >= 0.0);
-        assert(diagnostics_out(0, 0, exaero::diagnostic_indices::GRAVITATIONAL_SETTLING_VELOCITY) >= 0.0);
+    package.computeDerivedDiagnostics(env, state, diagnostics_out);
 
-        // 2. Optical Property checks
-        double wavelengths_raw[2] = { 550e-9, 870e-9 };
-        exaero::View1D<const double> wavelengths(wavelengths_raw, 2);
+    // Mass Conservation: Column Mass must equal concentration * thickness
+    double expected_col_mass = (state_raw[0] + state_raw[1]) * thickness;
+    assert(std::abs(
+               diagnostics_out(0, 0, exaero::diagnostic_indices::COLUMN_MASS) -
+               expected_col_mass) /
+               expected_col_mass <
+           1e-12);
 
-        double optics_raw[1 * 1 * 2 * exaero::optical_indices::NUM_OPTICS] = { 0.0 };
-        exaero::View4D<double> optics_out(optics_raw, 1, 1, 2, exaero::optical_indices::NUM_OPTICS);
+    // Mass non-negativity
+    assert(diagnostics_out(
+               0, 0, exaero::diagnostic_indices::PM2_5_CONCENTRATION) >= 0.0);
+    assert(diagnostics_out(
+               0, 0, exaero::diagnostic_indices::NUMBER_CONCENTRATION) >= 0.0);
+    assert(diagnostics_out(
+               0, 0, exaero::diagnostic_indices::SURFACE_AREA_DENSITY) >= 0.0);
+    assert(diagnostics_out(
+               0, 0, exaero::diagnostic_indices::AEROSOL_LIQUID_WATER) >= 0.0);
+    assert(diagnostics_out(
+               0, 0,
+               exaero::diagnostic_indices::GRAVITATIONAL_SETTLING_VELOCITY) >=
+           0.0);
 
-        package.computeOptics(env, state, wavelengths, optics_out);
+    // 2. Optical Property checks
+    double wavelengths_raw[2] = {550e-9, 870e-9};
+    exaero::View1D<const double> wavelengths(wavelengths_raw, 2);
 
-        for (int band = 0; band < 2; ++band) {
-            double extinction = optics_out(0, 0, band, exaero::optical_indices::EXTINCTION_COEFF);
-            double scattering = optics_out(0, 0, band, exaero::optical_indices::SCATTERING_COEFF);
-            double asymmetry = optics_out(0, 0, band, exaero::optical_indices::ASYMMETRY_FACTOR);
+    double optics_raw[1 * 1 * 2 * exaero::optical_indices::NUM_OPTICS] = {0.0};
+    exaero::View4D<double> optics_out(optics_raw, 1, 1, 2,
+                                      exaero::optical_indices::NUM_OPTICS);
 
-            assert(extinction >= 0.0);
-            assert(scattering >= 0.0);
-            assert(extinction >= scattering); // scattering coefficient cannot exceed extinction!
-            
-            // Asymmetry g must reside in [-1.0, 1.0]
-            assert(asymmetry >= -1.0 && asymmetry <= 1.0);
-        }
+    package.computeOptics(env, state, wavelengths, optics_out);
 
-        // 3. Cloud CCN Spectrum Property checks
-        double ss_raw[3] = { 0.0005, 0.001, 0.005 };
-        exaero::View1D<const double> supersaturations(ss_raw, 3);
+    for (int band = 0; band < 2; ++band) {
+      double extinction =
+          optics_out(0, 0, band, exaero::optical_indices::EXTINCTION_COEFF);
+      double scattering =
+          optics_out(0, 0, band, exaero::optical_indices::SCATTERING_COEFF);
+      double asymmetry =
+          optics_out(0, 0, band, exaero::optical_indices::ASYMMETRY_FACTOR);
 
-        double ccn_raw[3] = { 0.0 };
-        exaero::View4D<double> ccn_out(ccn_raw, 1, 1, 3, 1);
+      assert(extinction >= 0.0);
+      assert(scattering >= 0.0);
+      assert(extinction >=
+             scattering); // scattering coefficient cannot exceed extinction!
 
-        package.computeCCN(env, state, supersaturations, ccn_out);
-
-        // Monotonicity: higher supersaturations must activate larger or equal droplet counts
-        assert(ccn_out(0, 0, 2, 0) >= ccn_out(0, 0, 1, 0));
-        assert(ccn_out(0, 0, 1, 0) >= ccn_out(0, 0, 0, 0));
+      // Asymmetry g must reside in [-1.0, 1.0]
+      assert(asymmetry >= -1.0 && asymmetry <= 1.0);
     }
-    std::cout << "Property-Based Invariants (1000 Trials): PASS" << std::endl;
+
+    // 3. Cloud CCN Spectrum Property checks
+    double ss_raw[3] = {0.0005, 0.001, 0.005};
+    exaero::View1D<const double> supersaturations(ss_raw, 3);
+
+    double ccn_raw[3] = {0.0};
+    exaero::View4D<double> ccn_out(ccn_raw, 1, 1, 3, 1);
+
+    package.computeCCN(env, state, supersaturations, ccn_out);
+
+    // Monotonicity: higher supersaturations must activate larger or equal
+    // droplet counts
+    assert(ccn_out(0, 0, 2, 0) >= ccn_out(0, 0, 1, 0));
+    assert(ccn_out(0, 0, 1, 0) >= ccn_out(0, 0, 0, 0));
+  }
+  std::cout << "Property-Based Invariants (1000 Trials): PASS" << std::endl;
 }
 
 // Fuzz and Crash Testing Harness
-void run_fuzz_tests(exaero::GocartPackage& package) {
-    std::mt19937 rng(1337);
-    
-    double temp_raw[1] = { 298.0 };
-    double pres_raw[1] = { 101325.0 };
-    double dens_raw[1] = { 1.2 };
+void run_fuzz_tests(exaero::GocartPackage &package) {
+  std::mt19937 rng(1337);
 
-    exaero::View2D<const double> temperature(temp_raw, 1, 1);
-    exaero::View2D<const double> pressure(pres_raw, 1, 1);
-    exaero::View2D<const double> air_density(dens_raw, 1, 1);
+  double temp_raw[1] = {298.0};
+  double pres_raw[1] = {101325.0};
+  double dens_raw[1] = {1.2};
 
-    // List of extreme, malformed, and NaN/Inf values to inject
-    std::vector<double> fuzz_inputs = {
-        -1.0, -100.0,       // extreme negative values
-        0.0,                // zero boundaries
-        1.0, 1.5, 100.0,    // out-of-bounds RH
-        std::numeric_limits<double>::quiet_NaN(), // NaN
-        std::numeric_limits<double>::infinity(),  // Positive Inf
-        -std::numeric_limits<double>::infinity(), // Negative Inf
-        1e-308, 1e308       // subnormal and extreme boundaries
-    };
+  exaero::View2D<const double> temperature(temp_raw, 1, 1);
+  exaero::View2D<const double> pressure(pres_raw, 1, 1);
+  exaero::View2D<const double> air_density(dens_raw, 1, 1);
 
-    for (double f_val : fuzz_inputs) {
-        double rh = f_val;
-        double thickness = f_val;
-        double concentration = f_val;
+  // List of extreme, malformed, and NaN/Inf values to inject
+  std::vector<double> fuzz_inputs = {
+      -1.0,
+      -100.0, // extreme negative values
+      0.0,    // zero boundaries
+      1.0,
+      1.5,
+      100.0,                                    // out-of-bounds RH
+      std::numeric_limits<double>::quiet_NaN(), // NaN
+      std::numeric_limits<double>::infinity(),  // Positive Inf
+      -std::numeric_limits<double>::infinity(), // Negative Inf
+      1e-308,
+      1e308 // subnormal and extreme boundaries
+  };
 
-        exaero::View2D<const double> relative_humidity(&rh, 1, 1);
-        exaero::View2D<const double> layer_thickness(&thickness, 1, 1);
-        exaero::EnvironmentalStateView env{temperature, pressure, air_density, relative_humidity, layer_thickness};
+  for (double f_val : fuzz_inputs) {
+    double rh = f_val;
+    double thickness = f_val;
+    double concentration = f_val;
 
-        double state_raw[2] = { concentration, concentration };
-        exaero::View3D<double> state(state_raw, 1, 1, 2);
+    exaero::View2D<const double> relative_humidity(&rh, 1, 1);
+    exaero::View2D<const double> layer_thickness(&thickness, 1, 1);
+    exaero::EnvironmentalStateView env{temperature, pressure, air_density,
+                                       relative_humidity, layer_thickness};
 
-        double diags_raw[exaero::diagnostic_indices::NUM_DIAGNOSTICS] = { 0.0 };
-        exaero::View3D<double> diagnostics_out(diags_raw, 1, 1, exaero::diagnostic_indices::NUM_DIAGNOSTICS);
+    double state_raw[2] = {concentration, concentration};
+    exaero::View3D<double> state(state_raw, 1, 1, 2);
 
-        double wavelengths_raw[1] = { 550e-9 };
-        exaero::View1D<const double> wavelengths(wavelengths_raw, 1);
+    double diags_raw[exaero::diagnostic_indices::NUM_DIAGNOSTICS] = {0.0};
+    exaero::View3D<double> diagnostics_out(
+        diags_raw, 1, 1, exaero::diagnostic_indices::NUM_DIAGNOSTICS);
 
-        double optics_raw[1 * 1 * 1 * exaero::optical_indices::NUM_OPTICS] = { 0.0 };
-        exaero::View4D<double> optics_out(optics_raw, 1, 1, 1, exaero::optical_indices::NUM_OPTICS);
+    double wavelengths_raw[1] = {550e-9};
+    exaero::View1D<const double> wavelengths(wavelengths_raw, 1);
 
-        double ss_raw[1] = { 0.001 };
-        exaero::View1D<const double> supersaturations(ss_raw, 1);
+    double optics_raw[1 * 1 * 1 * exaero::optical_indices::NUM_OPTICS] = {0.0};
+    exaero::View4D<double> optics_out(optics_raw, 1, 1, 1,
+                                      exaero::optical_indices::NUM_OPTICS);
 
-        double ccn_raw[1] = { 0.0 };
-        exaero::View4D<double> ccn_out(ccn_raw, 1, 1, 1, 1);
+    double ss_raw[1] = {0.001};
+    exaero::View1D<const double> supersaturations(ss_raw, 1);
 
-        // Test robustness: solvers must defensively clamp values, handle NaNs, and NEVER segfault or crash
-        try {
-            package.computeDerivedDiagnostics(env, state, diagnostics_out);
-            package.computeOptics(env, state, wavelengths, optics_out);
-            package.computeCCN(env, state, supersaturations, ccn_out);
-        } catch (...) {
-            // Exceptions are acceptable, but segmentation faults or page-fault crashes are failures
-        }
+    double ccn_raw[1] = {0.0};
+    exaero::View4D<double> ccn_out(ccn_raw, 1, 1, 1, 1);
+
+    // Test robustness: solvers must defensively clamp values, handle NaNs, and
+    // NEVER segfault or crash
+    try {
+      package.computeDerivedDiagnostics(env, state, diagnostics_out);
+      package.computeOptics(env, state, wavelengths, optics_out);
+      package.computeCCN(env, state, supersaturations, ccn_out);
+    } catch (...) {
+      // Exceptions are acceptable, but segmentation faults or page-fault
+      // crashes are failures
     }
-    std::cout << "Fuzz/Crash Resilience Boundary Testing: PASS" << std::endl;
+  }
+  std::cout << "Fuzz/Crash Resilience Boundary Testing: PASS" << std::endl;
 }
 
-void test_dynamic_queries(exaero::GocartPackage& package) {
-    // Dynamically query mapping indices to names (Hole 4)
-    int dust_idx = package.getSpeciesIndex("Dust_ADT");
-    int sulf_idx = package.getSpeciesIndex("Sulfate_Lookup");
-    int fake_idx = package.getSpeciesIndex("FakeSpecies");
+void test_dynamic_queries(exaero::GocartPackage &package) {
+  // Dynamically query mapping indices to names (Hole 4)
+  int dust_idx = package.getSpeciesIndex("Dust_ADT");
+  int sulf_idx = package.getSpeciesIndex("Sulfate_Lookup");
+  int fake_idx = package.getSpeciesIndex("FakeSpecies");
 
-    assert(dust_idx == 0);
-    assert(sulf_idx == 1);
-    assert(fake_idx == -1); // Not found
+  assert(dust_idx == 0);
+  assert(sulf_idx == 1);
+  assert(fake_idx == -1); // Not found
 
-    std::string name_0 = package.getSpeciesName(0);
-    std::string name_1 = package.getSpeciesName(1);
+  std::string name_0 = package.getSpeciesName(0);
+  std::string name_1 = package.getSpeciesName(1);
 
-    assert(name_0 == "Dust_ADT");
-    assert(name_1 == "Sulfate_Lookup");
+  assert(name_0 == "Dust_ADT");
+  assert(name_1 == "Sulfate_Lookup");
 
-    // Test dynamic out of bounds index throws cleanly
-    bool threw = false;
-    try {
-        package.getSpeciesName(99);
-    } catch (const std::out_of_range&) {
-        threw = true;
-    }
-    assert(threw);
+  // Test dynamic out of bounds index throws cleanly
+  bool threw = false;
+  try {
+    package.getSpeciesName(99);
+  } catch (const std::out_of_range &) {
+    threw = true;
+  }
+  assert(threw);
 
-    // Test defensive boundary checks throw cleanly when malformed layouts are passed (Hole 2)
-    double temp_raw[1] = { 298.0 };
-    double pres_raw[1] = { 101325.0 };
-    double dens_raw[1] = { 1.2 };
-    double rh_raw[1] = { 0.5 };
-    double thick_raw[1] = { 100.0 };
+  // Test defensive boundary checks throw cleanly when malformed layouts are
+  // passed (Hole 2)
+  double temp_raw[1] = {298.0};
+  double pres_raw[1] = {101325.0};
+  double dens_raw[1] = {1.2};
+  double rh_raw[1] = {0.5};
+  double thick_raw[1] = {100.0};
 
-    exaero::View2D<const double> temperature(temp_raw, 1, 1);
-    exaero::View2D<const double> pressure(pres_raw, 1, 1);
-    exaero::View2D<const double> air_density(dens_raw, 1, 1);
-    exaero::View2D<const double> relative_humidity(rh_raw, 1, 1);
-    exaero::View2D<const double> layer_thickness(thick_raw, 1, 1);
-    exaero::EnvironmentalStateView env{temperature, pressure, air_density, relative_humidity, layer_thickness};
+  exaero::View2D<const double> temperature(temp_raw, 1, 1);
+  exaero::View2D<const double> pressure(pres_raw, 1, 1);
+  exaero::View2D<const double> air_density(dens_raw, 1, 1);
+  exaero::View2D<const double> relative_humidity(rh_raw, 1, 1);
+  exaero::View2D<const double> layer_thickness(thick_raw, 1, 1);
+  exaero::EnvironmentalStateView env{temperature, pressure, air_density,
+                                     relative_humidity, layer_thickness};
 
-    // Pass invalid state array size of 3 species (mismatch!)
-    double bad_state_raw[3] = { 1e-6, 1e-6, 1e-6 };
-    exaero::View3D<double> bad_state(bad_state_raw, 1, 1, 3);
+  // Pass invalid state array size of 3 species (mismatch!)
+  double bad_state_raw[3] = {1e-6, 1e-6, 1e-6};
+  exaero::View3D<double> bad_state(bad_state_raw, 1, 1, 3);
 
-    double diags_raw[exaero::diagnostic_indices::NUM_DIAGNOSTICS] = { 0.0 };
-    exaero::View3D<double> diagnostics_out(diags_raw, 1, 1, exaero::diagnostic_indices::NUM_DIAGNOSTICS);
+  double diags_raw[exaero::diagnostic_indices::NUM_DIAGNOSTICS] = {0.0};
+  exaero::View3D<double> diagnostics_out(
+      diags_raw, 1, 1, exaero::diagnostic_indices::NUM_DIAGNOSTICS);
 
-    bool check_threw = false;
-    try {
-        package.computeDerivedDiagnostics(env, bad_state, diagnostics_out);
-    } catch (const std::runtime_error& e) {
-        check_threw = true;
-    }
-    assert(check_threw);
+  bool check_threw = false;
+  try {
+    package.computeDerivedDiagnostics(env, bad_state, diagnostics_out);
+  } catch (const std::runtime_error &e) {
+    check_threw = true;
+  }
+  assert(check_threw);
 
-    std::cout << "Dynamic Metadata Queries & Boundary Protections: PASS" << std::endl;
+  std::cout << "Dynamic Metadata Queries & Boundary Protections: PASS"
+            << std::endl;
 }
 
-// Seeded MIE attribute property sweep (T017): growth_factor monotone up in RH, density/
-// radius/mass strictly positive, RH clamped at the 0.99 source edge, NaN/Inf rejected with
-// an explicit status and never a silent 0 (invariant C3, FR-007, SC-005).
+// Seeded MIE attribute property sweep (T017): growth_factor monotone up in RH,
+// density/ radius/mass strictly positive, RH clamped at the 0.99 source edge,
+// NaN/Inf rejected with an explicit status and never a silent 0 (invariant C3,
+// FR-007, SC-005).
 void run_mie_attribute_sweep() {
-    using namespace exaero::microphysical_indices;
-    const char* yaml = R"YAML(
+  using namespace exaero::microphysical_indices;
+  const char *yaml = R"YAML(
     species:
       - name: "DU"
         dry_density: 2600.0
@@ -245,67 +280,75 @@ void run_mie_attribute_sweep() {
         refractive_index_real: 1.55
         refractive_index_imag: 0.002
     )YAML";
-    exaero::GocartPackage package;
-    package.initialize(yaml);
+  exaero::GocartPackage package;
+  package.initialize(yaml);
 
-    std::mt19937 rng(2026); // fixed seed for reproducibility (FR-013 determinism)
-    std::uniform_real_distribution<double> rh_dist(0.0, 0.99);
+  std::mt19937 rng(2026); // fixed seed for reproducibility (FR-013 determinism)
+  std::uniform_real_distribution<double> rh_dist(0.0, 0.99);
 
-    for (int t = 0; t < 2000; ++t) {
-        const double rh = rh_dist(rng);
-        double v = 0.0;
-        auto st = package.queryAttribute(0, exaero::AttributeCategory::Microphysical,
-                                         GROWTH_FACTOR, rh, 0.0, &v, nullptr);
-        assert(st == exaero::AttributeStatus::Available ||
-               st == exaero::AttributeStatus::Interpolated);
-        assert(std::isfinite(v));
-        assert(v >= 1.0 - 1e-9); // growth factor never below dry (SC-005)
-
+  for (int t = 0; t < 2000; ++t) {
+    const double rh = rh_dist(rng);
+    double v = 0.0;
+    auto st =
         package.queryAttribute(0, exaero::AttributeCategory::Microphysical,
-                               EFFECTIVE_RADIUS, rh, 0.0, &v, nullptr);
-        assert(v > 0.0 && std::isfinite(v));
-        package.queryAttribute(0, exaero::AttributeCategory::Microphysical,
-                               WET_PARTICLE_DENSITY, rh, 0.0, &v, nullptr);
-        assert(v > 0.0 && std::isfinite(v));
-        package.queryAttribute(0, exaero::AttributeCategory::Microphysical,
-                               PARTICLE_MASS, rh, 0.0, &v, nullptr);
-        assert(v > 0.0 && std::isfinite(v));
-    }
+                               GROWTH_FACTOR, rh, 0.0, &v, nullptr);
+    assert(st == exaero::AttributeStatus::Available ||
+           st == exaero::AttributeStatus::Interpolated);
+    assert(std::isfinite(v));
+    assert(v >= 1.0 - 1e-9); // growth factor never below dry (SC-005)
 
-    // growth_factor monotone non-decreasing in RH on an ascending sweep (C3, SC-005).
-    double prev_growth = -std::numeric_limits<double>::infinity();
-    for (int i = 0; i <= 200; ++i) {
-        const double rh = 0.99 * (i / 200.0);
-        double g = 0.0;
-        package.queryAttribute(0, exaero::AttributeCategory::Microphysical,
-                               GROWTH_FACTOR, rh, 0.0, &g, nullptr);
-        assert(g >= prev_growth - 1e-9);
-        prev_growth = g;
-    }
+    package.queryAttribute(0, exaero::AttributeCategory::Microphysical,
+                           EFFECTIVE_RADIUS, rh, 0.0, &v, nullptr);
+    assert(v > 0.0 && std::isfinite(v));
+    package.queryAttribute(0, exaero::AttributeCategory::Microphysical,
+                           WET_PARTICLE_DENSITY, rh, 0.0, &v, nullptr);
+    assert(v > 0.0 && std::isfinite(v));
+    package.queryAttribute(0, exaero::AttributeCategory::Microphysical,
+                           PARTICLE_MASS, rh, 0.0, &v, nullptr);
+    assert(v > 0.0 && std::isfinite(v));
+  }
 
-    // RH clamped at the declared 0.99 edge: beyond it, no extrapolation (FR-007).
-    double v_edge = 0.0, v_over = 0.0;
-    package.queryAttribute(0, exaero::AttributeCategory::Microphysical, GROWTH_FACTOR, 0.99, 0.0, &v_edge, nullptr);
-    package.queryAttribute(0, exaero::AttributeCategory::Microphysical, GROWTH_FACTOR, 1.5, 0.0, &v_over, nullptr);
-    assert(v_edge == v_over); // clamped, never extrapolated
+  // growth_factor monotone non-decreasing in RH on an ascending sweep (C3,
+  // SC-005).
+  double prev_growth = -std::numeric_limits<double>::infinity();
+  for (int i = 0; i <= 200; ++i) {
+    const double rh = 0.99 * (i / 200.0);
+    double g = 0.0;
+    package.queryAttribute(0, exaero::AttributeCategory::Microphysical,
+                           GROWTH_FACTOR, rh, 0.0, &g, nullptr);
+    assert(g >= prev_growth - 1e-9);
+    prev_growth = g;
+  }
 
-    // NaN / Inf RH: explicit non-available status, value left untouched (never silent 0).
-    double sentinel = -42.0;
-    auto st_nan = package.queryAttribute(0, exaero::AttributeCategory::Microphysical,
-                                         EFFECTIVE_RADIUS, std::nan(""), 0.0, &sentinel, nullptr);
-    assert(st_nan == exaero::AttributeStatus::NotInSource);
-    assert(sentinel == -42.0);
-    auto st_inf = package.queryAttribute(0, exaero::AttributeCategory::Microphysical,
-                                         EFFECTIVE_RADIUS, std::numeric_limits<double>::infinity(), 0.0, &sentinel, nullptr);
-    assert(st_inf == exaero::AttributeStatus::NotInSource);
+  // RH clamped at the declared 0.99 edge: beyond it, no extrapolation (FR-007).
+  double v_edge = 0.0, v_over = 0.0;
+  package.queryAttribute(0, exaero::AttributeCategory::Microphysical,
+                         GROWTH_FACTOR, 0.99, 0.0, &v_edge, nullptr);
+  package.queryAttribute(0, exaero::AttributeCategory::Microphysical,
+                         GROWTH_FACTOR, 1.5, 0.0, &v_over, nullptr);
+  assert(v_edge == v_over); // clamped, never extrapolated
 
-    std::cout << "MIE Attribute Property Sweep (seeded, C3/FR-007/SC-005): PASS" << std::endl;
+  // NaN / Inf RH: explicit non-available status, value left untouched (never
+  // silent 0).
+  double sentinel = -42.0;
+  auto st_nan = package.queryAttribute(
+      0, exaero::AttributeCategory::Microphysical, EFFECTIVE_RADIUS,
+      std::nan(""), 0.0, &sentinel, nullptr);
+  assert(st_nan == exaero::AttributeStatus::NotInSource);
+  assert(sentinel == -42.0);
+  auto st_inf = package.queryAttribute(
+      0, exaero::AttributeCategory::Microphysical, EFFECTIVE_RADIUS,
+      std::numeric_limits<double>::infinity(), 0.0, &sentinel, nullptr);
+  assert(st_inf == exaero::AttributeStatus::NotInSource);
+
+  std::cout << "MIE Attribute Property Sweep (seeded, C3/FR-007/SC-005): PASS"
+            << std::endl;
 }
 
 int main() {
-    exaero::initialize_environment();
-    {
-        std::string yaml_string = R"(
+  exaero::initialize_environment();
+  {
+    std::string yaml_string = R"(
         species:
           - name: "Dust_ADT"
             dry_density: 2600.0
@@ -332,15 +375,15 @@ int main() {
             asm_lookup: [0.60, 0.63, 0.65, 0.67, 0.70, 0.72, 0.73, 0.74]
         )";
 
-        exaero::GocartPackage package;
-        package.initialize(yaml_string);
+    exaero::GocartPackage package;
+    package.initialize(yaml_string);
 
-        verify_sizing_property(package);
-        run_property_based_tests(package);
-        run_fuzz_tests(package);
-        test_dynamic_queries(package);
-    }
-    run_mie_attribute_sweep();
-    exaero::finalize_environment();
-    return 0;
+    verify_sizing_property(package);
+    run_property_based_tests(package);
+    run_fuzz_tests(package);
+    test_dynamic_queries(package);
+  }
+  run_mie_attribute_sweep();
+  exaero::finalize_environment();
+  return 0;
 }

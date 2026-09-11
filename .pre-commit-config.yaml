@@ -34,7 +34,9 @@ repos:
         name: clang-format (C++)
         description: Formats all public and private C++ source and header files.
         types_or: [c++, c]
-        exclude: ^src/src_impl/third_party/
+        # generated/ holds the byte-exact output of tools/generate_mie_tables.py;
+        # formatting it breaks the ExaeroMieDeterminism sha256 gate.
+        exclude: ^src/src_impl/third_party/|^src/src_impl/data/generated/
 
   # 3. CMake Formatting & Linting (cmake-format)
   - repo: https://github.com/cheshirekow/cmake-format-precommit

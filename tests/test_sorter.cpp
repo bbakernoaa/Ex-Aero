@@ -1,45 +1,51 @@
-#include <gtest/gtest.h>
 #include "exaero/sorter.hpp"
+#include <gtest/gtest.h>
 #include <vector>
 
 static size_t dynamic_allocations = 0;
 
-extern "C" void kokkos_profiling_allocate_data(const Kokkos::Profiling::SpaceHandle, const char*, const void*, const uint64_t) {
-    dynamic_allocations++;
+extern "C" void
+kokkos_profiling_allocate_data(const Kokkos::Profiling::SpaceHandle,
+                               const char *, const void *, const uint64_t) {
+  dynamic_allocations++;
 }
 
-extern "C" void kokkos_profiling_free_data(const Kokkos::Profiling::SpaceHandle, const char*, const void*, const uint64_t) {}
+extern "C" void kokkos_profiling_free_data(const Kokkos::Profiling::SpaceHandle,
+                                           const char *, const void *,
+                                           const uint64_t) {}
 
 TEST(SorterTest, ZeroAllocationDuringSort) {
-    std::vector<double> dummy_conc(5 * 100);
-    std::vector<double> dummy_met(10 * 100);
+  std::vector<double> dummy_conc(5 * 100);
+  std::vector<double> dummy_met(10 * 100);
 
-    // Put reverse sorted SZA to force it to work
-    for(int i=0; i<100; ++i) {
-        dummy_met[i] = 100.0 - i;
-    }
+  // Put reverse sorted SZA to force it to work
+  for (int i = 0; i < 100; ++i) {
+    dummy_met[i] = 100.0 - i;
+  }
 
-    exaero::UnmanagedDeviceState state(dummy_conc.data(), dummy_met.data(), 5, 100, 1, 1);
-    exaero::ExaeroContext ctx("ChapmanCycle", 100);
-    
-    // Reset counter before tracking the integration loop
-    dynamic_allocations = 0;
+  exaero::UnmanagedDeviceState state(dummy_conc.data(), dummy_met.data(), 5,
+                                     100, 1, 1);
+  exaero::ExaeroContext ctx("ChapmanCycle", 100);
 
-    exaero::SZA_Sorter::sort_workload(ctx, state);
+  // Reset counter before tracking the integration loop
+  dynamic_allocations = 0;
 
-    // Track memory (T016)
-    EXPECT_EQ(dynamic_allocations, 0) << "Sorting triggered dynamic memory allocations!";
+  exaero::SZA_Sorter::sort_workload(ctx, state);
 
-    auto h_indices = Kokkos::create_mirror_view(ctx.sza_sorted_indices);
-    Kokkos::deep_copy(h_indices, ctx.sza_sorted_indices);
+  // Track memory (T016)
+  EXPECT_EQ(dynamic_allocations, 0)
+      << "Sorting triggered dynamic memory allocations!";
 
-    EXPECT_EQ(h_indices(0), 99);
+  auto h_indices = Kokkos::create_mirror_view(ctx.sza_sorted_indices);
+  Kokkos::deep_copy(h_indices, ctx.sza_sorted_indices);
+
+  EXPECT_EQ(h_indices(0), 99);
 }
 
 int main(int argc, char **argv) {
-    ::testing::InitGoogleTest(&argc, argv);
-    Kokkos::initialize(argc, argv);
-    int result = RUN_ALL_TESTS();
-    Kokkos::finalize();
-    return result;
+  ::testing::InitGoogleTest(&argc, argv);
+  Kokkos::initialize(argc, argv);
+  int result = RUN_ALL_TESTS();
+  Kokkos::finalize();
+  return result;
 }
