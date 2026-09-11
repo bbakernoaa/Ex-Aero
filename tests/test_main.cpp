@@ -1847,11 +1847,443 @@ void test_structured_config_full_equivalence() {
         }
     }
 
-    std::cout << "Structured config full equivalence: PASS (reused)" << std::endl;
+    std::cout << "Structured config full equivalence (all blocks): PASS" << std::endl;
 }
 
+// Task 4: the struct path must fail fast, loudly, with the same "EX-aero Error:"
+// contract as the YAML path — never a silent fallback.
 void test_structured_config_failfast() {
-    std::cout << "Structured config fail-fast: PASS (reused)" << std::endl;
+    auto expect_throw = [](const exaero::GocartConfig& cfg, const char* what) {
+        exaero::GocartPackage pkg;
+        bool threw = false;
+        try { pkg.initialize(cfg); } catch (const std::runtime_error& e) {
+            threw = std::string(e.what()).rfind("EX-aero Error:", 0) == 0;
+        }
+        gate(threw, what);
+    };
+
+    auto base_species = [](const char* n) {
+        exaero::GocartSpeciesConfig c;
+        c.name = n; c.dry_density = 2600.0; c.molecular_weight = 100.0;
+        c.dry_particle_diameter = 2.0e-6; c.hygroscopicity = 0.1;
+        c.lognormal_sigma = 1.5; c.lognormal_dg = 1.0e-6;
+        c.refractive_index_real = 1.55; c.refractive_index_imag = 0.002;
+        return c;
+    };
+
+    // (a) empty species vector
+    {
+        exaero::GocartConfig cfg;
+        expect_throw(cfg, "(a) empty species vector must fail fast");
+    }
+    // (b) optics_lookup with 1 point
+    {
+        exaero::GocartConfig cfg;
+        auto s = base_species("solo");
+        exaero::GocartLegacyOpticsLookup lut;
+        lut.rh = {0.5}; lut.ext = {2.0}; lut.ssa = {0.9}; lut.asm_ = {0.7};
+        s.optics_lookup = std::move(lut);
+        cfg.species.push_back(std::move(s));
+        expect_throw(cfg, "(b) 1-point optics_lookup must fail fast");
+    }
+    // (c) lookup list length mismatch
+    {
+        exaero::GocartConfig cfg;
+        auto s = base_species("mismatch");
+        exaero::GocartLegacyOpticsLookup lut;
+        lut.rh = {0.0, 0.5, 0.99}; lut.ext = {2.0, 4.0}; lut.ssa = {0.9, 0.9, 0.9};
+        lut.asm_ = {0.7, 0.7, 0.7};
+        s.optics_lookup = std::move(lut);
+        cfg.species.push_back(std::move(s));
+        expect_throw(cfg, "(c) mismatched lookup lengths must fail fast");
+    }
+    // (d) override whose values.size() != radius_nodes.size()
+    {
+        exaero::GocartConfig cfg;
+        auto s = base_species("bad_override");
+        exaero::SpeciesCurveConfig cc;
+        cc.source_label = "DU";
+        cc.radius_nodes = {1.0e-7, 2.0e-7, 3.0e-7};
+        exaero::SpeciesCurveConfig::Override ov;
+        ov.category = exaero::AttributeCategory::SpectralOptical;
+        ov.attribute_index = exaero::spectral_optical_indices::MASS_EXTINCTION;
+        ov.values = {1.0, 2.0}; // one short of the declared nodes
+        cc.overrides.push_back(std::move(ov));
+        s.mie_table = std::move(cc);
+        cfg.species.push_back(std::move(s));
+        expect_throw(cfg, "(d) override length != radius_nodes must fail fast");
+    }
+    // (e) overrides with empty radius_nodes: the effective axis is the SOURCE axis,
+    // which the reader cannot see; the store's apply_curve_config length guarantee
+    // (same as YAML) must still reject a 2-value override against the 5-node DU axis.
+    {
+        exaero::GocartConfig cfg;
+        auto s = base_species("bad_override_src");
+        exaero::SpeciesCurveConfig cc;
+        cc.source_label = "DU";
+        exaero::SpeciesCurveConfig::Override ov;
+        ov.category = exaero::AttributeCategory::SpectralOptical;
+        ov.attribute_index = exaero::spectral_optical_indices::MASS_EXTINCTION;
+        ov.values = {1.0, 2.0};
+        cc.overrides.push_back(std::move(ov));
+        s.mie_table = std::move(cc);
+        cfg.species.push_back(std::move(s));
+        exaero::GocartPackage pkg;
+        bool threw = false;
+        std::string msg;
+        try { pkg.initialize(cfg); } catch (const std::runtime_error& e) { threw = true; msg = e.what(); }
+        gate(threw, "(e) source-axis override length must still fail fast");
+        gate(msg.find("length 2 != radius nodes 5") != std::string::npos,
+             "(e) store reports the effective source-axis length mismatch");
+    }
+    // Control: a well-formed override (one value per declared node) must NOT throw —
+    // the (d) check cannot be a blanket rejection.
+    {
+        exaero::GocartConfig cfg;
+        auto s = base_species("good_override");
+        exaero::SpeciesCurveConfig cc;
+        cc.source_label = "DU";
+        cc.radius_nodes = {1.0e-7, 2.0e-7, 3.0e-7};
+        exaero::SpeciesCurveConfig::Override ov;
+        ov.category = exaero::AttributeCategory::SpectralOptical;
+        ov.attribute_index = exaero::spectral_optical_indices::MASS_EXTINCTION;
+        ov.values = {1.0, 2.0, 3.0};
+        cc.overrides.push_back(std::move(ov));
+        s.mie_table = std::move(cc);
+        cfg.species.push_back(std::move(s));
+        exaero::GocartPackage pkg;
+        bool threw = false;
+        try { pkg.initialize(cfg); } catch (const std::runtime_error&) { threw = true; }
+        gate(!threw, "control: valid override must initialize cleanly");
+    }
+
+    std::cout << "Structured config fail-fast: PASS" << std::endl;
+}
+
+void test_optical_precision() {
+    // High-precision physical validation of our GPU ADT Mie solver against standard analytical results.
+    // For n = 1.5, x = 10.0, we have:
+    // phase shift rho = 2 * x * (n - 1) = 10.0
+    // sin(10.0) ≈ -0.54402111, cos(10.0) ≈ -0.83907153
+    // Analytical ADT Q_ext = 2 - (4/10)*sin(10) + (4/100)*(1 - cos(10)) = 2.29117135
+    std::string yaml_string = R"(
+    species:
+      - name: "Dust_ADT_Precision"
+        dry_density: 2600.0
+        molecular_weight: 100.0
+        dry_particle_diameter: 2.0e-6
+        hygroscopicity: 0.0            # No wet size growth (D_wet = D_dry = 2.0e-6)
+        lognormal_sigma: 1.0001        # Monodisperse limit (ln(sigma) ≈ 0)
+        lognormal_dg: 2.0e-6           # dg = dry_particle_diameter = 2.0e-6
+        refractive_index_real: 1.50    # n = 1.5
+        refractive_index_imag: 0.0     # Non-absorbing (k = 0)
+    )";
+
+    exaero::GocartPackage package;
+    package.initialize(yaml_string);
+
+    double temp_raw[1] = { 298.0 };
+    double pres_raw[1] = { 101325.0 };
+    double dens_raw[1] = { 1.2 };
+    double rh_raw[1] = { 0.0 };       // Dry (0% RH)
+    double thick_raw[1] = { 1.0 };
+
+    exaero::View2D<const double> temperature(temp_raw, 1, 1);
+    exaero::View2D<const double> pressure(pres_raw, 1, 1);
+    exaero::View2D<const double> air_density(dens_raw, 1, 1);
+    exaero::View2D<const double> relative_humidity(rh_raw, 1, 1);
+    exaero::View2D<const double> layer_thickness(thick_raw, 1, 1);
+
+    exaero::EnvironmentalStateView env{temperature, pressure, air_density, relative_humidity, layer_thickness};
+
+    // Calculate state mass concentration to yield exactly 1.0 particle/m³
+    // N = C / ( (pi/6)*rho*D^3 * exp(4.5*ln(sigma)^2) )
+    // For N = 1.0, C = (pi/6)*rho*D^3 ≈ (3.14159265/6)*2600*(2.0e-6)^3 ≈ 1.08908549e-14 [kg/m³]
+    double pi_val = 3.141592653589793;
+    double expected_vol = (pi_val / 6.0) * 2600.0 * std::pow(2.0e-6, 3);
+    double state_raw[1] = { expected_vol };
+    exaero::View3D<double> state(state_raw, 1, 1, 1);
+
+    // Query wavelength that yields exactly size parameter x = 10.0
+    // x = pi * D_wet / lambda -> lambda = pi * D_wet / 10.0 = pi * 2.0e-6 / 10.0 ≈ 6.2831853e-7 [m]
+    double lambda_query = pi_val * 2.0e-6 / 10.0;
+    double wavelengths_raw[1] = { lambda_query };
+    exaero::View1D<const double> wavelengths(wavelengths_raw, 1);
+
+    double optics_raw[exaero::optical_indices::NUM_OPTICS] = { 0.0 };
+    exaero::View4D<double> optics_out(optics_raw, 1, 1, 1, exaero::optical_indices::NUM_OPTICS);
+
+    // Run multi-band optics calculations
+    package.computeOptics(env, state, wavelengths, optics_out);
+
+    double total_ext_coeff = optics_out(0, 0, 0, exaero::optical_indices::EXTINCTION_COEFF);
+
+    // Under N = 1.0 particle/m³, extinction coefficient is:
+    // b_ext = N * cross_section * Q_ext
+    // where cross_section = (pi/4)*D^2 = (3.14159265/4)*(2.0e-6)^2 ≈ 3.14159265e-12 [m²]
+    // So Q_ext = b_ext / (N * cross_section)
+    double cross_section = (pi_val / 4.0) * std::pow(2.0e-6, 2);
+    double calculated_q_ext = total_ext_coeff / (1.0 * cross_section);
+
+    double expected_q_ext = 2.29117135; // Van de Hulst Analytical Limit for rho = 10.0
+
+    // Assert that our C++/Kokkos GPU ADT kernel calculates and returns exactly the expected Mie efficiency
+    // with high floating-point numerical precision (< 1e-6 tolerance!)
+    double numerical_tolerance = 1.0e-6;
+    double numerical_diff = std::abs(calculated_q_ext - expected_q_ext);
+
+    assert(numerical_diff < numerical_tolerance);
+
+    std::cout << "GOCART Optics High-Precision Physical Validation: PASS" << std::endl;
+    std::cout << "  - Expected Q_ext: " << expected_q_ext << std::endl;
+    std::cout << "  - Calculated Q_ext: " << calculated_q_ext << " (Diff: " << numerical_diff << ")" << std::endl;
+}
+
+void test_gocart_ccn() {
+    // YAML containing two species: ADT Dust (scaled to small size) and Lookup-Table Sulfate
+    std::string yaml_string = R"(
+    species:
+      - name: "Dust_ADT"
+        dry_density: 2600.0
+        molecular_weight: 100.0
+        dry_particle_diameter: 0.15e-6
+        hygroscopicity: 0.1
+        lognormal_sigma: 1.5
+        lognormal_dg: 0.1e-6
+        refractive_index_real: 1.55
+        refractive_index_imag: 0.002
+      - name: "Sulfate_Lookup"
+        dry_density: 1800.0
+        molecular_weight: 98.0
+        dry_particle_diameter: 0.2e-6
+        hygroscopicity: 0.50
+        lognormal_sigma: 2.0
+        lognormal_dg: 0.15e-6
+        refractive_index_real: 1.43
+        refractive_index_imag: 1.0e-8
+    )";
+
+    exaero::GocartPackage package;
+    package.initialize(yaml_string);
+
+    double temp_raw[1] = { 298.0 }; // T = 298 K
+    double pres_raw[1] = { 101325.0 };
+    double dens_raw[1] = { 1.2 };
+    double rh_raw[1] = { 0.50 };
+    double thick_raw[1] = { 100.0 };
+
+    exaero::View2D<const double> temperature(temp_raw, 1, 1);
+    exaero::View2D<const double> pressure(pres_raw, 1, 1);
+    exaero::View2D<const double> air_density(dens_raw, 1, 1);
+    exaero::View2D<const double> relative_humidity(rh_raw, 1, 1);
+    exaero::View2D<const double> layer_thickness(thick_raw, 1, 1);
+
+    exaero::EnvironmentalStateView env{temperature, pressure, air_density, relative_humidity, layer_thickness};
+
+    // 1.0 ug/m³ of ADT Dust and 1.0 ug/m³ of Sulfate
+    double state_raw[2] = { 1.0e-6, 1.0e-6 };
+    exaero::View3D<double> state(state_raw, 1, 1, 2);
+
+    // Query three supersaturation levels simultaneously: 0.05% (0.0005), 0.1% (0.001), 0.5% (0.005)
+    double ss_raw[3] = { 0.0005, 0.001, 0.005 };
+    exaero::View1D<const double> supersaturations(ss_raw, 3);
+
+    // 4D output view of size (cells, levels, ss, 1) -> we can use ccn_out view directly
+    double ccn_raw[1 * 1 * 3] = { 0.0 };
+    exaero::View4D<double> ccn_out(ccn_raw, 1, 1, 3, 1);
+
+    // Run multi-supersaturation CCN activation solver
+    package.computeCCN(env, state, supersaturations, ccn_out);
+
+    double ccn_05ss = ccn_out(0, 0, 0, 0); // Activated particles/m3 at 0.05% SS
+    double ccn_10ss = ccn_out(0, 0, 1, 0); // Activated particles/m3 at 0.1% SS
+    double ccn_50ss = ccn_out(0, 0, 2, 0); // Activated particles/m3 at 0.5% SS
+
+    // Verify physical activation spectrum monotonicity:
+    // Higher supersaturation must activate larger or equal number concentrations!
+    assert(ccn_50ss >= ccn_10ss);
+    assert(ccn_10ss >= ccn_05ss);
+
+    std::cout << "GOCART Cloud CCN Activation Spectra: PASS" << std::endl;
+}
+
+void test_gocart_yaml_emissions_parsing() {
+    std::string yaml_string = R"(
+    species:
+      - name: "Dust_1"
+        dry_density: 2600.0
+        molecular_weight: 100.0
+        dry_particle_diameter: 0.15e-6
+        hygroscopicity: 0.14
+        lognormal_sigma: 1.5
+        lognormal_dg: 0.15e-6
+        refractive_index_real: 1.53
+        refractive_index_imag: 0.003
+    emissions_mapping:
+      - raw_name: "CECE_Dust"
+        mappings:
+          - target_species: "Dust_1"
+            mass_split_fraction: 0.35
+            is_modal_mode: true
+            emitted_particle_diameter: 0.25e-6
+            lognormal_sigma: 1.8
+    )";
+
+    exaero::GocartPackage package;
+    package.initialize(yaml_string);
+
+    assert(package.get_num_species() == 1);
+    auto p = package.get_species_params(0);
+    assert(p.emissions_mapping.is_active == true);
+    assert(p.emissions_mapping.raw_cece_index == 0);
+    assert(p.emissions_mapping.mass_split_fraction == 0.35);
+    assert(p.emissions_mapping.is_modal_mode == true);
+    assert(p.emissions_mapping.emitted_particle_diameter == 0.25e-6);
+    assert(p.emissions_mapping.lognormal_sigma == 1.8);
+
+    std::cout << "YAML Emissions Parsing Unit Test: PASS" << std::endl;
+}
+
+void test_gocart_emissions_mapping() {
+    std::string yaml_string = R"(
+    species:
+      - name: "Dust_1"
+        dry_density: 2600.0
+        molecular_weight: 100.0
+        dry_particle_diameter: 0.15e-6
+        hygroscopicity: 0.14
+        lognormal_sigma: 1.5
+        lognormal_dg: 0.15e-6
+        refractive_index_real: 1.53
+        refractive_index_imag: 0.003
+      - name: "Sulfate_1"
+        dry_density: 1800.0
+        molecular_weight: 98.0
+        dry_particle_diameter: 0.20e-6
+        hygroscopicity: 0.50
+        lognormal_sigma: 1.6
+        lognormal_dg: 0.20e-6
+        refractive_index_real: 1.43
+        refractive_index_imag: 1.0e-7
+    emissions_mapping:
+      - raw_name: "CECE_Dust"
+        mappings:
+          - target_species: "Dust_1"
+            mass_split_fraction: 0.40
+      - raw_name: "CECE_Sulfate"
+        mappings:
+          - target_species: "Sulfate_1"
+            mass_split_fraction: 0.60
+            is_modal_mode: true
+            emitted_particle_diameter: 0.25e-6
+            lognormal_sigma: 1.8
+    )";
+
+    exaero::GocartPackage package;
+    package.initialize(yaml_string);
+
+    // Inputs (1 cell, 1 level)
+    double temp_raw[1] = { 298.0 };
+    double pres_raw[1] = { 101325.0 };
+    double dens_raw[1] = { 1.2 };
+    double rh_raw[1] = { 0.50 };
+    double thick_raw[1] = { 50.0 }; // Δz = 50 m
+
+    exaero::View2D<const double> temperature(temp_raw, 1, 1);
+    exaero::View2D<const double> pressure(pres_raw, 1, 1);
+    exaero::View2D<const double> air_density(dens_raw, 1, 1);
+    exaero::View2D<const double> relative_humidity(rh_raw, 1, 1);
+    exaero::View2D<const double> layer_thickness(thick_raw, 1, 1);
+
+    exaero::EnvironmentalStateView env{temperature, pressure, air_density, relative_humidity, layer_thickness};
+
+    // Raw fluxes: 2 CECE species. 
+    // CECE_Dust = 1.0e-4 kg/m²/s (AREA_FLUX)
+    // CECE_Sulfate = 1.0e-4 kg/m³/s (MASS_CONCENTRATION_RATE)
+    double flux_raw[2] = { 1.0e-4, 1.0e-4 };
+    exaero::View3D<const double> flux(flux_raw, 1, 1, 2);
+
+    // Outputs: size (1, 1, 2)
+    double out_raw[2] = { 0.0, 0.0 };
+    exaero::View3D<double> emissions_out(out_raw, 1, 1, 2);
+
+    // 1. Run Area-Flux scaling test (CECE_Dust)
+    exaero::EmissionsInputView em_in_area{flux, exaero::FluxType::AREA_FLUX};
+    package.computeEmissions(env, em_in_area, emissions_out);
+
+    // Expect: (1.0e-4 / 50.0) * 0.40 = 8.0e-7 kg/m³/s
+    double mass_dust_rate = emissions_out(0, 0, 0);
+    assert(std::abs(mass_dust_rate - 8.0e-7) < 1e-12);
+
+    // 2. Run Mass-Concentration-Rate & Modal-Number conversion test (CECE_Sulfate)
+    // Clear outputs and zero out CECE_Dust flux to isolate CECE_Sulfate
+    flux_raw[0] = 0.0;
+    out_raw[0] = 0.0; out_raw[1] = 0.0;
+    exaero::EmissionsInputView em_in_rate{flux, exaero::FluxType::MASS_CONCENTRATION_RATE};
+    package.computeEmissions(env, em_in_rate, emissions_out);
+
+    // Expect: target mass rate = 1.0e-4 * 0.60 = 6.0e-5 kg/m³/s.
+    // Vol factor = (M_PI/6) * 1800 * (0.25e-6)^3 * exp(4.5 * ln^2(1.8)) ≈ 6.97103e-17
+    // Emitted Number rate = 6.0e-5 / 6.97103e-17 ≈ 8.60705e11
+    double mass_sulfate_rate = emissions_out(0, 0, 0); // Dust is 0 because CECE_Sulfate has no mapping to Dust_1
+    double num_sulfate_rate = emissions_out(0, 0, 1);
+    
+    assert(mass_sulfate_rate == 0.0);
+    assert(std::abs(num_sulfate_rate - 8.60705e11) / 8.60705e11 < 1e-6);
+
+    // 3. Boundary Clamping & Crash fuzzer test
+    double nan_flux_raw[2] = { NAN, -5.0 }; // Pass NaN and negatives
+    exaero::View3D<const double> nan_flux(nan_flux_raw, 1, 1, 2);
+    exaero::EmissionsInputView em_nan{nan_flux, exaero::FluxType::AREA_FLUX};
+    out_raw[0] = 1.234; out_raw[1] = 5.678; // non-zero default
+    
+    // Execute fuzzer-condition
+    package.computeEmissions(env, em_nan, emissions_out);
+    
+    // NaNs and negatives must be clamped defensively to 0.0, yielding 0.0 outputs
+    assert(emissions_out(0, 0, 0) == 0.0);
+    assert(emissions_out(0, 0, 1) == 0.0);
+
+    std::cout << "GOCART Parallel GPU Emissions Mapping Solver Tests: PASS" << std::endl;
+}
+
+void test_lut_generator_stub() {
+    std::string yaml_string = R"(
+    generation_grid:
+      rh_bins: [0.0, 0.50, 0.99]
+      wavelengths: [550.0e-9]
+      legendre_moments: 16
+    )";
+    exaero::LutGenerator generator(yaml_string);
+    assert(generator.num_rh() == 3);
+    assert(generator.num_bands() == 1);
+    assert(generator.num_moments() == 16);
+    std::cout << "LutGenerator Stub test: PASS" << std::endl;
+}
+
+void test_spheroid_database_interpolation() {
+    const auto& db = exaero::SpheroidDatabase::instance();
+
+    // 1. In-bounds query: Exact match at grid point (1.53, 0.003, 1.0)
+    auto p_exact = db.interpolate(1.53, 0.003, 1.0);
+    double expected_ext = 2.0 * (1.0 - std::exp(-0.5)) * (1.53 / 1.53); // 2.0 * (1.0 - exp(-0.5)) ≈ 0.786938
+    assert(std::abs(p_exact.ext_efficiency - expected_ext) < 1e-6);
+    assert(p_exact.sca_efficiency == p_exact.ext_efficiency * (1.0 - 0.003 * 10.0));
+
+    // 2. Linear Interpolation check: midpoint between 1.53 and 1.56 at (1.545, 0.003, 1.0)
+    auto p_mid = db.interpolate(1.545, 0.003, 1.0);
+    double expected_mid_ext = 2.0 * (1.0 - std::exp(-0.5)) * (1.545 / 1.53); // midpoint ext
+    assert(std::abs(p_mid.ext_efficiency - expected_mid_ext) < 1e-6);
+
+    // 3. Boundary Clamping check: pass values exceeding grid limits (e.g. n_real = 1.60, size = 15.0)
+    // It must clamp n_real to 1.56, n_imag to 0.008, and size to 10.0 defensively
+    auto p_clamp = db.interpolate(1.60, 0.010, 15.0);
+    auto p_limit = db.interpolate(1.56, 0.008, 10.0);
+    assert(p_clamp.ext_efficiency == p_limit.ext_efficiency);
+    assert(p_clamp.sca_efficiency == p_limit.sca_efficiency);
+    assert(p_clamp.moments[5] == p_limit.moments[5]);
+
+    std::cout << "Dubovik Spheroid Database Trilinear Interpolation & Bounds Clamping: PASS" << std::endl;
 }
 
 int main(int argc, char** argv) {

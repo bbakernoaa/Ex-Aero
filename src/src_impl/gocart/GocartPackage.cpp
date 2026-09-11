@@ -184,11 +184,11 @@ public:
                 cc.overrides.push_back(std::move(ov));
             }
         }
-        // Fail-fast parity with YAML: overrides require an explicit axis.
-        if (cc.radius_nodes.empty() && !cc.overrides.empty()) {
-            throw std::runtime_error("EX-aero Error: species '" + cc.species_name +
-                "' overrides require radius_nodes (fail fast)");
-        }
+        // When an explicit axis is declared, each override row must supply exactly one
+        // value per node. With radius_nodes empty the effective axis is the SOURCE axis;
+        // that length guarantee is enforced downstream in
+        // MieTableStore::apply_curve_config — identical to the pre-seam YAML semantics
+        // (byte-for-byte compatibility: no extra reader-level rejection here).
         if (!cc.radius_nodes.empty()) {
             const std::size_t n_nodes = cc.radius_nodes.size();
             for (const auto& ov : cc.overrides) {
