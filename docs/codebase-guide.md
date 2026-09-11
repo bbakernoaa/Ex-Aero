@@ -125,3 +125,9 @@ boundary and one private host module:
     ctest re-generates the baked header and fails on any diff (T039, SC-007).
 See `docs/api-contracts.md` §4 for the full contract and `specs/001-geosmie-lut-attributes/`
 for the design.
+
+### 3C. GOCART Structured Config (New — 2026-09-10)
+- `GocartConfig.hpp`: public Kokkos-free header defining `GocartConfig`, `GocartSpeciesConfig`, `GocartActivationConfig`, `GocartEmissionsMappingConfig`, `GocartLegacyOpticsLookup`.
+- `IAerosolPackage.hpp`: new virtual overload `initialize(const GocartConfig&)` (defaults to `std::logic_error` for unsupported packages).
+- `GocartPackage.cpp`: `PackageConfigReader` seam (`YamlReader` + `StructReader`) + `initializeImpl()` shared orchestration; `initialize(const GocartConfig&)` override.
+- `tests/test_main.cpp`: `test_structured_config_*` family (unsupported-package guard, species parity, full equivalence, fail-fast 5-case gate).

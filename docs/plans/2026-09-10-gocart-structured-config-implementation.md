@@ -40,7 +40,7 @@
   - `struct GocartConfig { std::vector<GocartSpeciesConfig> species; std::optional<GocartActivationConfig> activation; std::vector<GocartEmissionsMappingConfig> emissions_mapping; };`
   - `virtual void IAerosolPackage::initialize(const GocartConfig&)` — default throws `std::logic_error("EX-aero Error: this package does not support structured configuration")`.
 
-- [ ] **Step 1: Write the failing test**
+- [X] **Step 1: Write the failing test**
 
 Add to `tests/test_main.cpp` (near the other Mie tests; register in `main()` after `test_mie_hot_path_overhead(...)`):
 
@@ -91,12 +91,12 @@ void test_structured_config_unsupported_package() {
 
 Add `#include <exaero/GocartConfig.hpp>` at the top of `test_main.cpp` (with the other exaero includes).
 
-- [ ] **Step 2: Run test to verify it fails to compile**
+- [X] **Step 2: Run test to verify it fails to compile**
 
 Run: `cmake --build build -j8 2>&1 | tail -20`
 Expected: FAIL — `exaero/GocartConfig.hpp: No such file or directory`.
 
-- [ ] **Step 3: Write `src/exaero/GocartConfig.hpp`**
+- [X] **Step 3: Write `src/exaero/GocartConfig.hpp`**
 
 Full content (Doxygen on every type/member; mirrors design spec §3.1 exactly):
 
@@ -181,7 +181,7 @@ struct GocartConfig {
 } // namespace exaero
 ```
 
-- [ ] **Step 4: Add the overload to `IAerosolPackage.hpp`**
+- [X] **Step 4: Add the overload to `IAerosolPackage.hpp`**
 
 After `virtual void initialize(const std::string& config_yaml) = 0;` add:
 
@@ -199,17 +199,17 @@ After `virtual void initialize(const std::string& config_yaml) = 0;` add:
 
 Also add at the top of the file: `#include <exaero/GocartConfig.hpp>` and `#include <stdexcept>`.
 
-- [ ] **Step 5: Verify name-hiding safety**
+- [X] **Step 5: Verify name-hiding safety**
 
 Run: `grep -rn "public IAerosolPackage\|: IAerosolPackage" src tests | grep -v GocartPackage`
 For each concrete subclass that calls `initialize(...)` on the *concrete* type anywhere, add `using IAerosolPackage::initialize;` in its public section (calling through an `IAerosolPackage&` always works without it). Expected current hits: test doubles only — inspect and add the using-declaration if any direct concrete call sites exist.
 
-- [ ] **Step 6: Build and run the full suite**
+- [X] **Step 6: Build and run the full suite**
 
 Run: `cmake --build build -j8 && ./build/tests/exaero_test_runner 2>&1 | tail -8`
 Expected: `Structured config unsupported-package guard: PASS` and all prior tests PASS, exit 0.
 
-- [ ] **Step 7: Commit**
+- [X] **Step 7: Commit**
 
 ```sh
 git add src/exaero/GocartConfig.hpp src/exaero/IAerosolPackage.hpp tests/test_main.cpp
@@ -251,7 +251,7 @@ struct PackageConfigReader {
 };
 ```
 
-- [ ] **Step 1: Declare `initializeImpl` in `GocartPackage.hpp`**
+- [X] **Step 1: Declare `initializeImpl` in `GocartPackage.hpp`**
 
 In the private section (after `GocartSolverState* solver_state_ = nullptr;`):
 
@@ -262,7 +262,7 @@ In the private section (after `GocartSolverState* solver_state_ = nullptr;`):
         void initializeImpl(class PackageConfigReader& reader);
 ```
 
-- [ ] **Step 2: Move the body**
+- [X] **Step 2: Move the body**
 
 In `GocartPackage.cpp`: create the anonymous-namespace `PackageConfigReader` interface above (place it next to `attribute_key`), then move the ENTIRE current body of `initialize(const std::string&)` into `GocartPackage::initializeImpl(PackageConfigReader& reader)` replacing every `config[...]`/`s[...]` access with the reader calls:
 
@@ -283,7 +283,7 @@ Then:
     }
 ```
 
-- [ ] **Step 3: Implement `YamlReader`**
+- [X] **Step 3: Implement `YamlReader`**
 
 In the same anonymous namespace. Constructor reproduces today's document-level fail-fast:
 
@@ -314,12 +314,12 @@ In the same anonymous namespace. Constructor reproduces today's document-level f
 
 `speciesScalars(i)` must throw on missing `dry_density`/... exactly like `.as<double>()` on an absent node does today (yaml-cpp `TypedKeyNotFound` propagates — do not catch it; parity).
 
-- [ ] **Step 4: Build and run the FULL regression suite**
+- [X] **Step 4: Build and run the FULL regression suite**
 
 Run: `cmake --build build -j8 && ./build/tests/exaero_test_runner 2>&1 | tail -30 && ctest --test-dir build 2>&1 | tail -8`
 Expected: every existing test PASS (including all `test_gocart_yaml_*`, `test_mie_*`, `ExaeroMieDeterminism`), 4/4 ctest. Any failure = the refactor changed behavior — fix by restoring the original semantics, do not adjust the test.
 
-- [ ] **Step 5: Commit**
+- [X] **Step 5: Commit**
 
 ```sh
 git add src/src_impl/gocart/GocartPackage.hpp src/src_impl/gocart/GocartPackage.cpp
@@ -339,7 +339,7 @@ git commit -m "refactor(gocart): route YAML initialize through PackageConfigRead
 - Consumes: `PackageConfigReader` (Task 2), `GocartConfig` types (Task 1).
 - Produces: `GocartPackage::initialize(const GocartConfig&)` — fully functional for species scalars + legacy lookups; activation/curve/emissions blocks wired in Task 4 (the StructReader already delegates them; only validation tests are added there).
 
-- [ ] **Step 1: Write the failing parity test**
+- [X] **Step 1: Write the failing parity test**
 
 `kMieSixYaml` (test_main.cpp:312) is the fixture to mirror. Add:
 
@@ -398,12 +398,12 @@ void test_structured_config_species_parity() {
 
 Register in `main()` after `test_structured_config_unsupported_package()`.
 
-- [ ] **Step 2: Run to verify it fails**
+- [X] **Step 2: Run to verify it fails**
 
 Run: `cmake --build build -j8 2>&1 | tail -5`
 Expected: compile error — `GocartPackage` has no `initialize(const GocartConfig&)` overload visible / base default throws at runtime once it compiles.
 
-- [ ] **Step 3: Implement `StructReader` + override**
+- [X] **Step 3: Implement `StructReader` + override**
 
 In `GocartPackage.cpp` anonymous namespace:
 
@@ -494,12 +494,12 @@ In `GocartPackage.cpp`:
     }
 ```
 
-- [ ] **Step 4: Run tests**
+- [X] **Step 4: Run tests**
 
 Run: `cmake --build build -j8 && ./build/tests/exaero_test_runner 2>&1 | tail -6`
 Expected: `Structured config species parity: PASS`, all prior tests PASS.
 
-- [ ] **Step 5: Commit**
+- [X] **Step 5: Commit**
 
 ```sh
 git add src/src_impl/gocart/GocartPackage.hpp src/src_impl/gocart/GocartPackage.cpp tests/test_main.cpp
@@ -518,7 +518,7 @@ git commit -m "feat(gocart): structured initialize via StructReader (species par
 - Consumes: everything above; `tools/make_test_fixtures.py`'s `tests/data/mie_dust7.txt` (C12 fixture) for the runtime-file leg; `mie_file_yaml()` helper (exists in test_main.cpp).
 - Produces: final proof that the struct path is complete.
 
-- [ ] **Step 1: Full-feature equivalence test**
+- [X] **Step 1: Full-feature equivalence test**
 
 `test_structured_config_full_equivalence()`: build BOTH a YAML string and a `GocartConfig` that exercise every block at once — one species with `optics_lookup` (reuse the 4-point lookup from `test_gocart_arbitrary_lookup_length`), one species with `mie_table` (source `DU`, one inserted `radius_nodes` + one `bext` override, mirroring the C11/C13 blocks in `test_mie_config_curves`), `activation` (categories `[polarized]`, species `["DU"]`... note: YAML `categories` are strings, struct uses `AttributeCategory` — same bits), and an `emissions_mapping` with one modal mapping (mirror test_main.cpp:1503). Initialize two `GocartPackage`s and gate every check with Task 1's `gate()` helper (throw-based, holds under NDEBUG):
 
@@ -529,11 +529,11 @@ git commit -m "feat(gocart): structured initialize via StructReader (species par
 
 Use the same `store`-ordering care as `test_mie_config_curves` (fresh package per case; the MieTableStore is a singleton reset by `initialize`).
 
-- [ ] **Step 2: Runtime-file leg equivalence**
+- [X] **Step 2: Runtime-file leg equivalence**
 
 Extend the full-equivalence test (or a sibling) with `activation.data_file = "tests/data/mie_dust7.txt"`-equivalent content: the YAML variant uses `mie_file_yaml(...)` exactly as `test_mie_config_curves` does; the struct variant sets `data_file` to the same path. Assert DUST7-sourced queries (`qext` at rh=0.495, band 2.0 → the known `4.31`, `AvailableFile`) match on both paths.
 
-- [ ] **Step 3: Struct fail-fast tests**
+- [X] **Step 3: Struct fail-fast tests**
 
 `test_structured_config_failfast()` — each case must throw `std::runtime_error` whose message starts `"EX-aero Error:"` and (where applicable) contains the species name:
 
@@ -550,13 +550,13 @@ auto expect_throw = [](const exaero::GocartConfig& cfg, const char* what) {
 
 Cases: (a) empty `species`; (b) species with `optics_lookup` of length 1; (c) lookup lists of mismatched lengths; (d) `mie_table` engaged with `overrides` but empty `radius_nodes` (add the check to `StructReader::mieTable` mirroring the YAML guarantee — override values must be resampleable; message: `"...overrides require radius_nodes"`); (e) override `values.size()` != `radius_nodes.size()`.
 
-- [ ] **Step 4: Run everything, Debug + Release**
+- [X] **Step 4: Run everything, Debug + Release**
 
 Run: `cmake --build build -j8 && ./build/tests/exaero_test_runner 2>&1 | tail -6 && ctest --test-dir build 2>&1 | tail -5`
 Then: `cmake --build build-rel -j8 && ./build-rel/tests/exaero_test_runner 2>&1 | tail -6 && ctest --test-dir build-rel 2>&1 | tail -5`
 Expected: all PASS, 4/4 ctest in both configs (Release catches NDEBUG-gated issues — see the intent(inout) lesson).
 
-- [ ] **Step 5: Commit**
+- [X] **Step 5: Commit**
 
 ```sh
 git add tests/test_main.cpp src/src_impl/gocart/GocartPackage.cpp
@@ -576,20 +576,20 @@ git commit -m "test(gocart): struct/YAML full equivalence + structured fail-fast
 - Consumes: final API.
 - Produces: contract documentation for the new surface.
 
-- [ ] **Step 1: Document in `docs/api-contracts.md`**
+- [X] **Step 1: Document in `docs/api-contracts.md`**
 
 New subsection under §4: table of the five config structs (fields, units, optionality), the `initialize(const GocartConfig&)` signature, default-throws contract for non-supporting packages, precedence statement (config > runtime file > baked-in, identical on both paths), and the fail-fast list from design §4.
 
-- [ ] **Step 2: Update `docs/codebase-guide.md`**
+- [X] **Step 2: Update `docs/codebase-guide.md`**
 
 Add `GocartConfig.hpp` to the public-header layout listing and the `exaero::` namespace table (one line: "Structured configuration descriptors — Kokkos-free").
 
-- [ ] **Step 3: Final full verification**
+- [X] **Step 3: Final full verification**
 
 Run: `cmake --build build -j8 && ./build/tests/exaero_test_runner && ctest --test-dir build && cmake --build build-rel -j8 && ./build-rel/tests/exaero_test_runner && ctest --test-dir build-rel`
 Expected: exit 0 everywhere; 4/4 ctest each config.
 
-- [ ] **Step 4: Commit**
+- [X] **Step 4: Commit**
 
 ```sh
 git add docs/api-contracts.md docs/codebase-guide.md

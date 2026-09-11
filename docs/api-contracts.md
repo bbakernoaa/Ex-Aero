@@ -16,8 +16,12 @@ namespace exaero {
     public:
         virtual ~IAerosolPackage() = default;
 
-        // Dynamic Initialization
+        // Dynamic Initialization (canonical YAML entry point)
         virtual void initialize(const std::string& config_yaml) = 0;
+
+        // Structured (no-YAML) initialization. Additive overload: packages that do
+        // not support structured configuration throw std::logic_error by default.
+        virtual void initialize(const GocartConfig& config);
 
         // Passive microphysics step (advances states like chemical mechanisms if applicable)
         virtual void executeMicrophysics(
@@ -52,6 +56,38 @@ namespace exaero {
 
 } // namespace exaero
 ```
+
+### 1A. Structured GOCART Configuration (`GocartConfig.hpp`)
+
+`exaero::GocartPackage` additionally accepts an in-memory configuration struct, so a C++
+caller (e.g. a CCPP host) can configure an entire package without producing YAML text.
+`src/exaero/GocartConfig.hpp` is Kokkos-free (ADR-001) and defines:
+
+| Type | Purpose |
+|------|---------|
+| `GocartConfig` | Top level: `species` list, optional `activation`, `emissions_mapping` list |
+| `GocartSpeciesConfig` | Per-species scalars plus optional `optics_lookup` / `mie_table` blocks |
+| `GocartLegacyOpticsLookup` | Parallel `rh`/`ext`/`ssa`/`asm_` vectors (Mode B lookup) |
+| `SpeciesCurveConfig` | `source_label`, `radius_nodes`, `interpolate`, `solver_radius_node`, `overrides` |
+| `GocartActivationConfig` | `categories` (`AttributeCategory` list), `species`, `data_file` |
+| `GocartEmissionsMappingConfig` | `raw_name` + `mappings` of target species / split fractions / modal fields |
+
+**Contract:**
+
+* **Behavioral parity.** `initialize(const GocartConfig&)` and
+  `initialize(const std::string& config_yaml)` share one orchestration core
+  (`initializeImpl(PackageConfigReader&)`); the `YamlReader` and `StructReader` adapters
+  feed it. Given equivalent inputs the two paths produce bit-identical pools, statuses,
+  and provenance (verified by `test_structured_config_full_equivalence`).
+* **Fail fast, fail loudly.** Every validation error throws `std::runtime_error` with the
+  `"EX-aero Error: "` prefix and the offending species name — never a silent fallback.
+* **Default-throw surface.** `IAerosolPackage::initialize(const GocartConfig&)` throws
+  `std::logic_error` for packages that do not implement structured configuration
+  (additive virtual, no ABI break for existing YAML-only implementers).
+* **Delivery precedence** is identical on both paths: `config > runtime file > baked-in`
+  (`DeliverySource::{BakedIn, RuntimeFile, Config}`).
+* **Overrides with an empty `radius_nodes`** are validated against the effective SOURCE
+  axis downstream in `MieTableStore::apply_curve_config`, exactly as on the YAML path.
 
 ---
 
