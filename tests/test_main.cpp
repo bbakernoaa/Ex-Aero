@@ -1441,6 +1441,525 @@ void test_structured_config_species_parity() {
     std::cout << "Structured config species parity: PASS" << std::endl;
 }
 
+// --- Task 4 (design 2026-09-10): full-feature YAML==struct equivalence ---------------
+// One scenario engages EVERY config block simultaneously — a legacy optics_lookup
+// species (Mode B), a mie_table species with an inserted radius node + one bext
+// override, an activation block (categories + species + runtime data_file), and an
+// emissions_mapping with one modal mapping — expressed BOTH as a YAML string and as a
+// GocartConfig. The MieTableStore is a process-wide singleton reset by every
+// initialize(), so the YAML snapshots must be captured BEFORE the struct package is
+// initialized (same store-ordering care as test_mie_config_curves).
+
+namespace full_equiv {
+
+struct ParamsSnap {
+    double dry_density, molecular_weight, dry_particle_diameter, hygroscopicity;
+    double lognormal_sigma, lognormal_dg, refractive_index_real, refractive_index_imag;
+    bool has_optics_lookup;
+    int curve_offset, n_radius, n_rh, n_lambda;
+    int micro_offset, n_micro_radius, n_micro_rh, solver_radius_node;
+    int spec_offset, n_spec_radius, n_spec_rh, n_spec_lambda;
+    int pmom_offset, n_pmom_radius, n_pmom_rh, n_pmom_lambda, n_pmom_pol, n_pmom_moment;
+    bool em_active;
+    int em_raw_cece_index;
+    double em_mass_split_fraction;
+    bool em_is_modal_mode;
+    double em_emitted_particle_diameter, em_lognormal_sigma;
+};
+
+inline ParamsSnap snap(const exaero::GocartSpeciesParams& p) {
+    ParamsSnap s;
+    std::memset(&s, 0, sizeof(s)); // padding bytes must be defined for bit-comparison
+    s.dry_density = p.dry_density; s.molecular_weight = p.molecular_weight;
+    s.dry_particle_diameter = p.dry_particle_diameter; s.hygroscopicity = p.hygroscopicity;
+    s.lognormal_sigma = p.lognormal_sigma; s.lognormal_dg = p.lognormal_dg;
+    s.refractive_index_real = p.refractive_index_real; s.refractive_index_imag = p.refractive_index_imag;
+    s.has_optics_lookup = p.has_optics_lookup;
+    s.curve_offset = p.curve_offset; s.n_radius = p.n_radius; s.n_rh = p.n_rh; s.n_lambda = p.n_lambda;
+    s.micro_offset = p.micro_offset; s.n_micro_radius = p.n_micro_radius;
+    s.n_micro_rh = p.n_micro_rh; s.solver_radius_node = p.solver_radius_node;
+    s.spec_offset = p.spec_offset; s.n_spec_radius = p.n_spec_radius;
+    s.n_spec_rh = p.n_spec_rh; s.n_spec_lambda = p.n_spec_lambda;
+    s.pmom_offset = p.pmom_offset; s.n_pmom_radius = p.n_pmom_radius;
+    s.n_pmom_rh = p.n_pmom_rh; s.n_pmom_lambda = p.n_pmom_lambda;
+    s.n_pmom_pol = p.n_pmom_pol; s.n_pmom_moment = p.n_pmom_moment;
+    s.em_active = p.emissions_mapping.is_active;
+    s.em_raw_cece_index = p.emissions_mapping.raw_cece_index;
+    s.em_mass_split_fraction = p.emissions_mapping.mass_split_fraction;
+    s.em_is_modal_mode = p.emissions_mapping.is_modal_mode;
+    s.em_emitted_particle_diameter = p.emissions_mapping.emitted_particle_diameter;
+    s.em_lognormal_sigma = p.emissions_mapping.lognormal_sigma;
+    return s;
+}
+
+// Bit-identical comparison of every scalar/extent/offset/emissions subfield
+// (both sides come from snap(), so padding is memset-defined and comparable).
+inline void gate_snap(const ParamsSnap& a, const ParamsSnap& b, const char* what) {
+    gate(std::memcmp(&a, &b, sizeof(ParamsSnap)) == 0, what);
+}
+
+inline std::string yaml(const std::string& dust7) {
+    // Same data as the GocartConfig below, spelled as YAML. Species names deliberately
+    // differ from the baked labels (store binds baked curves BY NAME — see T021).
+    return std::string(R"YAML(species:
+  - name: "sulf_lut"
+    dry_density: 1800.0
+    molecular_weight: 98.0
+    dry_particle_diameter: 0.2e-6
+    hygroscopicity: 0.5
+    lognormal_sigma: 2.0
+    lognormal_dg: 0.15e-6
+    refractive_index_real: 1.43
+    refractive_index_imag: 1.0e-8
+    has_optics_lookup: true
+    rh_bins: [0.0, 0.2, 0.4, 0.6, 0.8, 0.9, 1.0]
+    ext_lookup: [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0]
+    ssa_lookup: [0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5]
+    asm_lookup: [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
+  - name: "dust_cfg"
+    dry_density: 2600.0
+    molecular_weight: 100.0
+    dry_particle_diameter: 2.0e-6
+    hygroscopicity: 0.1
+    lognormal_sigma: 1.5
+    lognormal_dg: 1.0e-6
+    refractive_index_real: 1.55
+    refractive_index_imag: 0.002
+    mie_table:
+      source: DU
+      radius_nodes: [6.358845325848961e-07, 1.324423010373721e-06, 1.8e-06,
+                     2.301213726241258e-06, 4.1672033148643095e-06, 7.670712875551544e-06]
+      overrides:
+        bext: [987.65, 987.65, 987.65, 987.65, 987.65, 987.65]
+  - name: "d7"
+    dry_density: 2600.0
+    molecular_weight: 100.0
+    dry_particle_diameter: 1.0e-6
+    hygroscopicity: 0.1
+    lognormal_sigma: 1.5
+    lognormal_dg: 1.0e-6
+    refractive_index_real: 1.55
+    refractive_index_imag: 0.002
+    mie_table: {source: DUST7, solver_radius_node: 3}
+activation:
+  categories: [polarized]
+  species: ["dust_cfg", "d7"]
+  data_file: )YAML")
+        + dust7 + R"YAML(
+emissions_mapping:
+  - raw_name: "CECE_Dust"
+    mappings:
+      - target_species: "dust_cfg"
+        mass_split_fraction: 0.35
+        is_modal_mode: true
+        emitted_particle_diameter: 0.25e-6
+        lognormal_sigma: 1.8
+)YAML";
+}
+
+inline exaero::GocartConfig config(const std::string& dust7) {
+    auto sp = [](const char* n, double dens, double mw, double dpg, double kap,
+                 double sig, double dg, double nr, double ni) {
+        exaero::GocartSpeciesConfig c;
+        c.name = n; c.dry_density = dens; c.molecular_weight = mw;
+        c.dry_particle_diameter = dpg; c.hygroscopicity = kap;
+        c.lognormal_sigma = sig; c.lognormal_dg = dg;
+        c.refractive_index_real = nr; c.refractive_index_imag = ni;
+        return c;
+    };
+    exaero::GocartConfig cfg;
+    // (0) legacy Mode B RH lookup — same 7-point table as the YAML leg.
+    cfg.species.push_back(sp("sulf_lut", 1800.0, 98.0, 0.2e-6, 0.5, 2.0, 0.15e-6, 1.43, 1.0e-8));
+    {
+        exaero::GocartLegacyOpticsLookup lut;
+        lut.rh   = {0.0, 0.2, 0.4, 0.6, 0.8, 0.9, 1.0};
+        lut.ext  = {1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0};
+        lut.ssa  = {0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5};
+        lut.asm_ = {0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1};
+        cfg.species.back().optics_lookup = std::move(lut);
+    }
+    // (1) mie_table: source DU, inserted radius node, one bext override (C11+C13 shape).
+    cfg.species.push_back(sp("dust_cfg", 2600.0, 100.0, 2.0e-6, 0.1, 1.5, 1.0e-6, 1.55, 0.002));
+    {
+        exaero::SpeciesCurveConfig cc;
+        cc.source_label = "DU";
+        cc.radius_nodes = {6.358845325848961e-07, 1.324423010373721e-06, 1.8e-06,
+                           2.301213726241258e-06, 4.1672033148643095e-06, 7.670712875551544e-06};
+        exaero::SpeciesCurveConfig::Override ov;
+        ov.category = exaero::AttributeCategory::SpectralOptical;
+        ov.attribute_index = exaero::spectral_optical_indices::MASS_EXTINCTION;
+        ov.values.assign(cc.radius_nodes.size(), 987.65);
+        cc.overrides.push_back(std::move(ov));
+        cfg.species.back().mie_table = std::move(cc);
+    }
+    // (2) file-delivered species (DUST7 via activation.data_file), node 3.
+    cfg.species.push_back(sp("d7", 2600.0, 100.0, 1.0e-6, 0.1, 1.5, 1.0e-6, 1.55, 0.002));
+    {
+        exaero::SpeciesCurveConfig cc;
+        cc.source_label = "DUST7";
+        cc.solver_radius_node = 3;
+        cfg.species.back().mie_table = std::move(cc);
+    }
+    exaero::GocartActivationConfig act;
+    act.categories = {exaero::AttributeCategory::PolarizedMoment};
+    act.species = {"dust_cfg", "d7"};
+    act.data_file = dust7;
+    cfg.activation = std::move(act);
+    exaero::GocartEmissionsMappingConfig em;
+    em.raw_name = "CECE_Dust";
+    em.mappings.push_back({"dust_cfg", 0.35, true, 0.25e-6, 1.8});
+    cfg.emissions_mapping.push_back(std::move(em));
+    return cfg;
+}
+
+} // namespace full_equiv
+
+void test_structured_config_full_equivalence() {
+    using namespace exaero::microphysical_indices;
+    namespace spi = exaero::spectral_optical_indices;
+    namespace pmi = exaero::polarized_moment_indices;
+    const std::string dust7 = std::string(EXAERO_TEST_DATA_DIR) + "/mie_dust7.txt";
+
+    constexpr int kNumSpecies = 3;
+    constexpr int kNumCats = static_cast<int>(exaero::AttributeCategory::NUM_CATEGORIES);
+
+    exaero::GocartPackage pkg_yaml, pkg_cfg;
+    pkg_yaml.initialize(full_equiv::yaml(dust7));
+
+    // Snapshot the YAML-path state FIRST: initializing pkg_cfg resets the store singleton.
+    full_equiv::ParamsSnap snaps[kNumSpecies];
+    int pmom_yaml[kNumSpecies][2];
+    for (int i = 0; i < kNumSpecies; ++i) {
+        snaps[i] = full_equiv::snap(pkg_yaml.get_species_params(i));
+        pmom_yaml[i][0] = pmom_yaml[i][1] = -1;
+        pkg_yaml.momentCounts(i, &pmom_yaml[i][0], &pmom_yaml[i][1]);
+    }
+    // Probe matrix over the whole public attribute surface (statuses + values +
+    // provenance). Indices are probes, never capacities: category attribute counts
+    // come from the *_indices::NUM_ATTRIBUTES constants (ADR-003).
+    const double rh_list[3] = {0.0, 0.495, 0.99};
+    const double wl_list[3] = {1e-6, 2e-6, 5e-6};
+    struct QSnap { int status; double value; exaero::ProvenanceInfo prov; };
+    std::vector<QSnap> probes;
+    for (int i = 0; i < kNumSpecies; ++i) {
+        for (int cat = 0; cat < kNumCats; ++cat) {
+            const auto category = static_cast<exaero::AttributeCategory>(cat);
+            const int num_attr =
+                (category == exaero::AttributeCategory::Microphysical)   ? NUM_ATTRIBUTES :
+                (category == exaero::AttributeCategory::SpectralOptical) ? spi::NUM_ATTRIBUTES :
+                                                                           pmi::ELEMENT_STRIDE;
+            for (int ia = 0; ia < num_attr; ++ia) {
+                for (double rh : rh_list) {
+                    for (double wl : wl_list) {
+                        QSnap q{};
+                        q.status = static_cast<int>(pkg_yaml.queryAttribute(
+                            i, category, ia, rh, wl, &q.value, &q.prov));
+                        probes.push_back(q);
+                    }
+                }
+            }
+        }
+    }
+    // computeAttributes on a small 2x3 grid, spectral bands {3.0, 5.0} (values+statuses).
+    constexpr int kCells = 2, kLevels = 3, kBands = 2;
+    double temp[kCells * kLevels], pres[kCells * kLevels], dens[kCells * kLevels];
+    double rh_raw[kCells * kLevels], thick[kCells * kLevels];
+    for (int k = 0; k < kCells * kLevels; ++k) {
+        temp[k] = 298.0; pres[k] = 101325.0; dens[k] = 1.2; thick[k] = 100.0;
+        rh_raw[k] = 0.2 + 0.3 * (k % 5); // grid + off-grid RH, same for both packages
+    }
+    double wl_raw[kBands] = {3.0, 5.0};
+    double state_raw[kCells * kLevels * kNumSpecies];
+    for (int i = 0; i < kCells * kLevels; ++i) {
+        for (int s = 0; s < kNumSpecies; ++s) {
+            state_raw[static_cast<std::size_t>(i) * kNumSpecies + s] = (s + 1) * 1.0e-6;
+        }
+    }
+    const int attr_slots = kBands * spi::NUM_ATTRIBUTES;
+    // Per-species buffers: each computeAttributes call fills the whole grid, so one
+    // buffer per species keeps every species' output comparable.
+    double attrs_yaml[kNumSpecies][kCells * kLevels * attr_slots];
+    double attrs_cfg[kNumSpecies][kCells * kLevels * attr_slots];
+    int stats_yaml[kNumSpecies][kCells * kLevels * attr_slots];
+    int stats_cfg[kNumSpecies][kCells * kLevels * attr_slots];
+    for (auto& buf : attrs_yaml) for (double& x : buf) x = -777.0;
+    for (auto& buf : attrs_cfg) for (double& x : buf) x = -777.0;
+    for (auto& buf : stats_yaml) for (int& s : buf) s = -1;
+    for (auto& buf : stats_cfg) for (int& s : buf) s = -1;
+    {
+        exaero::View2D<const double> temperature(temp, kCells, kLevels);
+        exaero::View2D<const double> pressure(pres, kCells, kLevels);
+        exaero::View2D<const double> air_density(dens, kCells, kLevels);
+        exaero::View2D<const double> relative_humidity(rh_raw, kCells, kLevels);
+        exaero::View2D<const double> layer_thickness(thick, kCells, kLevels);
+        exaero::EnvironmentalStateView env{temperature, pressure, air_density,
+                                           relative_humidity, layer_thickness};
+        exaero::View3D<const double> state(state_raw, kCells, kLevels, kNumSpecies);
+        exaero::View1D<const double> wavelengths(wl_raw, kBands);
+        for (int i = 0; i < kNumSpecies; ++i) {
+            exaero::View3D<double> attributes_out(attrs_yaml[i], kCells, kLevels, attr_slots);
+            exaero::View3D<int> status_out(stats_yaml[i], kCells, kLevels, attr_slots);
+            pkg_yaml.computeAttributes(env, state, i, exaero::AttributeCategory::SpectralOptical,
+                                       wavelengths, attributes_out, &status_out);
+        }
+    }
+
+    // ---- struct path: same scenario, same order, everything must match bit-for-bit ----
+    pkg_cfg.initialize(full_equiv::config(dust7));
+    gate(pkg_cfg.get_num_species() == pkg_yaml.get_num_species(), "species count parity");
+    for (int i = 0; i < kNumSpecies; ++i) {
+        gate(pkg_cfg.getSpeciesName(i) == pkg_yaml.getSpeciesName(i), "species name parity");
+        full_equiv::gate_snap(full_equiv::snap(pkg_cfg.get_species_params(i)), snaps[i],
+                              "full species-params parity (scalars, wiring, emissions subfields)");
+        int p0 = -1, p1 = -1;
+        pkg_cfg.momentCounts(i, &p0, &p1);
+        gate(p0 == pmom_yaml[i][0] && p1 == pmom_yaml[i][1], "momentCounts parity");
+    }
+    std::size_t probe = 0;
+    for (int i = 0; i < kNumSpecies; ++i) {
+        for (int cat = 0; cat < kNumCats; ++cat) {
+            const auto category = static_cast<exaero::AttributeCategory>(cat);
+            const int num_attr =
+                (category == exaero::AttributeCategory::Microphysical)   ? NUM_ATTRIBUTES :
+                (category == exaero::AttributeCategory::SpectralOptical) ? spi::NUM_ATTRIBUTES :
+                                                                           pmi::ELEMENT_STRIDE;
+            for (int ia = 0; ia < num_attr; ++ia) {
+                for (double rh : rh_list) {
+                    for (double wl : wl_list) {
+                        const QSnap& want = probes[probe++];
+                        QSnap got{};
+                        got.status = static_cast<int>(pkg_cfg.queryAttribute(
+                            i, category, ia, rh, wl, &got.value, &got.prov));
+                        gate(got.status == want.status, "queryAttribute status parity");
+                        gate(std::memcmp(&got.value, &want.value, sizeof(double)) == 0,
+                             "queryAttribute value bit-parity");
+                        gate(std::memcmp(&got.prov, &want.prov, sizeof(exaero::ProvenanceInfo)) == 0,
+                             "queryAttribute provenance parity");
+                    }
+                }
+            }
+        }
+    }
+    gate(probe == probes.size(), "probe matrix fully replayed");
+    {
+        exaero::View2D<const double> temperature(temp, kCells, kLevels);
+        exaero::View2D<const double> pressure(pres, kCells, kLevels);
+        exaero::View2D<const double> air_density(dens, kCells, kLevels);
+        exaero::View2D<const double> relative_humidity(rh_raw, kCells, kLevels);
+        exaero::View2D<const double> layer_thickness(thick, kCells, kLevels);
+        exaero::EnvironmentalStateView env{temperature, pressure, air_density,
+                                           relative_humidity, layer_thickness};
+        exaero::View3D<const double> state(state_raw, kCells, kLevels, kNumSpecies);
+        exaero::View1D<const double> wavelengths(wl_raw, kBands);
+        for (int i = 0; i < kNumSpecies; ++i) {
+            exaero::View3D<double> attributes_out(attrs_cfg[i], kCells, kLevels, attr_slots);
+            exaero::View3D<int> status_out(stats_cfg[i], kCells, kLevels, attr_slots);
+            pkg_cfg.computeAttributes(env, state, i, exaero::AttributeCategory::SpectralOptical,
+                                      wavelengths, attributes_out, &status_out);
+            gate(std::memcmp(attrs_cfg[i], attrs_yaml[i], sizeof(attrs_yaml[i])) == 0,
+                 "computeAttributes values bit-parity");
+            gate(std::memcmp(stats_cfg[i], stats_yaml[i], sizeof(stats_yaml[i])) == 0,
+                 "computeAttributes statuses bit-parity");
+        }
+    }
+
+    // The scenario must actually engage every block (a silent no-op would pass vacuously).
+    {
+        auto p0 = pkg_cfg.get_species_params(0); // sulf_lut: legacy Mode B lookup
+        gate(p0.has_optics_lookup && p0.curve_offset >= 0 && p0.n_rh == 7 && p0.n_radius == 1 &&
+                 p0.n_lambda == 0,
+             "legacy lookup engaged on the struct path");
+        auto p1 = pkg_cfg.get_species_params(1); // dust_cfg: DU resample + bext override
+        gate(p1.micro_offset >= 0 && p1.spec_offset >= 0 && p1.n_spec_radius == 6 &&
+                 p1.solver_radius_node == 0,
+             "mie_table resample engaged on the struct path");
+        gate(p1.emissions_mapping.is_active && p1.emissions_mapping.is_modal_mode,
+             "emissions mapping engaged on the struct path");
+        auto p2 = pkg_cfg.get_species_params(2); // d7: runtime-file delivery, node 3
+        // The DUST7 fixture ships only optical fields (no rMass/rEff), so it wires no
+        // device micro/spectral pool block (spec_offset stays -1 on BOTH paths — the
+        // parity gate above proves that); the data_file leg is instead proven through
+        // the store query below (file extents + AvailableFile delivery + node-3 value).
+        (void)p2;
+        double v = 0.0;
+        exaero::ProvenanceInfo prov{};
+        auto st = pkg_cfg.queryAttribute(1, exaero::AttributeCategory::SpectralOptical,
+                                         spi::MASS_EXTINCTION, 0.5, 3.0, &v, &prov);
+        gate(st == exaero::AttributeStatus::AvailableConfig && v == 987.65 &&
+                 prov.delivery_source == static_cast<int>(exaero::DeliverySource::Config),
+             "config bext override engaged on the struct path");
+        v = 0.0;
+        exaero::ProvenanceInfo fp{};
+        st = pkg_cfg.queryAttribute(2, exaero::AttributeCategory::SpectralOptical,
+                                    spi::EXTINCTION_EFFICIENCY, 0.495, 2.0, &v, &fp);
+        gate(st == exaero::AttributeStatus::AvailableFile && v == 4.31 &&
+                 fp.num_radius == 7 && fp.num_rh == 7 && fp.num_lambda == 3 &&
+                 fp.delivery_source == static_cast<int>(exaero::DeliverySource::RuntimeFile),
+             "DUST7 file leg answers 4.31 with file extents on the struct path");
+    }
+
+    // Legacy-lookup DEVICE pool: the four {rh,ext,ssa,asm} slots are only readable
+    // through the kernels (h_curve_pool_ is impl-private), so pool parity is proven
+    // end-to-end: identical flat pool offsets/extents (gate_snap above) plus
+    // bit-identical diagnostics + multi-band optics from the uploaded pool.
+    {
+        constexpr int kBandN = 3;
+        double wl_m[kBandN] = {550.0e-9, 870.0e-9, 1.5e-6};
+        double out_yaml[1 * 1 * kBandN * exaero::optical_indices::NUM_OPTICS];
+        double out_cfg[1 * 1 * kBandN * exaero::optical_indices::NUM_OPTICS];
+        double dg_yaml[exaero::diagnostic_indices::NUM_DIAGNOSTICS];
+        double dg_cfg[exaero::diagnostic_indices::NUM_DIAGNOSTICS];
+        for (double& x : out_yaml) x = -777.0;
+        for (double& x : out_cfg) x = -777.0;
+        for (double& x : dg_yaml) x = -777.0;
+        for (double& x : dg_cfg) x = -777.0;
+        double rh_run[1];
+        // Every bracket edge + interior point of the 7-point lookup, incl. the
+        // above-last-edge clamp region: full coverage of the pool's four slots.
+        const double rh_probe[9] = {0.0, 0.1, 0.2, 0.4, 0.5, 0.6, 0.8, 0.95, 0.99};
+        for (double rhv : rh_probe) {
+            rh_run[0] = rhv;
+            exaero::View2D<const double> temperature(temp, 1, 1);
+            exaero::View2D<const double> pressure(pres, 1, 1);
+            exaero::View2D<const double> air_density(dens, 1, 1);
+            exaero::View2D<const double> relative_humidity(rh_run, 1, 1);
+            exaero::View2D<const double> layer_thickness(thick, 1, 1);
+            exaero::EnvironmentalStateView env{temperature, pressure, air_density,
+                                               relative_humidity, layer_thickness};
+            exaero::View3D<const double> state(state_raw, 1, 1, kNumSpecies);
+            exaero::View1D<const double> wavelengths(wl_m, kBandN);
+            exaero::View4D<double> optics_yaml(out_yaml, 1, 1, kBandN,
+                                               exaero::optical_indices::NUM_OPTICS);
+            exaero::View4D<double> optics_cfg(out_cfg, 1, 1, kBandN,
+                                              exaero::optical_indices::NUM_OPTICS);
+            exaero::View3D<double> diags_yaml(dg_yaml, 1, 1,
+                                              exaero::diagnostic_indices::NUM_DIAGNOSTICS);
+            exaero::View3D<double> diags_cfg(dg_cfg, 1, 1,
+                                             exaero::diagnostic_indices::NUM_DIAGNOSTICS);
+            pkg_yaml.computeDerivedDiagnostics(env, state, diags_yaml);
+            pkg_yaml.computeOptics(env, state, wavelengths, optics_yaml);
+            pkg_cfg.computeDerivedDiagnostics(env, state, diags_cfg);
+            pkg_cfg.computeOptics(env, state, wavelengths, optics_cfg);
+            gate(std::memcmp(dg_cfg, dg_yaml, sizeof(dg_yaml)) == 0,
+                 "diagnostics bit-parity (legacy lookup + curve pool)");
+            gate(std::memcmp(out_cfg, out_yaml, sizeof(out_yaml)) == 0,
+                 "optics bit-parity (legacy lookup pool slots rh/ext/ssa/asm)");
+        }
+    }
+
+    std::cout << "Structured config full equivalence (all blocks): PASS" << std::endl;
+}
+
+// Task 4: the struct path must fail fast, loudly, with the same "EX-aero Error:"
+// contract as the YAML path — never a silent fallback.
+void test_structured_config_failfast() {
+    auto expect_throw = [](const exaero::GocartConfig& cfg, const char* what) {
+        exaero::GocartPackage pkg;
+        bool threw = false;
+        try { pkg.initialize(cfg); } catch (const std::runtime_error& e) {
+            threw = std::string(e.what()).rfind("EX-aero Error:", 0) == 0;
+        }
+        gate(threw, what);
+    };
+
+    auto base_species = [](const char* n) {
+        exaero::GocartSpeciesConfig c;
+        c.name = n; c.dry_density = 2600.0; c.molecular_weight = 100.0;
+        c.dry_particle_diameter = 2.0e-6; c.hygroscopicity = 0.1;
+        c.lognormal_sigma = 1.5; c.lognormal_dg = 1.0e-6;
+        c.refractive_index_real = 1.55; c.refractive_index_imag = 0.002;
+        return c;
+    };
+
+    // (a) empty species vector
+    {
+        exaero::GocartConfig cfg;
+        expect_throw(cfg, "(a) empty species vector must fail fast");
+    }
+    // (b) optics_lookup with 1 point
+    {
+        exaero::GocartConfig cfg;
+        auto s = base_species("solo");
+        exaero::GocartLegacyOpticsLookup lut;
+        lut.rh = {0.5}; lut.ext = {2.0}; lut.ssa = {0.9}; lut.asm_ = {0.7};
+        s.optics_lookup = std::move(lut);
+        cfg.species.push_back(std::move(s));
+        expect_throw(cfg, "(b) 1-point optics_lookup must fail fast");
+    }
+    // (c) lookup list length mismatch
+    {
+        exaero::GocartConfig cfg;
+        auto s = base_species("mismatch");
+        exaero::GocartLegacyOpticsLookup lut;
+        lut.rh = {0.0, 0.5, 0.99}; lut.ext = {2.0, 4.0}; lut.ssa = {0.9, 0.9, 0.9};
+        lut.asm_ = {0.7, 0.7, 0.7};
+        s.optics_lookup = std::move(lut);
+        cfg.species.push_back(std::move(s));
+        expect_throw(cfg, "(c) mismatched lookup lengths must fail fast");
+    }
+    // (d) override whose values.size() != radius_nodes.size()
+    {
+        exaero::GocartConfig cfg;
+        auto s = base_species("bad_override");
+        exaero::SpeciesCurveConfig cc;
+        cc.source_label = "DU";
+        cc.radius_nodes = {1.0e-7, 2.0e-7, 3.0e-7};
+        exaero::SpeciesCurveConfig::Override ov;
+        ov.category = exaero::AttributeCategory::SpectralOptical;
+        ov.attribute_index = exaero::spectral_optical_indices::MASS_EXTINCTION;
+        ov.values = {1.0, 2.0}; // one short of the declared nodes
+        cc.overrides.push_back(std::move(ov));
+        s.mie_table = std::move(cc);
+        cfg.species.push_back(std::move(s));
+        expect_throw(cfg, "(d) override length != radius_nodes must fail fast");
+    }
+    // (e) overrides with empty radius_nodes: the effective axis is the SOURCE axis,
+    // which the reader cannot see; the store's apply_curve_config length guarantee
+    // (same as YAML) must still reject a 2-value override against the 5-node DU axis.
+    {
+        exaero::GocartConfig cfg;
+        auto s = base_species("bad_override_src");
+        exaero::SpeciesCurveConfig cc;
+        cc.source_label = "DU";
+        exaero::SpeciesCurveConfig::Override ov;
+        ov.category = exaero::AttributeCategory::SpectralOptical;
+        ov.attribute_index = exaero::spectral_optical_indices::MASS_EXTINCTION;
+        ov.values = {1.0, 2.0};
+        cc.overrides.push_back(std::move(ov));
+        s.mie_table = std::move(cc);
+        cfg.species.push_back(std::move(s));
+        exaero::GocartPackage pkg;
+        bool threw = false;
+        std::string msg;
+        try { pkg.initialize(cfg); } catch (const std::runtime_error& e) { threw = true; msg = e.what(); }
+        gate(threw, "(e) source-axis override length must still fail fast");
+        gate(msg.find("length 2 != radius nodes 5") != std::string::npos,
+             "(e) store reports the effective source-axis length mismatch");
+    }
+    // Control: a well-formed override (one value per declared node) must NOT throw —
+    // the (d) check cannot be a blanket rejection.
+    {
+        exaero::GocartConfig cfg;
+        auto s = base_species("good_override");
+        exaero::SpeciesCurveConfig cc;
+        cc.source_label = "DU";
+        cc.radius_nodes = {1.0e-7, 2.0e-7, 3.0e-7};
+        exaero::SpeciesCurveConfig::Override ov;
+        ov.category = exaero::AttributeCategory::SpectralOptical;
+        ov.attribute_index = exaero::spectral_optical_indices::MASS_EXTINCTION;
+        ov.values = {1.0, 2.0, 3.0};
+        cc.overrides.push_back(std::move(ov));
+        s.mie_table = std::move(cc);
+        cfg.species.push_back(std::move(s));
+        exaero::GocartPackage pkg;
+        bool threw = false;
+        try { pkg.initialize(cfg); } catch (const std::runtime_error&) { threw = true; }
+        gate(!threw, "control: valid override must initialize cleanly");
+    }
+
+    std::cout << "Structured config fail-fast: PASS" << std::endl;
+}
+
 void test_optical_precision() {
     // High-precision physical validation of our GPU ADT Mie solver against standard analytical results.
     // For n = 1.5, x = 10.0, we have:
@@ -1797,6 +2316,8 @@ int main(int argc, char** argv) {
     test_mie_hot_path_overhead(bench_verbose);
     test_structured_config_unsupported_package();
     test_structured_config_species_parity();
+    test_structured_config_full_equivalence();
+    test_structured_config_failfast();
     test_optical_precision();
     test_gocart_ccn();
     

@@ -289,6 +289,21 @@ public:
     SpeciesCurveConfig mieTable(int i) const override {
         SpeciesCurveConfig cc = *config_.species[i].mie_table; // caller checked engaged
         cc.species_name = config_.species[i].name;            // config name wins (R9)
+        // Fail-fast parity with the YAML path: an override row must supply exactly one
+        // value per declared radius node. When radius_nodes is empty the effective axis
+        // is the SOURCE axis, which StructReader cannot see; the identical guarantee is
+        // enforced downstream in MieTableStore::apply_curve_config against the effective
+        // n_radius (same as YAML), so there is no divergence between the two paths.
+        if (!cc.radius_nodes.empty()) {
+            const std::size_t n_nodes = cc.radius_nodes.size();
+            for (const auto& ov : cc.overrides) {
+                if (ov.values.size() != n_nodes) {
+                    throw std::runtime_error("EX-aero Error: species '" + cc.species_name +
+                        "' override for attribute " + std::to_string(ov.attribute_index) +
+                        " must supply one value per radius_node (fail fast)");
+                }
+            }
+        }
         return cc;
     }
     bool hasActivation() const override { return config_.activation.has_value(); }
