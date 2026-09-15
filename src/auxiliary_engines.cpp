@@ -1,8 +1,23 @@
+/// @file auxiliary_engines.cpp
+/// @brief Kokkos team drivers bridging to the CloudJ / ISORROPIA Fortran
+/// kernels.
+///
+/// Each engine call is guarded by its compile-time macro so the library
+/// links without the optional dependencies. The team league runs over the
+/// SZA-sorted cell order: one team per cell, Kokkos::single(PerTeam) so
+/// the Fortran kernel (which is not thread-parallel) executes once per
+/// cell, and pure .data() pointers plus an explicit extents array are
+/// passed so the bind(c) Fortran signatures receive contiguous arrays.
+///
+/// @note Defensive validation: both entry points scan the input arrays
+/// for NaN/Inf (val != val || val * 0.0 != 0.0) via parallel_reduce and
+/// abort with "FATAL ERROR:" before any kernel launch, so corrupted host
+/// data never reaches the physics.
 #include "auxiliary_engines.hpp"
 #include <iostream>
 #include <stdexcept>
 
-// T008: Declare extern "C" bindings strictly matching Fortran bind(c)
+// : Declare extern "C" bindings strictly matching Fortran bind(c)
 // signatures
 #ifdef EXAERO_WITH_CLOUDJ
 extern "C" void cloudj_driver_compute_jrates_device(const double *meteo_data,
@@ -19,6 +34,7 @@ extern "C" void isorropia_compute_thermo_device(double *conc_data,
 
 namespace exaero {
 
+// @copydoc AuxiliaryEngines::PhotolysisFunctor::operator()
 KOKKOS_INLINE_FUNCTION
 void AuxiliaryEngines::PhotolysisFunctor::operator()(
     const MemberType &team_member) const {
@@ -30,9 +46,9 @@ void AuxiliaryEngines::PhotolysisFunctor::operator()(
         "FATAL ERROR: state.meteorology.data() is null in PhotolysisFunctor");
   }
 
-  // T012: Prevent thread starvation with sub-stepping calculations
+  // : Prevent thread starvation with sub-stepping calculations
   Kokkos::single(Kokkos::PerTeam(team_member), [&]() {
-  // T009: Extract pure .data() pointer and explicit dimensions so Fortran can
+  // : Extract pure.data() pointer and explicit dimensions so Fortran can
   // accept it via bind(c)
 #ifdef EXAERO_WITH_CLOUDJ
     int extents[4] = {static_cast<int>(state.meteorology.extent(0)),
@@ -45,6 +61,7 @@ void AuxiliaryEngines::PhotolysisFunctor::operator()(
   });
 }
 
+// @copydoc AuxiliaryEngines::ThermoFunctor::operator()
 KOKKOS_INLINE_FUNCTION
 void AuxiliaryEngines::ThermoFunctor::operator()(
     const MemberType &team_member) const {
@@ -68,6 +85,7 @@ void AuxiliaryEngines::ThermoFunctor::operator()(
   });
 }
 
+// @copydoc AuxiliaryEngines::compute_photolysis
 void AuxiliaryEngines::compute_photolysis(ExaeroContext &ctx,
                                           UnmanagedDeviceState &state,
                                           double dt) {
@@ -99,6 +117,7 @@ void AuxiliaryEngines::compute_photolysis(ExaeroContext &ctx,
       PhotolysisFunctor(state, ctx.sza_sorted_indices));
 }
 
+// @copydoc AuxiliaryEngines::compute_thermodynamics
 void AuxiliaryEngines::compute_thermodynamics(ExaeroContext &ctx,
                                               UnmanagedDeviceState &state,
                                               double dt) {

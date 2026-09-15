@@ -1,3 +1,17 @@
+/// @file IAerosolPackage_C.cpp
+/// @brief extern "C" implementations bridging Fortran/CCPP to GocartPackage.
+///
+/// Each routine is a thin, exception-safe adapter: validate the opaque
+/// handle, alias the flat column-major host arrays as non-owning mdspan
+/// views (zero-copy), invoke the C++ virtual, then translate any escaped
+/// exception into the CCPP @c errmsg/@c errflg protocol. No C++ exception
+/// is ever allowed to cross the @c extern "C" boundary (undefined
+/// behaviour in Fortran-interop); every body is wrapped in
+/// try/catch(std::exception)/catch(...).
+///
+/// @note The full parameter contracts live on the declarations in
+/// IAerosolPackage_C.h; Doxygen associates this file's definitions with
+/// them automatically, so the generated docs stay single-sourced.
 #include <cstring>
 #include <exaero/AerosolIndices.hpp>
 #include <exaero/Environment.hpp>
@@ -7,18 +21,22 @@
 
 extern "C" {
 
+// @copydoc exaero_create_gocart_package
 exaero_package_t exaero_create_gocart_package() {
   return static_cast<exaero_package_t>(new exaero::GocartPackage());
 }
 
+// @copydoc exaero_free_package
 void exaero_free_package(exaero_package_t pkg) {
   if (pkg) {
     delete static_cast<exaero::GocartPackage *>(pkg);
   }
 }
 
+// @copydoc exaero_initialize_package
 void exaero_initialize_package(exaero_package_t pkg, const char *config_yaml,
                                char *errmsg, int *errflg) {
+  // Fail loudly on a null handle: set errflg and return, never dereference.
   if (!pkg) {
     if (errflg)
       *errflg = 1;
@@ -50,6 +68,7 @@ void exaero_initialize_package(exaero_package_t pkg, const char *config_yaml,
   }
 }
 
+// @copydoc exaero_compute_diagnostics
 void exaero_compute_diagnostics(exaero_package_t pkg, int num_cells,
                                 int num_levels, int num_species,
                                 const double *temp_ptr, const double *pres_ptr,
@@ -110,6 +129,7 @@ void exaero_compute_diagnostics(exaero_package_t pkg, int num_cells,
   }
 }
 
+// @copydoc exaero_compute_emissions
 void exaero_compute_emissions(exaero_package_t pkg, int num_cells,
                               int num_levels, int num_raw_species,
                               int num_target_species, int flux_type_code,
@@ -172,6 +192,7 @@ void exaero_compute_emissions(exaero_package_t pkg, int num_cells,
   }
 }
 
+// @copydoc exaero_compute_optics
 void exaero_compute_optics(exaero_package_t pkg, int num_cells, int num_levels,
                            int num_bands, int num_species,
                            const double *wavelengths_ptr,
@@ -231,6 +252,7 @@ void exaero_compute_optics(exaero_package_t pkg, int num_cells, int num_levels,
   }
 }
 
+// @copydoc exaero_compute_ccn
 void exaero_compute_ccn(exaero_package_t pkg, int num_cells, int num_levels,
                         int num_ss, int num_species, const double *ss_ptr,
                         const double *temp_ptr, const double *rh_ptr,
@@ -294,6 +316,7 @@ void exaero_compute_ccn(exaero_package_t pkg, int num_cells, int num_levels,
 }
 
 // --- Dynamic Species-to-Index Queries (Hole 4) ---
+// @copydoc exaero_get_species_index
 int exaero_get_species_index(exaero_package_t pkg, const char *name) {
   if (!pkg || !name)
     return -1;
@@ -301,6 +324,7 @@ int exaero_get_species_index(exaero_package_t pkg, const char *name) {
       std::string(name));
 }
 
+// @copydoc exaero_get_species_name
 void exaero_get_species_name(exaero_package_t pkg, int index, char *name_out,
                              int max_len) {
   if (!pkg || !name_out || max_len <= 0)
@@ -321,7 +345,8 @@ void exaero_get_species_name(exaero_package_t pkg, int index, char *name_out,
   }
 }
 
-// --- GEOSmie MIE attribute surface (contract §3, CCPP errmsg/errflg) ---
+// --- GEOSmie MIE attribute surface (CCPP errmsg/errflg) ---
+// @copydoc exaero_set_attribute_activation
 void exaero_set_attribute_activation(exaero_package_t pkg,
                                      const char *const *species_names,
                                      int num_species, int categories_mask,
@@ -352,7 +377,7 @@ void exaero_set_attribute_activation(exaero_package_t pkg,
       errmsg[0] = '\0';
   } catch (const std::exception &e) {
     if (errflg)
-      *errflg = 1; // FATAL on bad file, no fallback (FR-009)
+      *errflg = 1; // FATAL on bad file, no fallback
     if (errmsg) {
       std::strncpy(errmsg, e.what(), 255);
       errmsg[255] = '\0';
@@ -365,6 +390,7 @@ void exaero_set_attribute_activation(exaero_package_t pkg,
   }
 }
 
+// @copydoc exaero_set_species_curve_config
 void exaero_set_species_curve_config(
     exaero_package_t pkg, const char *const *species_names,
     const char *const *source_labels, const double *const *radius_nodes,
@@ -404,6 +430,8 @@ void exaero_set_species_curve_config(
           override_attribute_ids && override_attribute_ids[i]) {
         const double *row = override_values[i];
         for (int a = 0; a < nAttr; ++a) {
+          // Reassemble the packed attribute id: high byte = category,
+          // low byte = index-within-category (see header for the code).
           const int code = override_attribute_ids[i][a];
           exaero::SpeciesCurveConfig::Override ov;
           ov.category = static_cast<exaero::AttributeCategory>(code >> 8);
@@ -423,7 +451,7 @@ void exaero_set_species_curve_config(
       errmsg[0] = '\0';
   } catch (const std::exception &e) {
     if (errflg)
-      *errflg = 1; // FATAL on bad config, no fallback (FR-009)
+      *errflg = 1; // FATAL on bad config, no fallback
     if (errmsg) {
       std::strncpy(errmsg, e.what(), 255);
       errmsg[255] = '\0';
@@ -437,6 +465,7 @@ void exaero_set_species_curve_config(
   }
 }
 
+// @copydoc exaero_compute_attributes
 void exaero_compute_attributes(
     exaero_package_t pkg, int num_cells, int num_levels, const double *temp_ptr,
     const double *pres_ptr, const double *dens_ptr, const double *rh_ptr,
@@ -463,14 +492,16 @@ void exaero_compute_attributes(
     exaero::EnvironmentalStateView env{temperature, pressure, air_density,
                                        relative_humidity, layer_thickness};
 
+    // Bulk attribute query targets one species at a time, so the state
+    // axis is length 1 (the host passes only that species' column).
     exaero::View3D<const double> state(state_ptr, num_cells, num_levels, 1);
     exaero::View1D<const double> wavelengths(wavelengths_ptr, num_bands);
 
-    // num_attributes derived from category (never a fixed literal, R10).
+    // num_attributes derived from category (never a fixed literal).
     // Spectral multi-band output is band-major: num_bands * num_attributes
-    // slots (T027). PolarizedMoment slots enumerate the species' (element,
-    // moment) pairs from its curve (data, FR-003); a species without moments
-    // yields 0 slots (FR-008).
+    // slots. PolarizedMoment slots enumerate the species' (element,
+    // moment) pairs from its curve (data); a species without moments
+    // yields 0 slots.
     int num_attr = 0;
     switch (static_cast<exaero::AttributeCategory>(category)) {
     case exaero::AttributeCategory::Microphysical:
@@ -526,6 +557,7 @@ void exaero_compute_attributes(
   }
 }
 
+// @copydoc exaero_query_attribute
 void exaero_query_attribute(exaero_package_t pkg, int species_index,
                             int category, int attribute_index, double rh,
                             double wavelength_m, double *value_out,
@@ -547,8 +579,9 @@ void exaero_query_attribute(exaero_package_t pkg, int species_index,
     const exaero::AttributeStatus st = package->queryAttribute(
         species_index, static_cast<exaero::AttributeCategory>(category),
         attribute_index, rh, wavelength_m, &value, &prov);
-    // FR-008: write the caller's value only on an available/interpolated result
-    // -- never a silent 0 for not-activated / not-in-source.
+    // FR-008: write the caller's value only on an available/interpolated
+    // result -- never a silent 0 for not-activated / not-in-source. The
+    // status code is always reported so the caller can branch on it.
     const bool ok = st == exaero::AttributeStatus::Available ||
                     st == exaero::AttributeStatus::AvailableFile ||
                     st == exaero::AttributeStatus::AvailableConfig ||
@@ -585,6 +618,7 @@ void exaero_query_attribute(exaero_package_t pkg, int species_index,
   }
 }
 
+// @copydoc exaero_get_moment_counts
 int exaero_get_moment_counts(exaero_package_t pkg, int species_index,
                              int *num_pol_out, int *num_moment_out,
                              char *errmsg, int *errflg) {
@@ -622,8 +656,10 @@ int exaero_get_moment_counts(exaero_package_t pkg, int species_index,
   }
 }
 
+// @copydoc exaero_init_environment
 void exaero_init_environment() { exaero::initialize_environment(); }
 
+// @copydoc exaero_finalize_environment
 void exaero_finalize_environment() { exaero::finalize_environment(); }
 
 } // extern "C"

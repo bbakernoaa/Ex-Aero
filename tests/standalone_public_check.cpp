@@ -1,5 +1,5 @@
-// Standalone public-header compile check (research R8, SC-002, contract
-// invariant C8).
+// Standalone public-header compile check (contract
+//).
 //
 // PURPOSE: prove the EX-aero public attribute surface is consumable WITHOUT
 // Kokkos on the include path. This translation unit is compiled by the
@@ -23,21 +23,21 @@
 namespace {
 
 // The status / delivery enums must be int-typed and stable across the C
-// boundary (FR-004).
+// boundary.
 static_assert(std::is_enum_v<exaero::AttributeStatus>,
               "AttributeStatus is an enum");
 static_assert(
     std::is_same_v<std::underlying_type_t<exaero::AttributeStatus>, int>,
     "AttributeStatus underlying type is int (C boundary)");
 static_assert(static_cast<int>(exaero::AttributeStatus::AvailableConfig) == 5,
-              "AttributeStatus ordinal stable (contract §1)");
+              "AttributeStatus ordinal stable");
 static_assert(static_cast<int>(exaero::DeliverySource::Config) == 2,
               "DeliverySource ordinal stable");
 
 // ProvenanceInfo must be a POD that crosses the FFI by value (no Kokkos, no
 // std::string).
 static_assert(std::is_trivially_copyable_v<exaero::ProvenanceInfo>,
-              "ProvenanceInfo must be trivially copyable (FR-004, ADR-002)");
+              "ProvenanceInfo must be trivially copyable");
 
 // The polarized-moment element stride is the documented P11,P12,P33,P34,P22,P44
 // ordering.
@@ -45,13 +45,13 @@ static_assert(exaero::polarized_moment_indices::ELEMENT_STRIDE == 6,
               "element ordering documented (data-model)");
 
 // Curve-mapping config carries dynamic axes: vectors + counts, never fixed-size
-// arrays (R9).
+// arrays.
 static_assert(std::is_same_v<decltype(exaero::SpeciesCurveConfig::radius_nodes),
                              std::vector<double>>,
-              "radius axis is dynamic (R9)");
+              "radius axis is dynamic");
 
 // Compile-time use of the category-bit helper (activation mask builder,
-// FR-010).
+//).
 constexpr int kMask =
     exaero::attribute_category_bit(exaero::AttributeCategory::PolarizedMoment);
 static_assert(kMask == (1 << 2),

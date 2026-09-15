@@ -1,63 +1,93 @@
+!> @file exaero_interface.f90
+!> @brief Fortran iso_c_binding interface to the EX-aero C surface.
+!>
+!> This module is the Fortran mirror of IAerosolPackage_C.h: it declares
+!> the @c bind(c) interfaces (CCPP-standard errmsg/errflg signatures) and
+!> the parameter constants that must stay numerically identical to the
+!> C++ *_indices headers. A host Fortran/CCPP component @c USEs this
+!> module and never sees a C++ type.
+!>
+!> @note ABI contract: every @c bind(c) scalar that the C callee writes
+!> only on some paths (e.g. value_out on an available status) is declared
+!> @c intent(inout), not @c intent(out) — see the rationale at
+!> exaero_query_attribute. intent(out) would let an optimizing compiler
+!> assume the callee always defines the dummy and discard the caller's
+!> pre-call value.
 module exaero_interface
   use iso_c_binding
   implicit none
 
   ! Public indices corresponding exactly to exaero/AerosolIndices.hpp
-  integer(c_int), parameter :: exaero_PM2_5_CONCENTRATION = 1
-  integer(c_int), parameter :: exaero_COLUMN_MASS = 8
-  integer(c_int), parameter :: exaero_EXTINCTION_COEFF = 0
-  integer(c_int), parameter :: exaero_EXTINCTION_AOT = 5
+  integer(c_int), parameter :: exaero_PM2_5_CONCENTRATION = 1  !< [kg/m^3] PM2.5 mass
+  integer(c_int), parameter :: exaero_COLUMN_MASS = 8          !< [kg/m^2] column mass
+  integer(c_int), parameter :: exaero_EXTINCTION_COEFF = 0     !< [1/m] extinction coeff
+  integer(c_int), parameter :: exaero_EXTINCTION_AOT = 5       !< column AOT (550 nm)
 
   ! --- GEOSmie MIE attribute surface indices (exaero/AttributeQuery.hpp) ---
   ! Categories (AttributeCategory)
-  integer(c_int), parameter :: exaero_CAT_MICROPHYSICAL   = 0
-  integer(c_int), parameter :: exaero_CAT_SPECTRAL_OPTICAL = 1
-  integer(c_int), parameter :: exaero_CAT_POLARIZED_MOMENT = 2
+  integer(c_int), parameter :: exaero_CAT_MICROPHYSICAL   = 0  !< (radius, rh)
+  integer(c_int), parameter :: exaero_CAT_SPECTRAL_OPTICAL = 1 !< (radius, rh, lambda)
+  integer(c_int), parameter :: exaero_CAT_POLARIZED_MOMENT = 2 !< (radius, rh, lambda, pol, moment)
   ! Availability status (AttributeStatus)
-  integer(c_int), parameter :: exaero_STATUS_AVAILABLE        = 0
-  integer(c_int), parameter :: exaero_STATUS_AVAILABLE_FILE   = 1
-  integer(c_int), parameter :: exaero_STATUS_INTERPOLATED     = 2
-  integer(c_int), parameter :: exaero_STATUS_NOT_ACTIVATED    = 3
-  integer(c_int), parameter :: exaero_STATUS_NOT_IN_SOURCE    = 4
-  integer(c_int), parameter :: exaero_STATUS_AVAILABLE_CONFIG = 5
+  integer(c_int), parameter :: exaero_STATUS_AVAILABLE        = 0  !< grid point, baked-in
+  integer(c_int), parameter :: exaero_STATUS_AVAILABLE_FILE   = 1  !< grid point, runtime file
+  integer(c_int), parameter :: exaero_STATUS_INTERPOLATED     = 2  !< between grid points
+  integer(c_int), parameter :: exaero_STATUS_NOT_ACTIVATED    = 3  !< deselected by operator
+  integer(c_int), parameter :: exaero_STATUS_NOT_IN_SOURCE    = 4  !< species lacks category
+  integer(c_int), parameter :: exaero_STATUS_AVAILABLE_CONFIG = 5  !< config override curve
   ! Delivery source (DeliverySource)
-  integer(c_int), parameter :: exaero_DELIVERY_BAKED_IN    = 0
-  integer(c_int), parameter :: exaero_DELIVERY_RUNTIME_FILE = 1
-  integer(c_int), parameter :: exaero_DELIVERY_CONFIG      = 2
+  integer(c_int), parameter :: exaero_DELIVERY_BAKED_IN    = 0  !< build-time snapshot
+  integer(c_int), parameter :: exaero_DELIVERY_RUNTIME_FILE = 1 !< optional data file
+  integer(c_int), parameter :: exaero_DELIVERY_CONFIG      = 2  !< runtime config (wins)
   ! Microphysical attribute index codes (microphysical_indices)
-  integer(c_int), parameter :: exaero_WET_PARTICLE_DENSITY = 0
-  integer(c_int), parameter :: exaero_GROWTH_FACTOR        = 1
-  integer(c_int), parameter :: exaero_EFFECTIVE_RADIUS     = 2
-  integer(c_int), parameter :: exaero_MASS_MEAN_RADIUS     = 3
-  integer(c_int), parameter :: exaero_BIN_LOWER_RADIUS     = 4
-  integer(c_int), parameter :: exaero_BIN_UPPER_RADIUS     = 5
-  integer(c_int), parameter :: exaero_VOLUME_PER_MASS      = 6
-  integer(c_int), parameter :: exaero_AREA_PER_MASS        = 7
-  integer(c_int), parameter :: exaero_PARTICLE_MASS        = 8
-  integer(c_int), parameter :: exaero_NUM_MICROPHYSICAL    = 9
+  integer(c_int), parameter :: exaero_WET_PARTICLE_DENSITY = 0  !< [kg/m^3]
+  integer(c_int), parameter :: exaero_GROWTH_FACTOR        = 1  !< wet/dry radius, >= 1
+  integer(c_int), parameter :: exaero_EFFECTIVE_RADIUS     = 2  !< [m]
+  integer(c_int), parameter :: exaero_MASS_MEAN_RADIUS     = 3  !< [m]
+  integer(c_int), parameter :: exaero_BIN_LOWER_RADIUS     = 4  !< [m]
+  integer(c_int), parameter :: exaero_BIN_UPPER_RADIUS     = 5  !< [m]
+  integer(c_int), parameter :: exaero_VOLUME_PER_MASS      = 6  !< [m^3/kg]
+  integer(c_int), parameter :: exaero_AREA_PER_MASS        = 7  !< [m^2/kg]
+  integer(c_int), parameter :: exaero_PARTICLE_MASS        = 8  !< [kg]
+  integer(c_int), parameter :: exaero_NUM_MICROPHYSICAL    = 9  !< slot count (extent)
   ! Spectral optical attribute index codes (spectral_optical_indices)
-  integer(c_int), parameter :: exaero_QEXT       = 0
-  integer(c_int), parameter :: exaero_QSCA       = 1
-  integer(c_int), parameter :: exaero_QABS       = 2
-  integer(c_int), parameter :: exaero_BEXT       = 3
-  integer(c_int), parameter :: exaero_BSCA       = 4
-  integer(c_int), parameter :: exaero_BBCK       = 5
-  integer(c_int), parameter :: exaero_LIDAR_RATIO = 6
-  integer(c_int), parameter :: exaero_ASYM_FACTOR = 7
-  integer(c_int), parameter :: exaero_SSA         = 8
-  integer(c_int), parameter :: exaero_REFREAL     = 9
-  integer(c_int), parameter :: exaero_REFIMAG     = 10
-  integer(c_int), parameter :: exaero_NUM_SPECTRAL = 11
+  integer(c_int), parameter :: exaero_QEXT       = 0   !< Q_ext dimensionless, >= 0
+  integer(c_int), parameter :: exaero_QSCA       = 1   !< Q_sca in [0, Q_ext]
+  integer(c_int), parameter :: exaero_QABS       = 2   !< Q_abs dimensionless, >= 0
+  integer(c_int), parameter :: exaero_BEXT       = 3   !< mass extinction [m^2/kg]
+  integer(c_int), parameter :: exaero_BSCA       = 4   !< mass scattering [m^2/kg]
+  integer(c_int), parameter :: exaero_BBCK       = 5   !< mass backscatter [m^2/kg/sr]
+  integer(c_int), parameter :: exaero_LIDAR_RATIO = 6  !< [sr], guarded division
+  integer(c_int), parameter :: exaero_ASYM_FACTOR = 7  !< g in [-1, 1]
+  integer(c_int), parameter :: exaero_SSA         = 8  !< single-scat. albedo in [0, 1]
+  integer(c_int), parameter :: exaero_REFREAL     = 9  !< n (wet), > 0
+  integer(c_int), parameter :: exaero_REFIMAG     = 10 !< k (wet), >= 0
+  integer(c_int), parameter :: exaero_NUM_SPECTRAL = 11 !< slot count (extent)
   ! Polarized moment (polarized_moment_indices): single attribute, element ordering
-  ! P11,P12,P33,P34,P22,P44; moment count is per-species DATA (never hardcoded, R10).
-  integer(c_int), parameter :: exaero_PMOM_ELEMENT_STRIDE = 6
-  integer(c_int), parameter :: exaero_PHASE_FUNCTION_MOMENT = 0
+  ! P11,P12,P33,P34,P22,P44; moment count is per-species DATA (never hardcoded).
+  integer(c_int), parameter :: exaero_PMOM_ELEMENT_STRIDE = 6  !< P11,P12,P33,P34,P22,P44
+  integer(c_int), parameter :: exaero_PHASE_FUNCTION_MOMENT = 0 !< addressed by (element, moment)
 
-  ! C-interoperable opaque derived type representing the EX-aero package instance
+  !> @brief C-interoperable opaque handle to the EX-aero package instance.
+  !>
+  !> Wraps the C++ @c exaero_package_t (@c void*) so the Fortran side can
+  !> hold it as a typed value and pass it @c value to the bind(c) routines
+  !> without ever dereferencing the pointer.
   type, bind(c) :: exaero_package_t
-    type(c_ptr) :: ptr = c_null_ptr
+    type(c_ptr) :: ptr = c_null_ptr  !< Opaque pointer to the C++ object.
   end type exaero_package_t
 
+  !> @cond
+  ! The bind(c) procedure contracts are documented once on the matching
+  ! extern "C" declarations in IAerosolPackage_C.h (single source of truth);
+  ! hiding them here avoids duplicate doc pages in the generated reference.
+  !> @brief C-binding interfaces (CCPP-standard error signatures).
+  !>
+  !> Each @c bind(c) procedure maps one-to-one onto the extern "C" routine
+  !> of the same name in IAerosolPackage_C.h. Multidimensional arrays are
+  !> assumed-shape-free @c (*) arrays in Fortran column-major order, so a
+  !> host (cell, level, species) array forwards zero-copy. Refer to the C
+  !> header for the full per-argument unit/index contract.
   ! Public C-bindings interfaces (CCPP-standard error signatures)
   interface
     function exaero_create_gocart_package() result(pkg) bind(c, name="exaero_create_gocart_package")
@@ -146,7 +176,7 @@ module exaero_interface
       integer(c_int), value :: max_len
     end subroutine exaero_get_species_name
 
-    ! --- GEOSmie MIE attribute surface (contract §4, CCPP-standard error signatures) ---
+    ! --- GEOSmie MIE attribute surface (CCPP-standard error signatures) ---
     ! Array-of-pointer C arguments (const char* const*, const double* const*) bind to a
     ! single type(c_ptr), value; the caller passes c_loc of a target array of c_ptr.
     ! const int* arrays bind to intent(in) arrays (no VALUE, which conflicts with dimension).
@@ -210,7 +240,7 @@ module exaero_interface
       integer(c_int), value :: species_index, category, attribute_index
       real(c_double), value :: rh, wavelength_m
       ! intent(inout), NOT intent(out): the C side writes value_out ONLY on an
-      ! available/interpolated status (FR-008, never a silent 0). intent(out) would let
+      ! available/interpolated status (never a silent 0). intent(out) would let
       ! an optimizing compiler assume the callee always defines it and discard the
       ! caller's pre-call value on a not-in-source result (caught only in Release).
       real(c_double), intent(inout) :: value_out
@@ -223,7 +253,7 @@ module exaero_interface
       integer(c_int), intent(out) :: errflg
     end subroutine exaero_query_attribute
 
-    ! Polarized-moment count query (FR-003): num_slots = num_pol * num_moment for the
+    ! Polarized-moment count query num_slots = num_pol * num_moment for the
     ! species' curve (data, never a literal). Both are 0 for a species without moments.
     function exaero_get_moment_counts(pkg, species_index, num_pol_out, num_moment_out, &
         errmsg, errflg) result(rc) bind(c, name="exaero_get_moment_counts")
@@ -242,5 +272,6 @@ module exaero_interface
     subroutine exaero_finalize_environment() bind(c, name="exaero_finalize_environment")
     end subroutine exaero_finalize_environment
   end interface
+  !> @endcond
 
 end module exaero_interface

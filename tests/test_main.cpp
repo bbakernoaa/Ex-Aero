@@ -227,7 +227,7 @@ void test_gocart_optics() {
 }
 
 void test_gocart_arbitrary_lookup_length() {
-  // ADR-003 R10 / invariant C12: the RH lookup path must honor ANY declared
+  // / : the RH lookup path must honor ANY declared
   // length. The retired fixed-capacity arrays capped the bracket scan at 6
   // points; a prime (7-point) and a short (3-point) table must now both
   // interpolate correctly.
@@ -309,11 +309,11 @@ void test_gocart_arbitrary_lookup_length() {
   expected = 6.9e-3 + 8.0e-3;
   assert(std::abs(total_ext - expected) / expected < 1e-9);
 
-  std::cout << "GOCART Arbitrary Lookup Length (R10/C12): PASS" << std::endl;
+  std::cout << "GOCART Arbitrary Lookup Length PASS" << std::endl;
 }
 
 void test_gocart_lookup_length_mismatch_fails() {
-  // Fail-fast, no silent fallback (FR-009): mismatched lookup list lengths must
+  // Fail-fast, no silent fallback mismatched lookup list lengths must
   // abort.
   std::string yaml_string = R"(
     species:
@@ -343,12 +343,12 @@ void test_gocart_lookup_length_mismatch_fails() {
   std::cout << "GOCART Lookup Length Mismatch Fail-Fast: PASS" << std::endl;
 }
 
-// --- GEOSmie MIE attribute surface: US1 microphysical golden tests (T015,
-// T016) --- Golden values are the pinned snapshot's float64-widened grid values
-// (FR-005, C1); provenance must carry unit + version + citation + delivery
-// source on every value (C5).
+// --- GEOSmie MIE attribute surface: microphysical golden tests (
+//) --- Golden values are the pinned snapshot's float64-widened grid values
+// ; provenance must carry unit + version + citation + delivery
+// source on every value.
 
-// Relative tolerance for grid-point reproduction (FR-005).
+// Relative tolerance for grid-point reproduction.
 static const double kGridTol = 1e-7;
 
 // Six baked species configured by their source labels so the package resolves
@@ -416,9 +416,9 @@ namespace mie_micro {
 struct Golden {
   const char *species;
   int index;           // package species index
-  double reff00;       // rEff(bin0, rh=0)      [m]
-  double mass00;       // rMass(bin0, rh=0)     [kg]
-  double rlow0, rupp0; // bin boundaries        [m]
+  double reff00;       // rEff(bin0, rh=0) [m]
+  double mass00;       // rMass(bin0, rh=0) [kg]
+  double rlow0, rupp0; // bin boundaries [m]
   double growth_rh50;  // rEff(bin0, rh=0.5) / rEff(bin0, rh=0)
   double wetdens00;    // rMass/(4/3 pi rEff^3) at (bin0, rh=0) [kg m^-3]
   double volmass00, areamass00;
@@ -511,8 +511,7 @@ void test_mie_baked_in_microphysical() {
     assert(st == exaero::AttributeStatus::Available);
     check_close(v, g.areamass00, g.species);
   }
-  std::cout << "MIE Baked-in Microphysical Grid Values (FR-005/C1): PASS"
-            << std::endl;
+  std::cout << "MIE Baked-in Microphysical Grid Values PASS" << std::endl;
 }
 
 void test_mie_provenance() {
@@ -547,19 +546,19 @@ void test_mie_provenance() {
 
   // mass_mean_radius has no source variable in the pinned band tables
   // (data-model implement-time reconciliation): explicit NotInSource, never a
-  // silent 0 (FR-008).
+  // silent 0.
   auto st = package.queryAttribute(0, exaero::AttributeCategory::Microphysical,
                                    MASS_MEAN_RADIUS, 0.0, 0.0, &v, &p);
   assert(st == exaero::AttributeStatus::NotInSource);
 
-  std::cout << "MIE Provenance (unit+version+citation+delivery, C5): PASS"
+  std::cout << "MIE Provenance (unit+version+citation+delivery): PASS"
             << std::endl;
 }
 
 void test_mie_not_available() {
   using namespace exaero::microphysical_indices;
   // A species with no bound curve: explicit NotInSource, value untouched
-  // (FR-008/C4).
+  //.
   std::string yaml = std::string(kMieSixYaml) +
                      R"YAML(      - name: "MYSTERY"
         dry_density: 1000.0
@@ -581,7 +580,7 @@ void test_mie_not_available() {
   assert(st == exaero::AttributeStatus::NotInSource);
   assert(v == -777.0);
 
-  // Deactivate microphysical for DU only: explicit NotActivated (FR-010/C4).
+  // Deactivate microphysical for DU only: explicit NotActivated.
   package.setAttributeActivation(
       {"DU"},
       exaero::attribute_category_bit(
@@ -610,8 +609,7 @@ void test_mie_not_available() {
               exaero::AttributeCategory::SpectralOptical),
       "");
 
-  std::cout << "MIE Explicit Not-Available Statuses (FR-008/C4): PASS"
-            << std::endl;
+  std::cout << "MIE Explicit Not-Available Statuses PASS" << std::endl;
 }
 
 // Spectral RRTMG-band goldens at (radius bin 0, rh=0.5 grid point, band
@@ -682,7 +680,7 @@ void test_mie_rrtmg_spectral() {
     q(REFRACTIVE_INDEX_REAL, g.n);
     q(REFRACTIVE_INDEX_IMAG, g.k);
 
-    // Physical bounds (SC-005/C3): ssa in [0,1], g in [-1,1], qext/qsca/bext >=
+    // Physical bounds ssa in [0,1], g in [-1,1], qext/qsca/bext >=
     // 0.
     double ssa_v = 0.0, g_v = 0.0, qe = 0.0;
     package.queryAttribute(g.index, exaero::AttributeCategory::SpectralOptical,
@@ -695,8 +693,7 @@ void test_mie_rrtmg_spectral() {
     assert(g_v >= -1.0 - 1e-6 && g_v <= 1.0 + 1e-6);
     assert(qe >= 0.0);
   }
-  std::cout << "MIE RRTMG Spectral Grid Values (FR-002/FR-005/C1): PASS"
-            << std::endl;
+  std::cout << "MIE RRTMG Spectral Grid Values PASS" << std::endl;
 }
 
 void test_mie_interpolation() {
@@ -708,9 +705,9 @@ void test_mie_interpolation() {
   // through a config curve bound to bin 1). SS is hygroscopic: qext varies in
   // RH and band index. Corners at (b=1, rh in {0.5,0.550000011920929}, band in
   // {3.0,4.0}):
-  //   v00=0.1515267938375473 v10=0.15872181951999664
-  //   v01=0.22853879630565643 v11=0.24023324251174927
-  // Reference (research R3): linear in RH, LINEAR-IN-LOG band index.
+  // v00=0.1515267938375473 v10=0.15872181951999664
+  // v01=0.22853879630565643 v11=0.24023324251174927
+  // Reference linear in RH, LINEAR-IN-LOG band index.
   auto &store = exaero::MieTableStore::instance();
   double v = 0.0;
   exaero::Provenance prov{};
@@ -730,12 +727,11 @@ void test_mie_interpolation() {
                           /*radius_index=*/1, &v, &prov);
     assert(st == exaero::AttributeStatus::Interpolated);
     assert(prov.interpolated == 1);
-    // Tolerance 1e-5 RELATIVE (FR-006/C2).
+    // Tolerance 1e-5 RELATIVE.
     const double tol = 1e-5 * std::abs(cse.want);
     assert(std::abs(v - cse.want) <= tol);
   }
-  std::cout << "MIE Off-Grid Interpolation (FR-006/C2, log-wavelength): PASS"
-            << std::endl;
+  std::cout << "MIE Off-Grid Interpolation (log-wavelength): PASS" << std::endl;
 }
 
 void test_mie_compute_attributes_multiband() {
@@ -744,7 +740,7 @@ void test_mie_compute_attributes_multiband() {
   package.initialize(kMieSixYaml);
 
   // Three bands: two exact grid points (band 3, band 4) and one off-grid (3.5).
-  // Output is band-major: slot = band * NUM_ATTRIBUTES + attribute (T027).
+  // Output is band-major: slot = band * NUM_ATTRIBUTES + attribute.
   const int num_cells = 1, num_levels = 1;
   double temp[1] = {298.0}, pres[1] = {101325.0}, dens[1] = {1.2};
   double rh_raw[1] = {0.5}, thick[1] = {100.0}, state_raw[1] = {1.0e-6};
@@ -812,13 +808,12 @@ void test_mie_compute_attributes_multiband() {
   check_close(micro_attrs[exaero::microphysical_indices::EFFECTIVE_RADIUS],
               9.894295516232887e-08, "SS reff @ rh=0.5");
 
-  std::cout << "MIE Multi-Band computeAttributes (FR-002/T027): PASS"
-            << std::endl;
+  std::cout << "MIE Multi-Band computeAttributes PASS" << std::endl;
 }
 
 void test_mie_monochromatic_file() {
   using namespace exaero::spectral_optical_indices;
-  // Runtime-file path (T029/FR-012/C7): a portable file replaces the 30-band
+  // Runtime-file path a portable file replaces the 30-band
   // RRTMG lambda axis with a 3-wavelength monochromatic set and adds a
   // file-only category (polarized moments). The merged curve must surface the
   // FILE values (delivery=file) at the new wavelengths and report the old band
@@ -854,8 +849,7 @@ activation:
   check_close(v, 1.9339340925216675, "mono 0.55um qext");
   assert(p.delivery_source ==
          static_cast<int>(exaero::DeliverySource::RuntimeFile));
-  assert(p.num_lambda ==
-         3); // the file's monochromatic axis length is data (R10)
+  assert(p.num_lambda == 3); // the file's monochromatic axis length is data
 
   // 0.355 um = band-3 * 1.30 (shorter wavelength -> larger extinction,
   // monotone).
@@ -872,7 +866,7 @@ activation:
 
   // The old RRTMG band coordinate 3.0 is far above the new axis max (1.33e-6):
   // the documented above-max clamp returns the last point's value, never
-  // extrapolated garbage and never a silent 0 (FR-007). A NaN wavelength is
+  // extrapolated garbage and never a silent 0. A NaN wavelength is
   // rejected outright.
   st = package.queryAttribute(0, exaero::AttributeCategory::SpectralOptical,
                               EXTINCTION_EFFICIENCY, 0.5, 3.0, &v, nullptr);
@@ -883,8 +877,7 @@ activation:
                               EXTINCTION_EFFICIENCY, 0.5, std::nan(""),
                               &sentinel, nullptr);
   assert(st == exaero::AttributeStatus::NotInSource);
-  assert(sentinel ==
-         -777.0); // NaN wavelength rejected, value untouched (FR-008)
+  assert(sentinel == -777.0); // NaN wavelength rejected, value untouched
 
   // Microphysical fields survive the spectral-axis replacement (radius/rh
   // inherited).
@@ -894,12 +887,11 @@ activation:
   assert(st == exaero::AttributeStatus::Available);
   check_close(v, 6.358845325848961e-07, "mono DU reff survives");
 
-  std::cout << "MIE Monochromatic Runtime File (FR-012/C7/T029): PASS"
-            << std::endl;
+  std::cout << "MIE Monochromatic Runtime File PASS" << std::endl;
 }
 
 void test_mie_moments_not_available() {
-  // Polarized phase-function moments (FR-003/FR-008/FR-013, T030): the DU
+  // Polarized phase-function moments the DU
   // runtime file carries a rank-5 pmom array over (radius, rh, lambda, pol,
   // moment). The attribute_index encodes the (element, moment) pair as idx =
   // moment*ELEMENT_STRIDE
@@ -967,7 +959,7 @@ activation:
 
   // (2) Out-of-range (element, moment) decomposition: moment index 3 (idx 18)
   // does not exist in this file (M = 3) -> explicit NotInSource, value
-  // untouched (FR-008).
+  // untouched.
   v = -777.0;
   auto st =
       package.queryAttribute(0, exaero::AttributeCategory::PolarizedMoment,
@@ -978,7 +970,7 @@ activation:
                               0.5, band, &v, nullptr);
   assert(st == exaero::AttributeStatus::NotInSource);
 
-  // (3) Off-grid RH interpolates between moment tables (FR-006). DU is
+  // (3) Off-grid RH interpolates between moment tables. DU is
   // RH-invariant in qext, so the value is unchanged but the provenance must
   // flag interpolation.
   v = -777.0;
@@ -988,7 +980,7 @@ activation:
   assert(p.interpolated == 1);
   check_close(v, qe00, "pmom RH-interpolated (DU is RH-invariant)");
 
-  // (4) NaN RH rejected, value untouched (FR-007 never silent 0).
+  // (4) NaN RH rejected, value untouched (never silent 0).
   v = -777.0;
   st = package.queryAttribute(0, exaero::AttributeCategory::PolarizedMoment,
                               PHASE_FUNCTION_MOMENT, std::nan(""), band, &v,
@@ -996,7 +988,7 @@ activation:
   assert(st == exaero::AttributeStatus::NotInSource);
   assert(v == -777.0);
 
-  // (5) A spherical species with no moments: explicit NotInSource (FR-008,
+  // (5) A spherical species with no moments: explicit NotInSource (
   // scenario 2).
   v = -777.0;
   st = package.queryAttribute(1, exaero::AttributeCategory::PolarizedMoment,
@@ -1005,7 +997,7 @@ activation:
   assert(v == -777.0);
 
   // (6) Category deselected -> explicit NotActivated even though data exists
-  // (FR-010).
+  //.
   package.setAttributeActivation(
       {},
       exaero::attribute_category_bit(exaero::AttributeCategory::Microphysical) |
@@ -1016,7 +1008,7 @@ activation:
                               PHASE_FUNCTION_MOMENT, 0.5, band, &v, nullptr);
   assert(st == exaero::AttributeStatus::NotActivated);
 
-  std::cout << "MIE Polarized Moments (FR-003/FR-008/T030): PASS" << std::endl;
+  std::cout << "MIE Polarized Moments PASS" << std::endl;
 }
 
 // Build a DU-bound package whose activation loads `file` as the runtime data
@@ -1042,11 +1034,11 @@ void test_mie_file_override_and_failfast() {
   using namespace exaero::spectral_optical_indices;
   const std::string dir(EXAERO_TEST_DATA_DIR);
 
-  // (1) Valid override (C7/FR-012): the DU override file redefines bext on the
+  // (1) Valid override the DU override file redefines bext on the
   // SAME
-  //     30-band axis with a distinct constant. The query must report the FILE
-  //     value with delivery=file, proving file overrides baked for the same
-  //     key.
+  // 30-band axis with a distinct constant. The query must report the FILE
+  // value with delivery=file, proving file overrides baked for the same
+  // key.
   {
     exaero::GocartPackage package;
     package.initialize(mie_file_yaml(dir + "/mie_dust_override.txt"));
@@ -1061,8 +1053,8 @@ void test_mie_file_override_and_failfast() {
            static_cast<int>(exaero::DeliverySource::RuntimeFile));
   }
 
-  // (2) Fail-fast (C6/FR-009): each corrupt file must abort initialize() with a
-  //     "FATAL ERROR:" diagnostic and NO silent fallback to baked-in data.
+  // (2) Fail-fast each corrupt file must abort initialize() with a
+  // "FATAL ERROR:" diagnostic and NO silent fallback to baked-in data.
   struct CorruptCase {
     const char *file;
     const char *why;
@@ -1084,18 +1076,16 @@ void test_mie_file_override_and_failfast() {
       msg = e.what();
     }
     assert(threw); // must abort, never silently fall back
-    assert(msg.find("FATAL ERROR:") !=
-           std::string::npos); // clear diagnostic (FR-009)
+    assert(msg.find("FATAL ERROR:") != std::string::npos); // clear diagnostic
   }
 
-  std::cout << "MIE File Override + Fail-Fast (FR-009/FR-012/C6/C7/T036): PASS"
-            << std::endl;
+  std::cout << "MIE File Override + Fail-Fast PASS" << std::endl;
 }
 
 void test_mie_default_set() {
   using namespace exaero::microphysical_indices;
   using namespace exaero::spectral_optical_indices;
-  // Invariant C9 / FR-017: with NO runtime file, the default activation is
+  // Invariant / : with NO runtime file, the default activation is
   // exactly the pinned baked-in set -- every bound species microphysical +
   // RRTMG-band spectral -- while the monochromatic spectral axis and polarized
   // moments are file-only. The pinned release ships RRTMG band tables for six
@@ -1124,7 +1114,7 @@ void test_mie_default_set() {
     assert(p.num_lambda == 30); // the full RRTMG band set is active by default
   }
 
-  // (3) Polarized moments are OFF in the default mask (FR-010/FR-017):
+  // (3) Polarized moments are OFF in the default mask
   // NotActivated.
   auto st = package.queryAttribute(
       0, exaero::AttributeCategory::PolarizedMoment,
@@ -1134,7 +1124,7 @@ void test_mie_default_set() {
 
   // (4) Even with the category force-activated, the baked curves carry no pmom
   // field:
-  //     explicit NotInSource -- moments require the runtime file (FR-008/C9).
+  // explicit NotInSource -- moments require the runtime file.
   package.setAttributeActivation(
       {},
       exaero::attribute_category_bit(exaero::AttributeCategory::Microphysical) |
@@ -1150,10 +1140,9 @@ void test_mie_default_set() {
   assert(st == exaero::AttributeStatus::NotInSource);
   int n_pol = -1, n_mom = -1;
   package.momentCounts(0, &n_pol, &n_mom);
-  assert(n_pol == 0 &&
-         n_mom == 0); // no moment data => no slots (FR-003 data-driven)
+  assert(n_pol == 0 && n_mom == 0); // no moment data => no slots (data-driven)
 
-  std::cout << "MIE Default Baked Set (FR-017/C9/T037): PASS" << std::endl;
+  std::cout << "MIE Default Baked Set PASS" << std::endl;
 }
 
 void test_mie_config_curves() {
@@ -1162,7 +1151,7 @@ void test_mie_config_curves() {
   auto &store = exaero::MieTableStore::instance();
   const std::string dir(EXAERO_TEST_DATA_DIR);
 
-  // ---- C11 config-invariance (research R9/R10, ADR-003)
+  // ---- config-invariance
   // --------------------------- A config species bound to DU that declares its
   // OWN radius nodes -- the five source nodes PLUS one inserted node (1.8e-6,
   // between source bins 1 and 2) -- must reproduce the baked curve bit-for-bit
@@ -1202,7 +1191,7 @@ void test_mie_config_curves() {
                             EFFECTIVE_RADIUS, 0.5, 0.0, b, &du_v, nullptr);
       assert(s1 == exaero::AttributeStatus::Available); // still baked delivery
       assert(s0 == exaero::AttributeStatus::Available);
-      check_close(cfg_v, du_v, "C11 reff source-node invariance");
+      check_close(cfg_v, du_v, "reff source-node invariance");
       // Spectral (rank-3 radius,rh,lambda) at the band-3 grid point.
       double cfg_s = 0.0, du_s = -1.0;
       s1 = store.query("dust_cfg", exaero::AttributeCategory::SpectralOptical,
@@ -1210,7 +1199,7 @@ void test_mie_config_curves() {
       s0 = store.query("DU", exaero::AttributeCategory::SpectralOptical,
                        EXTINCTION_EFFICIENCY, 0.5, 3.0, b, &du_s, nullptr);
       assert(s1 == exaero::AttributeStatus::Available);
-      check_close(cfg_s, du_s, "C11 qext source-node invariance");
+      check_close(cfg_s, du_s, "qext source-node invariance");
     }
     // The public surface at the default solver node (0) is likewise unchanged.
     double v = 0.0;
@@ -1219,12 +1208,11 @@ void test_mie_config_curves() {
         package.queryAttribute(0, exaero::AttributeCategory::Microphysical,
                                EFFECTIVE_RADIUS, 0.0, 0.0, &v, &p);
     assert(st == exaero::AttributeStatus::Available);
-    check_close(v, 6.358845325848961e-07, "C11 queryAttribute bin0 baked");
-    assert(p.num_radius ==
-           6); // the curve really carries the extra node (data, R10)
+    check_close(v, 6.358845325848961e-07, "queryAttribute bin0 baked");
+    assert(p.num_radius == 6); // the curve really carries the extra node (data)
   }
 
-  // ---- C12 no-hardcoding gate (invariant C12, R10)
+  // ---- no-hardcoding gate
   // -------------------------------- A file-only species "DUST7" (absent from
   // the baked set) declares a PRIME radius count (7) and a NON-SOURCE RH length
   // (7) over 3 bands -- none of these match the baked DU 5x36x30 layout.
@@ -1252,13 +1240,13 @@ activation:
     double v = 0.0;
     exaero::ProvenanceInfo p{};
     // rh=0.495 (index 3) and band 2.0 (index 1) are exact grid points; radius
-    // node 3. qext[b,h,l] = (b+1) + 0.1*h + 0.01*l  =>  qext[3,3,1] = 4 + 0.3 +
+    // node 3. qext[b,h,l] = (b+1) + 0.1*h + 0.01*l => qext[3,3,1] = 4 + 0.3 +
     // 0.01 = 4.31.
     auto st =
         package.queryAttribute(0, exaero::AttributeCategory::SpectralOptical,
                                EXTINCTION_EFFICIENCY, 0.495, 2.0, &v, &p);
     assert(st == exaero::AttributeStatus::AvailableFile);
-    check_close(v, 4.31, "C12 DUST7 qext grid point");
+    check_close(v, 4.31, "DUST7 qext grid point");
     // The reported extents are the FILE's prime counts, not any baked literal.
     assert(p.num_radius == 7);
     assert(p.num_rh == 7);
@@ -1293,10 +1281,10 @@ activation:
                               wavelengths, attributes_out, nullptr);
     // Band 2 (index 1) at radius node 3, rh index 3: qext = 4.31 (grid point).
     check_close(attrs[1 * kSpecAttr + EXTINCTION_EFFICIENCY], 4.31,
-                "C12 computeAttributes band2 qext");
+                "computeAttributes band2 qext");
   }
 
-  // ---- C13 override precedence config > file > baked (research R9, FR-012)
+  // ---- override precedence config > file > baked
   // --------- The SAME attribute (DU bext) is set at all three layers; the
   // winning layer must be reported by provenance.delivery_source at each stage.
   {
@@ -1325,7 +1313,7 @@ activation:
       assert(st == exaero::AttributeStatus::AvailableFile);
       assert(p.delivery_source ==
              static_cast<int>(exaero::DeliverySource::RuntimeFile));
-      check_close(v, 1234.5, "C13 file beats baked");
+      check_close(v, 1234.5, "file beats baked");
       assert(v != baked_v); // file value really differs from the baked golden
     }
     // Stage 3 -- config overrides file: the SAME file is loaded, then a config
@@ -1360,16 +1348,16 @@ activation:
       assert(st == exaero::AttributeStatus::AvailableConfig);
       assert(p.delivery_source ==
              static_cast<int>(exaero::DeliverySource::Config));
-      check_close(v, 999.0, "C13 config beats file beats baked");
+      check_close(v, 999.0, "config beats file beats baked");
     }
   }
 
-  std::cout << "MIE Config Curves: invariance + no-hardcoding + precedence "
-               "(R9/R10/C11/C12/C13/T044): PASS"
+  std::cout << "MIE Config Curves: invariance + no-hardcoding + precedence: "
+               "PASS"
             << std::endl;
 }
 
-// --- T038 (SC-008 / invariant C10): coarse per-timestep overhead gate
+// --- coarse per-timestep overhead gate
 // ----------------- The curve-bound hot path must add <=1% to the per-timestep
 // diagnostics+optics step relative to the identical analytical (ADT/Kohler)
 // path, and the timestep loop must perform ZERO host->device transfers: the
@@ -1463,7 +1451,7 @@ void test_mie_hot_path_overhead(bool verbose) {
   exaero::View3D<const double> state(state_raw.data(), kCells, kLevels, 1);
   // Band coordinates INSIDE the DU curve domain (indices 1..30): the table read
   // is ACTIVE (replaces the ADT series), which is the default-activation hot
-  // path FR-015.
+  // path.
   double wl_raw[3] = {3.0, 4.0, 5.0};
   exaero::View1D<const double> wavelengths(wl_raw, 3);
 
@@ -1486,7 +1474,7 @@ void test_mie_hot_path_overhead(bool verbose) {
     best_curve = std::min(best_curve, c);
   }
 
-  // (1) SC-008/C10: curve path within 1% of the analytical baseline
+  // (1) /: curve path within 1% of the analytical baseline
   // (min-of-rounds). The strict gate is meaningful in OPTIMIZED builds (the
   // spec's performance target is the production step; measurements here: ratio
   // ~0.78 Release). In a Debug build the un-inlined ADT Mie series and the
@@ -1495,17 +1483,17 @@ void test_mie_hot_path_overhead(bool verbose) {
   // proxy (2) is build-independent. assert() would compile out under NDEBUG, so
   // this gate throws explicitly in both build types.
   if (verbose) {
-    std::cout << "  overhead bench: adt=" << best_adt
+    std::cout << "overhead bench: adt=" << best_adt
               << " ms / curve=" << best_curve << " ms over " << kSteps
               << " steps (ratio " << best_curve / best_adt << ")" << std::endl;
   }
 #ifdef NDEBUG
-  constexpr double kRatioLimit = 1.01; // SC-008 strict (Release)
+  constexpr double kRatioLimit = 1.01; // strict (Release)
 #else
   constexpr double kRatioLimit = 1.25; // Debug: order-of-regression guard only
 #endif
   if (!(best_curve <= best_adt * kRatioLimit)) {
-    throw std::runtime_error("FATAL ERROR: SC-008 overhead gate: curve path " +
+    throw std::runtime_error("FATAL ERROR: overhead gate: curve path" +
                              std::to_string(best_curve) + " ms vs analytical " +
                              std::to_string(best_adt) + " ms (ratio " +
                              std::to_string(best_curve / best_adt) + " > " +
@@ -1514,8 +1502,8 @@ void test_mie_hot_path_overhead(bool verbose) {
 
   // (2) Zero-transfer proxy: a hidden per-step (or first-step lazy) H2D would
   // inflate
-  //     the opening steps far above the median. Median-of-steps vs
-  //     mean-of-first-20.
+  // the opening steps far above the median. Median-of-steps vs
+  // mean-of-first-20.
   std::vector<double> sorted = curve_steps;
   std::sort(sorted.begin(), sorted.end());
   const double median = sorted[sorted.size() / 2];
@@ -1524,21 +1512,21 @@ void test_mie_hot_path_overhead(bool verbose) {
     head += curve_steps[i];
   head /= 20.0;
   if (verbose) {
-    std::cout << "  step flatness: median=" << median
+    std::cout << "step flatness: median=" << median
               << " ms, first20 mean=" << head << " ms" << std::endl;
   }
   if (!(head <= std::max(median * 3.0, median + 0.05))) {
     throw std::runtime_error(
-        "FATAL ERROR: SC-008 zero-transfer proxy: first-20-step mean " +
+        "FATAL ERROR: zero-transfer proxy: first-20-step mean" +
         std::to_string(head) + " ms vs median " + std::to_string(median) +
         " ms (per-step transfer suspected)");
   }
 
-  std::cout << "MIE Hot-Path Overhead (SC-008/C10/T038): PASS" << std::endl;
+  std::cout << "MIE Hot-Path Overhead PASS" << std::endl;
 }
 
 // A package that does not override the structured overload must throw
-// std::logic_error (additive-surface pattern, contract §2).
+// std::logic_error (additive-surface pattern).
 struct UnsupportedPkg : public exaero::IAerosolPackage {
   using IAerosolPackage::initialize; // un-hide the structured overload for
                                      // concrete-type calls
@@ -1564,12 +1552,12 @@ struct UnsupportedPkg : public exaero::IAerosolPackage {
 };
 
 // Explicit throw-based gate: bare assert() compiles out under NDEBUG and would
-// make Release runs a no-op (T038 precedent). ALL structured-config tests use
+// make Release runs a no-op (precedent). ALL structured-config tests use
 // it.
 static void gate(bool ok, const char *what) {
   if (!ok)
     throw std::runtime_error(
-        std::string("FATAL ERROR: structured-config test: ") + what);
+        std::string("FATAL ERROR: structured-config test:") + what);
 }
 
 void test_structured_config_unsupported_package() {
@@ -1584,7 +1572,7 @@ void test_structured_config_unsupported_package() {
         std::string(e.what()).find(
             "does not support structured configuration") != std::string::npos;
   }
-  gate(threw, "default structured initialize must throw logic_error with the "
+  gate(threw, "default structured initialize must throw logic_error with the"
               "contract message");
   std::cout << "Structured config unsupported-package guard: PASS" << std::endl;
 }
@@ -1618,7 +1606,7 @@ static exaero::GocartConfig kMieSixConfig() {
   return cfg;
 }
 
-// Task 3 (design 2026-09-10): the structured entry point must produce a package
+// the structured entry point must produce a package
 // state bit-identical to the YAML path for the same configuration — same
 // scalars, same lookup/curve/micro/spectral/pmom pool wiring. Throw-based gates
 // (not assert) so Release builds enforce parity too.
@@ -1654,7 +1642,7 @@ void test_structured_config_species_parity() {
   std::cout << "Structured config species parity: PASS" << std::endl;
 }
 
-// --- Task 4 (design 2026-09-10): full-feature YAML==struct equivalence
+// --- full-feature YAML==struct equivalence
 // --------------- One scenario engages EVERY config block simultaneously — a
 // legacy optics_lookup species (Mode B), a mie_table species with an inserted
 // radius node + one bext override, an activation block (categories + species +
@@ -1734,7 +1722,7 @@ inline void gate_snap(const ParamsSnap &a, const ParamsSnap &b,
 inline std::string yaml(const std::string &dust7) {
   // Same data as the GocartConfig below, spelled as YAML. Species names
   // deliberately differ from the baked labels (store binds baked curves BY NAME
-  // — see T021).
+  // —).
   return std::string(R"YAML(species:
   - name: "sulf_lut"
     dry_density: 1800.0
@@ -1818,7 +1806,7 @@ inline exaero::GocartConfig config(const std::string &dust7) {
     lut.asm_ = {0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1};
     cfg.species.back().optics_lookup = std::move(lut);
   }
-  // (1) mie_table: source DU, inserted radius node, one bext override (C11+C13
+  // (1) mie_table: source DU, inserted radius node, one bext override (+
   // shape).
   cfg.species.push_back(
       sp("dust_cfg", 2600.0, 100.0, 2.0e-6, 0.1, 1.5, 1.0e-6, 1.55, 0.002));
@@ -1883,7 +1871,7 @@ void test_structured_config_full_equivalence() {
   }
   // Probe matrix over the whole public attribute surface (statuses + values +
   // provenance). Indices are probes, never capacities: category attribute
-  // counts come from the *_indices::NUM_ATTRIBUTES constants (ADR-003).
+  // counts come from the *_indices::NUM_ATTRIBUTES constants.
   const double rh_list[3] = {0.0, 0.495, 0.99};
   const double wl_list[3] = {1e-6, 2e-6, 5e-6};
   struct QSnap {
@@ -2143,7 +2131,7 @@ void test_structured_config_full_equivalence() {
             << std::endl;
 }
 
-// Task 4: the struct path must fail fast, loudly, with the same "EX-aero
+// : the struct path must fail fast, loudly, with the same "EX-aero
 // Error:" contract as the YAML path — never a silent fallback.
 void test_structured_config_failfast() {
   auto expect_throw = [](const exaero::GocartConfig &cfg, const char *what) {
@@ -2313,7 +2301,7 @@ void test_optical_precision() {
                                      relative_humidity, layer_thickness};
 
   // Calculate state mass concentration to yield exactly 1.0 particle/m³
-  // N = C / ( (pi/6)*rho*D^3 * exp(4.5*ln(sigma)^2) )
+  // N = C / ((pi/6)*rho*D^3 * exp(4.5*ln(sigma)^2))
   // For N = 1.0, C = (pi/6)*rho*D^3 ≈ (3.14159265/6)*2600*(2.0e-6)^3
   // ≈ 1.08908549e-14 [kg/m³]
   double pi_val = 3.141592653589793;
@@ -2358,8 +2346,8 @@ void test_optical_precision() {
 
   std::cout << "GOCART Optics High-Precision Physical Validation: PASS"
             << std::endl;
-  std::cout << "  - Expected Q_ext: " << expected_q_ext << std::endl;
-  std::cout << "  - Calculated Q_ext: " << calculated_q_ext
+  std::cout << "- Expected Q_ext:" << expected_q_ext << std::endl;
+  std::cout << "- Calculated Q_ext:" << calculated_q_ext
             << " (Diff: " << numerical_diff << ")" << std::endl;
 }
 
@@ -2623,14 +2611,14 @@ void test_spheroid_database_interpolation() {
   assert(p_clamp.sca_efficiency == p_limit.sca_efficiency);
   assert(p_clamp.moments[5] == p_limit.moments[5]);
 
-  std::cout << "Dubovik Spheroid Database Trilinear Interpolation & Bounds "
+  std::cout << "Dubovik Spheroid Database Trilinear Interpolation & Bounds"
                "Clamping: PASS"
             << std::endl;
 }
 
 int main(int argc, char **argv) {
-  // The overhead bench is opt-in (quickstart §7: --bench-optics-defaults); the
-  // coarse assertion still runs by default so CI keeps the SC-008 gate, with
+  // The overhead bench is opt-in (--bench-optics-defaults); the
+  // coarse assertion still runs by default so CI keeps the gate, with
   // verbose output when explicitly requested.
   const bool bench_verbose =
       (argc > 1 && std::string(argv[1]) == "--bench-optics-defaults");

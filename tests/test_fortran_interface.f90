@@ -27,13 +27,13 @@ contains
     character(len=32, kind=c_char) :: queried_name
     integer(c_int) :: resolved_idx
 
-    ! GEOSmie MIE attribute round-trip (T022)
+    ! GEOSmie MIE attribute round-trip
     real(c_double) :: mie_value
     character(len=32, kind=c_char) :: mie_unit
     character(len=128, kind=c_char) :: mie_version
     integer(c_int) :: mie_status
 
-    ! GEOSmie polarized-moment round-trip (T034, FR-003)
+    ! GEOSmie polarized-moment round-trip
     type(exaero_package_t) :: mpkg
     character(len=4096, kind=c_char) :: mom_yaml
     character(len=4096) :: data_dir
@@ -84,7 +84,7 @@ contains
     write(*,*) "Package instance created successfully."
 
     ! Prepare YAML string - written as a single, flat, continuous line of kind=c_char with no concatenations or trims!
-    yaml_string = c_char_"species: [{name: 'Dust', dry_density: 2600.0, molecular_weight: 100.0, dry_particle_diameter: 0.15e-6, hygroscopicity: 0.1, lognormal_sigma: 1.5, lognormal_dg: 0.1e-6, refractive_index_real: 1.55, refractive_index_imag: 0.002, mie_table: {source: DU}}]" // c_null_char
+    yaml_string = c_char_"species: [{name: 'Dust', dry_density: 2600.0, molecular_weight: 100.0, dry_particle_diameter: 0.15e-6, hygroscopicity: 0.1, lognormal_sigma: 1.5, lognormal_dg: 0.1e-6, refractive_index_real: 1.55, refractive_index_imag: 0.002, mie_table: {source: DU}}]"  // c_null_char
 
     ! Initialize package from Fortran
     write(*,*) "Initializing package from YAML..."
@@ -99,7 +99,7 @@ contains
 
     ! --- Dynamic Metadata Queries Validation (Hole 4) ---
     write(*,*) "Running dynamic metadata queries..."
-    resolved_idx = exaero_get_species_index(pkg, "Dust" // char(0))
+    resolved_idx = exaero_get_species_index(pkg, "Dust"  // char(0))
     if (resolved_idx /= 0) then
       write(*,*) "Error: Failed to dynamically map Dust species to index offset!"
       call exit(1)
@@ -112,8 +112,8 @@ contains
     end if
     write(*,*) "Dynamic metadata queries completed successfully."
 
-    ! --- GEOSmie MIE microphysical round-trip (T022): query effective radius of the
-    !     DU-bound Dust species at the dry grid point through the C boundary. ---
+    ! --- GEOSmie MIE microphysical round-trip query effective radius of the
+    ! DU-bound Dust species at the dry grid point through the C boundary. ---
     write(*,*) "Querying MIE microphysical attribute..."
     errmsg = ""
     errflg = 0
@@ -226,10 +226,10 @@ contains
       write(*,*) "Error: Failed to compute emissions: ", errmsg
       call exit(1)
     end if
-    ! --- GEOSmie polarized-moment round-trip (T034, FR-003/C1): a second package loads
-    !     the DU monochromatic runtime file, which carries the rank-5 pmom array over
-    !     (radius, rh, lambda, pol, moment) with the documented element ordering
-    !     P11,P12,P33,P34,P22,P44. Counts are curve DATA (6 x 3 here), never literals. ---
+    ! --- GEOSmie polarized-moment round-trip a second package loads
+    ! the DU monochromatic runtime file, which carries the rank-5 pmom array over
+    ! (radius, rh, lambda, pol, moment) with the documented element ordering
+    ! P11,P12,P33,P34,P22,P44. Counts are curve DATA (6 x 3 here), never literals. ---
     write(*,*) "Running polarized-moment round-trip..."
     call get_environment_variable("EXAERO_TEST_DATA_DIR", data_dir, status=env_status)
     if (env_status /= 0) then
@@ -253,7 +253,7 @@ contains
       call exit(1)
     end if
 
-    ! (1) Counts are data: the fixture declares 6 elements x 3 moments (FR-003).
+    ! (1) Counts are data: the fixture declares 6 elements x 3 moments.
     errmsg = ""
     errflg = 0
     rc = exaero_get_moment_counts(mpkg, 0, n_pol, n_mom, errmsg, errflg)
@@ -267,7 +267,7 @@ contains
     end if
 
     ! (2) Scalar query: element P11 (0), moment 0 at the file's central band and the
-    !     rh=0.5 grid point -> DU qext[bin0,rh10,band2] = 1.9339340925216675, file-delivered.
+    ! rh=0.5 grid point -> DU qext[bin0,rh10,band2] = 1.9339340925216675, file-delivered.
     mom_value = -1.0d0
     call exaero_query_attribute(mpkg, 0, exaero_CAT_POLARIZED_MOMENT, &
         exaero_PHASE_FUNCTION_MOMENT, 0.5d0, 5.5d-7, mom_value, &
@@ -327,7 +327,7 @@ contains
       call exit(1)
     end if
 
-    ! (6) A spherical species (SeaSalt, no moments): explicit NotInSource (FR-008).
+    ! (6) A spherical species (SeaSalt, no moments): explicit NotInSource.
     n_pol = -1
     n_mom = -1
     rc = exaero_get_moment_counts(mpkg, 1, n_pol, n_mom, errmsg, errflg)
@@ -337,7 +337,7 @@ contains
     end if
 
     ! (7) Bulk path: compute_attributes fills n_pol*n_moment = 18 slots, dense
-    !     row-major (element fastest); slot 5 (e=5,m=0) = qe00*1.5 = 2.900901138782501.
+    ! row-major (element fastest); slot 5 (e=5,m=0) = qe00*1.5 = 2.900901138782501.
     mom_attrs = -777.0d0
     mom_stat = -1
     mom_wl(1) = 5.5d-7

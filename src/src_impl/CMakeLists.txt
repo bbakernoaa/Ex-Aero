@@ -1,6 +1,6 @@
 find_package(yaml-cpp REQUIRED)
 
-# --- Build-time baked-in MIE table generation (research R1, FR-016, T008) ---
+# --- Build-time baked-in MIE table generation ---
 # The pinned GEOSmie RRTMG snapshot is converted into a deterministic float64
 # header. Listing the generated header as a source makes every consumer depend
 # on the rule.

@@ -10,10 +10,10 @@ target_compile_definitions(
 target_link_libraries(exaero_test_runner PRIVATE exaero Kokkos::kokkos)
 add_test(NAME ExaeroUnitTests COMMAND exaero_test_runner)
 
-# Standalone public-header compile gate (T035, research R8, SC-002, invariant
-# C8): compiles the new public attribute surface with NO Kokkos include path and
-# links NOTHING (OBJECT library - the gate is compilation itself). If any public
-# header pulled <Kokkos_Core.hpp> in transitively, this target fails to build.
+# Standalone public-header compile gate (invariant ): compiles the new public
+# attribute surface with NO Kokkos include path and links NOTHING (OBJECT
+# library - the gate is compilation itself). If any public header pulled
+# <Kokkos_Core.hpp> in transitively, this target fails to build.
 add_library(exaero_standalone_public_check OBJECT standalone_public_check.cpp)
 target_compile_features(exaero_standalone_public_check PRIVATE cxx_std_23)
 target_include_directories(exaero_standalone_public_check
@@ -34,20 +34,20 @@ add_executable(exaero_fortran_test test_fortran_interface.f90)
 target_include_directories(exaero_fortran_test PRIVATE ${CMAKE_BINARY_DIR}/src)
 target_link_libraries(exaero_fortran_test PRIVATE exaero)
 add_test(NAME ExaeroFortranTest COMMAND exaero_fortran_test)
-# The moments round-trip (T034) loads the runtime-file fixture by absolute path;
-# pass the data directory through the environment so the test stays hermetic
-# under CTest.
+# The moments round-trip loads the runtime-file fixture by absolute path; pass
+# the data directory through the environment so the test stays hermetic under
+# CTest.
 set_tests_properties(
   ExaeroFortranTest
   PROPERTIES ENVIRONMENT
              "EXAERO_TEST_DATA_DIR=${CMAKE_CURRENT_SOURCE_DIR}/data")
 
-# Generator determinism gate (T039, FR-016/SC-007): re-run the baked-in table
-# generator in --check mode and fail on ANY diff to the committed header. This
-# is the CI-side twin of the build-time custom command (which rewrites on
-# drift); here we assert the committed artifact is exactly reproducible from the
-# pinned snapshot, so a stale/hand-edited MieTableData.hpp blocks the merge
-# rather than shipping non-deterministic physics (R6).
+# Generator determinism gate re-run the baked-in table generator in --check mode
+# and fail on ANY diff to the committed header. This is the CI-side twin of the
+# build-time custom command (which rewrites on drift); here we assert the
+# committed artifact is exactly reproducible from the pinned snapshot, so a
+# stale/hand-edited MieTableData.hpp blocks the merge rather than shipping
+# non-deterministic physics.
 add_test(
   NAME ExaeroMieDeterminism
   COMMAND
@@ -66,7 +66,8 @@ if(EXAERO_BUILD_CHEMISTRY)
   include(FetchContent)
   FetchContent_Declare(
     googletest
-    GIT_REPOSITORY https://github.com/google/googletest.git
+    GIT_REPOSITORY https:
+    //github.com/google/googletest.git
     GIT_TAG release-1.12.1)
   set(gtest_force_shared_crt
       ON

@@ -1,10 +1,10 @@
 #pragma once
 // Structured (no-YAML) configuration surface for the GOCART package.
 //
-// MUST NOT include <Kokkos_Core.hpp> (ADR-001): public, zero-dependency header.
+// MUST NOT include <Kokkos_Core.hpp> public, zero-dependency header.
 // Every optional block is std::optional; all array lengths are data — no
 // fixed-size shapes cross the public boundary. Species curve bindings reuse
-// SpeciesCurveConfig from AttributeQuery.hpp (ADR-003); there is no parallel
+// SpeciesCurveConfig from AttributeQuery.hpp ; there is no parallel
 // curve type.
 #include <exaero/AttributeQuery.hpp>
 #include <optional>
@@ -40,12 +40,11 @@ struct GocartSpeciesConfig {
   double refractive_index_imag = 0; ///< k
 
   std::optional<GocartLegacyOpticsLookup>
-      optics_lookup; ///< Engaged => Mode B RH lookup.
-  std::optional<SpeciesCurveConfig>
-      mie_table; ///< Engaged => curve binding (ADR-003 R9).
+      optics_lookup;                           ///< Engaged => Mode B RH lookup.
+  std::optional<SpeciesCurveConfig> mie_table; ///< Engaged => curve binding.
 };
 
-/// @brief Top-level attribute activation block (FR-010/FR-012 parity with YAML
+/// @brief Top-level attribute activation block (parity with YAML
 /// `activation:`). Absent activation engages the defaults: microphysical +
 /// spectral-optical categories, all species, no runtime file.
 struct GocartActivationConfig {
@@ -55,7 +54,7 @@ struct GocartActivationConfig {
   std::string data_file; ///< Optional runtime MIE table file; empty => none.
 };
 
-/// @brief Emissions mapping for one raw CECE species (SPEC-EMISSIONS-002 parity
+/// @brief Emissions mapping for one raw CECE species (parity
 /// with YAML `emissions_mapping[s]`).
 struct GocartEmissionsMappingConfig {
   std::string raw_name; ///< Reserved for diagnostics; unused by the mapping

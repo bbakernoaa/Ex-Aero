@@ -22,9 +22,9 @@ TEST(AuxiliaryEnginesTest, ZeroCopyExtractionDispatch) {
       exaero::AuxiliaryEngines::compute_thermodynamics(ctx, state, 0.1);
     });
 
-    // The underlying Kokkos LayoutLeft unmanaged view's .data() pointer MUST
+    // The underlying Kokkos LayoutLeft unmanaged view's.data() pointer MUST
     // point to exactly the same memory address as the host std::vector data(),
-    // guaranteeing zero-copy mapping (SC-003).
+    // guaranteeing zero-copy mapping.
     EXPECT_EQ(state.meteorology.data(), dummy_meteo.data());
     EXPECT_EQ(state.concentrations.data(), dummy_conc.data());
   }

@@ -262,10 +262,10 @@ void test_dynamic_queries(exaero::GocartPackage &package) {
             << std::endl;
 }
 
-// Seeded MIE attribute property sweep (T017): growth_factor monotone up in RH,
+// Seeded MIE attribute property sweep growth_factor monotone up in RH,
 // density/ radius/mass strictly positive, RH clamped at the 0.99 source edge,
-// NaN/Inf rejected with an explicit status and never a silent 0 (invariant C3,
-// FR-007, SC-005).
+// NaN/Inf rejected with an explicit status and never a silent 0 (
+//).
 void run_mie_attribute_sweep() {
   using namespace exaero::microphysical_indices;
   const char *yaml = R"YAML(
@@ -283,7 +283,7 @@ void run_mie_attribute_sweep() {
   exaero::GocartPackage package;
   package.initialize(yaml);
 
-  std::mt19937 rng(2026); // fixed seed for reproducibility (FR-013 determinism)
+  std::mt19937 rng(2026); // fixed seed for reproducibility (determinism)
   std::uniform_real_distribution<double> rh_dist(0.0, 0.99);
 
   for (int t = 0; t < 2000; ++t) {
@@ -295,7 +295,7 @@ void run_mie_attribute_sweep() {
     assert(st == exaero::AttributeStatus::Available ||
            st == exaero::AttributeStatus::Interpolated);
     assert(std::isfinite(v));
-    assert(v >= 1.0 - 1e-9); // growth factor never below dry (SC-005)
+    assert(v >= 1.0 - 1e-9); // growth factor never below dry
 
     package.queryAttribute(0, exaero::AttributeCategory::Microphysical,
                            EFFECTIVE_RADIUS, rh, 0.0, &v, nullptr);
@@ -308,8 +308,8 @@ void run_mie_attribute_sweep() {
     assert(v > 0.0 && std::isfinite(v));
   }
 
-  // growth_factor monotone non-decreasing in RH on an ascending sweep (C3,
-  // SC-005).
+  // growth_factor monotone non-decreasing in RH on an ascending sweep (
+  //).
   double prev_growth = -std::numeric_limits<double>::infinity();
   for (int i = 0; i <= 200; ++i) {
     const double rh = 0.99 * (i / 200.0);
@@ -320,7 +320,7 @@ void run_mie_attribute_sweep() {
     prev_growth = g;
   }
 
-  // RH clamped at the declared 0.99 edge: beyond it, no extrapolation (FR-007).
+  // RH clamped at the declared 0.99 edge: beyond it, no extrapolation.
   double v_edge = 0.0, v_over = 0.0;
   package.queryAttribute(0, exaero::AttributeCategory::Microphysical,
                          GROWTH_FACTOR, 0.99, 0.0, &v_edge, nullptr);
@@ -341,8 +341,7 @@ void run_mie_attribute_sweep() {
       std::numeric_limits<double>::infinity(), 0.0, &sentinel, nullptr);
   assert(st_inf == exaero::AttributeStatus::NotInSource);
 
-  std::cout << "MIE Attribute Property Sweep (seeded, C3/FR-007/SC-005): PASS"
-            << std::endl;
+  std::cout << "MIE Attribute Property Sweep (seeded): PASS" << std::endl;
 }
 
 int main() {

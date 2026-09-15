@@ -1,10 +1,11 @@
 #pragma once
+/// @file Provenance.hpp
 // Internal provenance record for the runtime table store (exaero_impl, no
 // Kokkos).
 //
 // Mirrors the public POD exaero::ProvenanceInfo but uses std::string for
 // host-side composition; it is copied into the POD only at the public query
-// boundary. See specs/001-geosmie-lut-attributes/data-model.md "Provenance
+// boundary. See /data-model.md "Provenance
 // Record".
 #include <exaero/AttributeQuery.hpp>
 
@@ -12,20 +13,17 @@
 
 namespace exaero {
 
-/// @brief Full provenance attached to one surfaced attribute value (FR-004).
+/// @brief Full provenance attached to one surfaced attribute value.
 struct Provenance {
   std::string species;   ///< GOCART species label.
   std::string attribute; ///< Attribute name (e.g. "wet_particle_density").
   std::string unit;      ///< Canonical unit string; "1" when dimensionless.
-  std::string source_version; ///< Pinned GEOSmie table version (FR-016); must
+  std::string source_version; ///< Pinned GEOSmie table version ; must
                               ///< be non-empty.
   std::string citation;       ///< Literature reference for the source table.
-  DeliverySource delivery =
-      DeliverySource::BakedIn; ///< Winning layer (FR-012, R9).
-  bool interpolated =
-      false; ///< True when the value is not a grid point (FR-006).
-  AttributeStatus status =
-      AttributeStatus::NotInSource; ///< Availability (FR-008).
+  DeliverySource delivery = DeliverySource::BakedIn; ///< Winning layer.
+  bool interpolated = false; ///< True when the value is not a grid point.
+  AttributeStatus status = AttributeStatus::NotInSource; ///< Availability.
 
   /// @brief Copy into the public POD form for delivery across the query
   /// boundary.
@@ -33,9 +31,9 @@ struct Provenance {
   /// @param num_rh Resolved RH-axis length for the queried species.
   /// @param num_lambda Resolved wavelength-axis length (0 for microphysical).
   /// @param num_pol Resolved polarized element count (0 unless moments exist,
-  /// FR-003).
+  ///).
   /// @param num_moment Resolved polarized moment count (0 unless moments exist,
-  /// FR-003).
+  ///).
   /// @return Populated public provenance record.
   ProvenanceInfo to_public(int num_radius, int num_rh, int num_lambda,
                            int num_pol = 0, int num_moment = 0) const;

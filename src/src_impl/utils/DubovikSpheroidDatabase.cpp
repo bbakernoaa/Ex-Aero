@@ -1,14 +1,25 @@
+/// @file DubovikSpheroidDatabase.cpp
+/// @brief Mock Dubovik spheroid kernel grid + trilinear lookup.
+///
+/// @warning The embedded values are physically-scaled placeholders
+/// (extinction saturating toward 2 with size parameter, exponential
+/// absorption decay of scattering, geometric moment decay) intended for
+/// interface and build validation. Replacing this with a real Dubovik
+/// T-matrix table changes only the constructor's data fill — the
+/// interpolation contract below is the production algorithm.
 #include <algorithm>
 #include <cmath>
 #include <utils/DubovikSpheroidDatabase.hpp>
 
 namespace exaero {
 
+// @copydoc SpheroidDatabase::instance
 SpheroidDatabase &SpheroidDatabase::instance() {
   static SpheroidDatabase db;
   return db;
 }
 
+// @copydoc SpheroidDatabase::SpheroidDatabase
 SpheroidDatabase::SpheroidDatabase() {
   n_real_grid_ = {1.50, 1.53, 1.56};
   n_imag_grid_ = {0.001, 0.003, 0.008};
@@ -45,6 +56,13 @@ SpheroidDatabase::SpheroidDatabase() {
   }
 }
 
+// @copydoc SpheroidDatabase::interpolate
+//
+// Algorithm: per-axis clamp -> bracket search -> weight
+// @f$ w = (v - v_0)/(v_1 - v_0) @f$ -> blend the 8 lattice corners
+// (n, k, x) with three nested linear passes. Identical structure to the
+// RH x lambda blends in GocartSolver/MieTableStore, so results are
+// comparable across the codebase.
 SpheroidKernelPoint SpheroidDatabase::interpolate(double n_real, double n_imag,
                                                   double size_parameter) const {
   // 1. Clamp input coordinates to grid bounds defensively (HPC safety gate)

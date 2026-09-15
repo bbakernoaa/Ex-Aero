@@ -32,7 +32,7 @@ TEST(SorterTest, ZeroAllocationDuringSort) {
 
   exaero::SZA_Sorter::sort_workload(ctx, state);
 
-  // Track memory (T016)
+  // Track memory
   EXPECT_EQ(dynamic_allocations, 0)
       << "Sorting triggered dynamic memory allocations!";
 

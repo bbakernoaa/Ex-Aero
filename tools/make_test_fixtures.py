@@ -115,7 +115,7 @@ def fixture_dust_monochromatic():
 
     # Polarized moments: rank-5 (radius, rh, lambda, pol, moment), 6 elements
     # (P11,P12,P33,P34,P22,P44) x 3 moments. value = qext(bin,rh) * 0.5^moment *
-    # (1 + 0.1*element): deterministic, ordering- and count-testable (US3 T031/T034).
+    # (1 + 0.1*element): deterministic, ordering- and count-testable.
     n_pol, n_mom = 6, 3
     qe = d["qext"][:, :, band2]             # (radius, rh)
     pm = np.empty((nR, nH, nL, n_pol, n_mom))
@@ -125,7 +125,7 @@ def fixture_dust_monochromatic():
                 .repeat(nL, axis=2)
     # pol element labels are the documented ordering P11,P12,P33,P34,P22,P44 -> 1..6
     # (data-model); moment labels 0..M-1. Axis VALUES are labels; the store addresses
-    # them positionally (0-based) and treats the count as data (R10).
+    # them positionally (0-based) and treats the count as data.
     emit_axis(lines, "pol", [1, 2, 3, 4, 5, 6])
     emit_axis(lines, "moment", [0, 1, 2])
     emit_field(lines, "pmom", pm)
@@ -175,7 +175,7 @@ def main():
     with open(os.path.join(OUT, "mie_nitrate_density.txt"), "w") as f:
         f.write(fixture_nitrate_density())
 
-    # Deliberately-malformed fixtures for the fail-fast gate (T036, FR-009/C6). Each is
+    # Deliberately-malformed fixtures for the fail-fast gate. Each is
     # valid up to exactly one fault so the loader aborts on a specific check.
     with open(os.path.join(OUT, "mie_corrupt_schema.txt"), "w") as fh:
         fh.write(corrupt_schema())
@@ -204,7 +204,7 @@ def fixture_dust7():
     emit_axis(lines, "radius", np.asarray(radius))
     emit_axis(lines, "rh", np.asarray(rh))
     emit_axis(lines, "lambda", np.asarray(lam))
-    # qext[b,h,l] = (b+1) + 0.1*h + 0.01*l  -> distinct, monotone, finite everywhere.
+    # qext[b,h,l] = (b+1) + 0.1*h + 0.01*l -> distinct, monotone, finite everywhere.
     qe = np.array([[[ (b + 1) + 0.1 * h + 0.01 * l for l in range(nL)]
                     for h in range(nH)] for b in range(nR)])
     emit_field(lines, "qext", qe)
@@ -218,8 +218,8 @@ def fixture_dust7():
     return "\n".join(lines) + "\n"
 
 
-# --- corrupt-file fixtures (T036/FR-009): each carries exactly one schema/unit/version/
-#     truncation fault; the loader must abort with "FATAL ERROR:" and no silent fallback. ---
+# --- corrupt-file fixtures each carries exactly one schema/unit/version/
+# truncation fault; the loader must abort with "FATAL ERROR:" and no silent fallback. ---
 
 def corrupt_schema():
     """Unknown directive -> loader_fatal('unknown directive ...')."""

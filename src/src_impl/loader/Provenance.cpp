@@ -1,9 +1,17 @@
+/// @file Provenance.cpp
+/// @brief Internal provenance record -> public fixed-size POD conversion.
+///
+/// The only place host-side std::string provenance crosses into the
+/// ABI-boundary ProvenanceInfo POD; every field copy is bounded and
+/// NUL-terminated so a long citation can never overflow a fixed char
+/// array.
 #include <loader/Provenance.hpp>
 
 #include <cstring>
 
 namespace exaero {
 
+// @copydoc copy_provenance_field
 void copy_provenance_field(char *dst, std::size_t dst_size,
                            const std::string &src) {
   if (dst == nullptr || dst_size == 0)
@@ -13,6 +21,7 @@ void copy_provenance_field(char *dst, std::size_t dst_size,
   dst[n] = '\0';
 }
 
+// @copydoc Provenance::to_public
 ProvenanceInfo Provenance::to_public(int num_radius, int num_rh, int num_lambda,
                                      int num_pol, int num_moment) const {
   ProvenanceInfo info{};

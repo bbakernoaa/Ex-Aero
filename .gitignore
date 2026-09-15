@@ -90,6 +90,9 @@ docs/specs/
 .github/agents/
 .github/prompts/
 
+# --- Generated documentation ---
+docs/doxygen/
+
 **/*.nc
 
 # Pinned GEOSmie MIE snapshot must be version-controlled so baked-in table generation

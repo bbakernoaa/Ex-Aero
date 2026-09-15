@@ -12,19 +12,19 @@ find_package(Python3 REQUIRED COMPONENTS Interpreter)
 # Build-graph note (2026-09-09)
 #
 # Two independent target groups in this repository both used the name `exaero`:
-# * the aerosol interface library (src/, src/src_impl/, include/) built via
-# add_subdirectory(src) below -- SHARED `exaero` plus the ADR-001 targets
-# `exaero_impl` (mdspan, no Kokkos) and `exaero_solver` (Kokkos, no mdspan); *
-# the MKPP chemistry driver (top-level add_library), generated from
-# generate_registry.py + include/exaero/registry.hpp.
+# * the aerosol interface library (src/, src/src_impl/, include) built via
+# add_subdirectory(src) below -- SHARED `exaero` plus the targets `exaero_impl`
+# (mdspan, no Kokkos) and `exaero_solver` (Kokkos, no mdspan); * the MKPP
+# chemistry driver (top-level add_library), generated from generate_registry.py
+# + include/exaero/registry.hpp.
 #
 # Commit d3f976d replaced the aerosol-only top-level with the chemistry driver
-# and dropped add_subdirectory(src), so the aerosol sources targeted by
-# specs/001-geosmie-lut-attributes were no longer compiled or tested. The
-# chemistry driver is itself currently unbuildable: generate_registry.py,
-# include/exaero/registry.hpp, include/exaero/dispatcher.hpp, src/dispatcher.cpp
-# and src/registry.cpp were removed by 37f0ce5, src/sorter.cpp is empty, and the
-# bare add_custom_command(OUTPUT ${REGISTRY_SRC}) expanded to zero arguments and
+# and dropped add_subdirectory(src), so the aerosol sources targeted by were no
+# longer compiled or tested. The chemistry driver is itself currently
+# unbuildable: generate_registry.py, include/exaero/registry.hpp,
+# include/exaero/dispatcher.hpp, src/dispatcher.cpp and src/registry.cpp were
+# removed by 37f0ce5, src/sorter.cpp is empty, and the bare
+# add_custom_command(OUTPUT ${REGISTRY_SRC}) expanded to zero arguments and
 # aborted configuration outright. It is therefore gated OFF by default and its
 # target renamed `exaero_chem` to free the `exaero` name for the interface
 # library -- restoring those inputs is a one-line re-enable. No chemistry source
@@ -75,7 +75,7 @@ if(EXAERO_BUILD_CHEMISTRY)
   target_link_libraries(exaero_chem PUBLIC Kokkos::kokkos)
 
   if(EXAERO_WITH_CLOUDJ)
-    # T004: Instead of Fortran linkage we just use the native C++ port headers
+    # : Instead of Fortran linkage we just use the native C++ port headers
     target_include_directories(exaero_chem
                                PRIVATE ${CMAKE_SOURCE_DIR}/../Cloud-J/include)
     target_compile_definitions(exaero_chem PUBLIC EXAERO_WITH_CLOUDJ)

@@ -1,9 +1,18 @@
+/// @file LutGenerator.cpp
+/// @brief LUT grid parsing, slab allocation, and zero-copy view wiring.
+///
+/// The constructor is the only substantive code: it validates the YAML
+/// grid (fail-fast on missing/mis-typed blocks), sizes three flat double
+/// buffers, and wraps them in column-major mdspan views so downstream
+/// consumers see (rh, band, species[, moment]) without offset math.
+/// generate() remains a compilation stub pending the production kernel.
 #include <stdexcept>
 #include <utils/LutGenerator.hpp>
 #include <yaml-cpp/yaml.h>
 
 namespace exaero {
 
+// @copydoc LutGenerator::LutGenerator
 LutGenerator::LutGenerator(const std::string &config_yaml) {
   YAML::Node config = YAML::Load(config_yaml);
   if (!config["generation_grid"]) {
@@ -47,10 +56,12 @@ LutGenerator::LutGenerator(const std::string &config_yaml) {
                                  num_species_, num_moments_);
 }
 
+// @copydoc LutGenerator::generate
 void LutGenerator::generate(const std::string &custom_spheroid_json_path) {
   // Stub for compilation verification
 }
 
+// @copydoc LutGenerator::to_yaml
 std::string LutGenerator::to_yaml() const {
   return "species:\n  - name: \"Generated_Lut\"\n";
 }

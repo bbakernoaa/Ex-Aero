@@ -1,3 +1,16 @@
+/// @file MieFileLoader.cpp
+/// @brief Parser/validator for the native portable MIE curve format.
+///
+/// Streaming ASCII parse (schema in MieFileLoader.hpp): directive lines
+/// declare axes and fields, value rows follow and may span lines. Every
+/// failure mode — unknown format, truncated field, axis/length mismatch,
+/// unit disagreement, Fortran-exponent garbage — aborts with a
+/// @c "FATAL ERROR: MieFileLoader:" diagnostic; a file is never silently
+/// trusted, because it ships operator-visible physics values.
+///
+/// @note Security: the path is sanitized here (bounded length, no NUL,
+/// no traversal, alphanumeric-and-safe-punctuation only) before any file
+/// operation; the file is opened directly, never through a shell.
 #include <loader/MieFileLoader.hpp>
 
 #include <algorithm>
@@ -13,6 +26,7 @@ namespace exaero {
 
 namespace {
 
+/// @brief Throw the uniform "FATAL ERROR: MieFileLoader:" diagnostic.
 [[noreturn]] void loader_fatal(const std::string &msg) {
   throw std::runtime_error("FATAL ERROR: MieFileLoader: " + msg);
 }
@@ -84,6 +98,7 @@ std::size_t axis_length(const SpeciesCurve &c, const std::string &name) {
 
 } // namespace
 
+// @copydoc MieFileLoader::path_is_safe
 bool MieFileLoader::path_is_safe(const std::string &path) {
   if (path.empty() || path.size() > 4096)
     return false;
@@ -104,6 +119,7 @@ bool MieFileLoader::path_is_safe(const std::string &path) {
   return true;
 }
 
+// @copydoc MieFileLoader::load
 std::vector<SpeciesCurve> MieFileLoader::load(const std::string &path) {
   if (!path_is_safe(path))
     loader_fatal("rejected unsafe path: " + path);
@@ -125,7 +141,7 @@ std::vector<SpeciesCurve> MieFileLoader::load(const std::string &path) {
     auto first = line.find_first_not_of(" \t");
     if (first == std::string::npos)
       continue; // blank
-    // Pure comment lines (SPEC-CRTM-004): '#' or '!' not introducing a
+    // Pure comment lines '#' or '!' not introducing a
     // directive.
     if ((line[first] == '#' || line[first] == '!')) {
       if (line[first] != '#' || line.find("@") == std::string::npos)
@@ -243,7 +259,7 @@ std::vector<SpeciesCurve> MieFileLoader::load(const std::string &path) {
         count *= len;
       }
       rank = static_cast<int>(dims.size());
-      // Unit-set validation (FR-009): a declared unit that disagrees with the
+      // Unit-set validation a declared unit that disagrees with the
       // canonical unit for this attribute aborts load -- never a silent
       // fallback.
       const std::string canonical = MieTableStore::unit_for_field(name);

@@ -1,3 +1,24 @@
+/// @file GocartPackage.cpp
+/// @brief GOCART package lifecycle: config parsing, curve wiring, kernel
+/// launch.
+///
+/// Owns the two configuration entry points (YAML text and structured
+/// GocartConfig) behind a single semantic reader seam so precedence
+/// cannot drift between them, assembles the flat device curve pool, and
+/// validates array shapes before delegating to the Kokkos kernels in
+/// GocartSolver.cpp. The GEOSmie attribute surface resolves through the
+/// process-wide MieTableStore singleton.
+///
+/// @section precedence Value precedence
+/// reset to baked-in -> optional runtime file -> config curves, applied
+/// in exactly that order, so **config > runtime file > baked-in** always
+/// holds regardless of which entry point supplied the configuration.
+///
+/// @section validation Fail-fast validation
+/// Every compute wrapper verifies the incoming mdspan extents against the
+/// initialized species count and grid ("Hole 2") before launching a
+/// kernel, throwing an @c "EX-aero ... Error:" diagnostic rather than
+/// reading out of bounds.
 #include <cmath>
 #include <gocart/GocartPackage.hpp>
 #include <loader/MieTableStore.hpp>
@@ -16,23 +37,47 @@ namespace exaero {
 // between them. Impl-private: declared in GocartPackage.hpp (elaborated
 // type-specifier), defined here at exaero:: scope so the member declaration
 // binds to exactly this type.
+/// @brief Abstract semantic view over a package configuration.
+///
+/// The seam that lets the YAML and structured-config paths share one
+/// orchestration. Implementations own validation: accessors return
+/// already-checked values (e.g. optics lookups guaranteed to have
+/// @f$ n \ge 2 @f$ strictly ordered, equal-length points) and propagate
+/// parse errors unchanged.
 struct PackageConfigReader {
-  virtual ~PackageConfigReader() = default;
+  virtual ~PackageConfigReader() =
+      default; ///< Virtual dtor for polymorphic use.
+  /// @brief Number of species declared in the configuration.
   virtual int numSpecies() const = 0;
+  /// @brief Config-side name of species @c i (index in [0, numSpecies)).
   virtual std::string speciesName(int i) const = 0;
+  /// @brief The 8 scalar physical parameters of species @c i (optics
+  /// offsets filled by the implementation; see GocartSpeciesParams).
   virtual GocartSpeciesParams speciesScalars(
       int i) const = 0; // 8 doubles + has_optics_lookup; offsets filled by impl
+  /// @brief True iff species @c i declares a legacy optics lookup table.
   virtual bool hasOpticsLookup(int i) const = 0;
+  /// @brief Validated legacy optics lookup for species @c i (n>=2, strictly
+  /// ordered, equal-length point arrays).
   virtual GocartLegacyOpticsLookup
   opticsLookup(int i) const = 0; // validated: n>=2, equal lengths
+  /// @brief True iff species @c i binds a GEOSmie MIE curve.
   virtual bool hasMieTable(int i) const = 0;
+  /// @brief MIE curve binding for species @c i (species_name pre-filled).
   virtual SpeciesCurveConfig
   mieTable(int i) const = 0; // species_name pre-filled
+  /// @brief True iff the config enables kappa-Köhler activation.
   virtual bool hasActivation() const = 0;
+  /// @brief Attribute-category bitmask OR-ed onto the activation default mask.
   virtual int activationExtraMask() const = 0; // category bits OR-ed on default
+  /// @brief Species names eligible for activation (subset of speciesName()).
   virtual std::vector<std::string> activationSpecies() const = 0;
+  /// @brief Optional external activation data file (empty => built-in
+  /// defaults).
   virtual std::string activationDataFile() const = 0;
+  /// @brief Number of emission-name mappings declared.
   virtual int numEmissionsMappings() const = 0;
+  /// @brief Emission mapping @c s (raw_name ignored downstream; parity).
   virtual GocartEmissionsMappingConfig
   emissionsMapping(int s) const = 0; // raw_name ignored downstream (parity)
 };
@@ -310,7 +355,7 @@ private:
   YAML::Node config_, species_;
 };
 
-// Reader over an in-memory GocartConfig (design 2026-09-10 §4). Near-trivial by
+// Reader over an in-memory GocartConfig. Near-trivial by
 // design: the caller already supplied typed data, so there are no names to
 // validate (curve overrides carry typed (category, attribute_index) pairs).
 // Validation duplicates the YAML fail-fast guarantees with the same
@@ -372,7 +417,7 @@ public:
   SpeciesCurveConfig mieTable(int i) const override {
     SpeciesCurveConfig cc =
         *config_.species[i].mie_table;         // caller checked engaged
-    cc.species_name = config_.species[i].name; // config name wins (R9)
+    cc.species_name = config_.species[i].name; // config name wins
     // Fail-fast parity with the YAML path: an override row must supply exactly
     // one value per declared radius node. When radius_nodes is empty the
     // effective axis is the SOURCE axis, which StructReader cannot see; the
@@ -456,12 +501,13 @@ GocartPackage::~GocartPackage() {
   }
 }
 
-// Shared orchestration for both configuration entry points (design 2026-09-10,
+// Shared orchestration for both configuration entry points (
 // Approach A): species params -> store reset -> activation -> curve configs ->
 // pool wiring -> emissions -> solver-state upload. Reads config ONLY through
 // the PackageConfigReader interface, so the YAML path and the structured-config
-// path (Task 3) share one code path and the precedence order cannot drift
+// path share one code path and the precedence order cannot drift
 // between them.
+// @copydoc GocartPackage::initializeImpl
 void GocartPackage::initializeImpl(PackageConfigReader &reader) {
   num_species_ = reader.numSpecies();
 
@@ -482,7 +528,7 @@ void GocartPackage::initializeImpl(PackageConfigReader &reader) {
     if (p.has_optics_lookup) {
       // Legacy RH lookups (presence/length checks already validated by the
       // reader): arbitrary length, appended to the flat pool.
-      // The block layout is the documented {rh,ext,ssa,asm} x n_rh order (R10).
+      // The block layout is the documented {rh,ext,ssa,asm} x n_rh order.
       const GocartLegacyOpticsLookup lut = reader.opticsLookup(i);
       const int n_rh = static_cast<int>(lut.rh.size());
       p.n_radius = 1; // band-integrated legacy lookup: single effective bin
@@ -501,10 +547,10 @@ void GocartPackage::initializeImpl(PackageConfigReader &reader) {
     h_species_params_.push_back(p);
   }
 
-  // --- GEOSmie MIE curve mapping (ADR-003 / research R9): parse per-species
-  //     `mie_table:` block into SpeciesCurveConfig, then resolve through the
-  //     store. Order matters: reset -> optional runtime file (activation) ->
-  //     config, so precedence is config > runtime-file > baked-in. ---
+  // --- GEOSmie MIE curve mapping parse per-species
+  // `mie_table:` block into SpeciesCurveConfig, then resolve through the
+  // store. Order matters: reset -> optional runtime file (activation) ->
+  // config, so precedence is config > runtime-file > baked-in. ---
   MieTableStore &store = MieTableStore::instance();
   store.reset_to_baked_in();
 
@@ -522,12 +568,12 @@ void GocartPackage::initializeImpl(PackageConfigReader &reader) {
     activated_species = reader.activationSpecies();
     runtime_file = reader.activationDataFile();
   }
-  // Runtime file (if any) is applied through setAttributeActivation (FR-012); a
-  // bad file aborts with FATAL ERROR and no fallback (FR-009).
+  // Runtime file (if any) is applied through setAttributeActivation ; a
+  // bad file aborts with FATAL ERROR and no fallback.
   setAttributeActivation(activated_species, activation_mask, runtime_file);
 
   std::vector<SpeciesCurveConfig>
-      curve_configs; // per-species mie_table: bindings (R9)
+      curve_configs; // per-species mie_table: bindings
   for (int i = 0; i < num_species_; ++i) {
     if (!reader.hasMieTable(i))
       continue;
@@ -536,11 +582,11 @@ void GocartPackage::initializeImpl(PackageConfigReader &reader) {
   if (!curve_configs.empty())
     setSpeciesCurveConfig(curve_configs);
 
-  // --- Device-resident microphysical curves (T021, ADR-003 R10): append each
-  //     curve-bound species' {rh, growth_factor, wet_particle_density} block to
-  //     the same flat pool the optics kernels use. Extents are data, never
-  //     literals; the diagnostics kernel reads them on-device with zero H2D in
-  //     the loop. ---
+  // --- Device-resident microphysical curves append each
+  // curve-bound species' {rh, growth_factor, wet_particle_density} block to
+  // the same flat pool the optics kernels use. Extents are data, never
+  // literals; the diagnostics kernel reads them on-device with zero H2D in
+  // the loop. ---
   for (int i = 0; i < num_species_; ++i) {
     const SpeciesCurve *c = store.find_curve(species_names_[i]);
     if (!c)
@@ -569,13 +615,13 @@ void GocartPackage::initializeImpl(PackageConfigReader &reader) {
                          dit->second.values.end());
   }
 
-  // --- Device-resident spectral curves (T028, ADR-003 R10): append each
+  // --- Device-resident spectral curves append each
   // curve-bound
-  //     species' {rh, lambda, bext, ssa, g} block so the optics kernels read
-  //     mass extinction / albedo / asymmetry from the table (RH-linear,
-  //     log-band) instead of the ADT analytical solver. Extents are data; a
-  //     band coordinate outside the curve lambda domain declines to the
-  //     fallback path (never a silent wrong value). ---
+  // species' {rh, lambda, bext, ssa, g} block so the optics kernels read
+  // mass extinction / albedo / asymmetry from the table (RH-linear,
+  // log-band) instead of the ADT analytical solver. Extents are data; a
+  // band coordinate outside the curve lambda domain declines to the
+  // fallback path (never a silent wrong value). ---
   for (int i = 0; i < num_species_; ++i) {
     const SpeciesCurve *c = store.find_curve(species_names_[i]);
     if (!c)
@@ -614,13 +660,13 @@ void GocartPackage::initializeImpl(PackageConfigReader &reader) {
                          git->second.values.end());
   }
 
-  // --- Device-resident polarized moments (T033, FR-003/FR-015, ADR-003 R10):
+  // --- Device-resident polarized moments
   // append
-  //     each moment-bearing species' {rh, lambda, pmom} block to the same
-  //     single-upload pool. Extents (pol, moment) are data from the curve
-  //     (never literals); a species without a pmom field gets no block
-  //     (pmom_offset stays -1 => FR-008 not-in-source). Hot-path consumers read
-  //     stride-1 over the fastest moment axis. ---
+  // each moment-bearing species' {rh, lambda, pmom} block to the same
+  // single-upload pool. Extents (pol, moment) are data from the curve
+  // (never literals); a species without a pmom field gets no block
+  // (pmom_offset stays -1 => not-in-source). Hot-path consumers read
+  // stride-1 over the fastest moment axis. ---
   for (int i = 0; i < num_species_; ++i) {
     const SpeciesCurve *c = store.find_curve(species_names_[i]);
     if (!c)
@@ -654,7 +700,7 @@ void GocartPackage::initializeImpl(PackageConfigReader &reader) {
                          pit->second.values.end());
   }
 
-  // Parse emissions mapping schemas if present (SPEC-EMISSIONS-002).
+  // Parse emissions mapping schemas if present.
   // raw_name is diagnostics-only downstream (parity); the sequential mapping
   // index s is the raw CECE index.
   const int num_raw_species = reader.numEmissionsMappings();
@@ -690,22 +736,29 @@ void GocartPackage::initializeImpl(PackageConfigReader &reader) {
                                       static_cast<int>(h_curve_pool_.size()));
 }
 
+// @copydoc IAerosolPackage::initialize(const std::string &)
 void GocartPackage::initialize(const std::string &config_yaml) {
   YamlReader reader{YAML::Load(config_yaml)};
   initializeImpl(reader);
 }
 
+// @copydoc GocartPackage::initialize(const GocartConfig &)
 void GocartPackage::initialize(const GocartConfig &config) {
   StructReader reader{config};
   initializeImpl(reader);
 }
 
+// @copydoc GocartPackage::executeMicrophysics
 void GocartPackage::executeMicrophysics(const EnvironmentalStateView &env,
                                         View3D<double> &state,
                                         double delta_time_sec) {
   // GOCART is passive bulk aerosol. No internal microphysics evolution.
+  // Emission/transport tendencies are applied by the host dynamical core;
+  // this package supplies diagnostics, optics, activation, and emissions
+  // mapping only. Intentionally a no-op, not an unimplemented stub.
 }
 
+// @copydoc GocartPackage::computeDerivedDiagnostics
 void GocartPackage::computeDerivedDiagnostics(const EnvironmentalStateView &env,
                                               const View3D<const double> &state,
                                               View3D<double> &diagnostics_out) {
@@ -733,6 +786,8 @@ void GocartPackage::computeDerivedDiagnostics(const EnvironmentalStateView &env,
         "match the state array spatial grid!");
   }
 
+  // Hand the raw column-major pointers straight to the solver: the
+  // unmanaged Kokkos views alias this memory with no copy or transpose.
   const double *rh_ptr = env.relative_humidity.data_handle();
   const double *thick_ptr = env.layer_thickness.data_handle();
   const double *state_ptr = state.data_handle();
@@ -743,6 +798,7 @@ void GocartPackage::computeDerivedDiagnostics(const EnvironmentalStateView &env,
                          rh_ptr, thick_ptr, state_ptr, diags_ptr);
 }
 
+// @copydoc GocartPackage::computeEmissions
 void GocartPackage::computeEmissions(const EnvironmentalStateView &env,
                                      const EmissionsInputView &emissions_in,
                                      View3D<double> &emissions_out) {
@@ -788,6 +844,7 @@ void GocartPackage::computeEmissions(const EnvironmentalStateView &env,
                        raw_emissions_ptr, target_emissions_out_ptr);
 }
 
+// @copydoc GocartPackage::computeOptics
 void GocartPackage::computeOptics(const EnvironmentalStateView &env,
                                   const View3D<const double> &state,
                                   const View1D<const double> &wavelengths,
@@ -829,6 +886,7 @@ void GocartPackage::computeOptics(const EnvironmentalStateView &env,
                     optics_ptr);
 }
 
+// @copydoc GocartPackage::computeCCN
 void GocartPackage::computeCCN(const EnvironmentalStateView &env,
                                const View3D<const double> &state,
                                const View1D<const double> &supersaturations,
@@ -870,6 +928,7 @@ void GocartPackage::computeCCN(const EnvironmentalStateView &env,
 }
 
 // --- Dynamic Species-to-Index Queries (Hole 4) ---
+// @copydoc GocartPackage::getSpeciesIndex
 int GocartPackage::getSpeciesIndex(const std::string &name) const {
   for (int i = 0; i < num_species_; ++i) {
     if (species_names_[i] == name) {
@@ -879,6 +938,7 @@ int GocartPackage::getSpeciesIndex(const std::string &name) const {
   return -1; // Not found
 }
 
+// @copydoc GocartPackage::getSpeciesName
 std::string GocartPackage::getSpeciesName(int index) const {
   if (index < 0 || index >= num_species_) {
     throw std::out_of_range("EX-aero Error: Species index (" +
@@ -887,7 +947,16 @@ std::string GocartPackage::getSpeciesName(int index) const {
   return species_names_[index];
 }
 
-// --- GEOSmie MIE attribute surface (ADR-003 / research R9) ---
+// --- GEOSmie MIE attribute surface ---
+// @copydoc GocartPackage::computeAttributes
+//
+// @note This path resolves through the host MieTableStore (grid reads
+// and interpolations) rather than a device kernel: it is the
+// retrieval/init-time bulk surface, and the curve data is small enough
+// that a host loop is deterministic and simpler than a second kernel
+// family. The slot layout matches the C header contract exactly
+// (band-major for SpectralOptical, dense (element, moment) for
+// PolarizedMoment).
 void GocartPackage::computeAttributes(const EnvironmentalStateView &env,
                                       const View3D<const double> &state,
                                       int species_index,
@@ -905,10 +974,10 @@ void GocartPackage::computeAttributes(const EnvironmentalStateView &env,
   const SpeciesCurve *c = store.find_curve(name);
   const int radius_node = c ? c->solver_radius_node : 0;
 
-  // Attribute count is derived from the category, never a fixed literal (R10).
+  // Attribute count is derived from the category, never a fixed literal.
   // For polarized moments the count is the number of addressable (element,
-  // moment) slots carried by THIS species' curve (data, FR-003), gated by
-  // activation (FR-010) so it agrees with momentCounts() used to size the
+  // moment) slots carried by THIS species' curve (data), gated by
+  // activation so it agrees with momentCounts() used to size the
   // caller's output.
   int num_attr = 0;
   int n_pol = 0, n_moment = 0;
@@ -924,8 +993,7 @@ void GocartPackage::computeAttributes(const EnvironmentalStateView &env,
       n_pol = c->n_pol();
       n_moment = c->n_moment();
     }
-    num_attr =
-        n_pol * n_moment; // 0 => no moments / not activated (FR-008/FR-010)
+    num_attr = n_pol * n_moment; // 0 => no moments / not activated
     break;
   default:
     num_attr = 0;
@@ -933,7 +1001,7 @@ void GocartPackage::computeAttributes(const EnvironmentalStateView &env,
 
   const int num_cells = static_cast<int>(state.extent(0));
   const int num_levels = static_cast<int>(state.extent(1));
-  // Multi-band spectral path (T027, FR-002): one column per (band, attribute)
+  // Multi-band spectral path one column per (band, attribute)
   // in band-major order matching computeOptics memory layout; Microphysical
   // ignores the wavelength axis entirely (single block, NaN wavelength).
   int num_bands = (category == AttributeCategory::SpectralOptical)
@@ -975,7 +1043,7 @@ void GocartPackage::computeAttributes(const EnvironmentalStateView &env,
           const AttributeStatus st =
               store.query(name, category, attr_index, rh, wavelength,
                           radius_node, &value, nullptr);
-          const int slot = ib * num_attr + ia; // band-major (T027)
+          const int slot = ib * num_attr + ia; // band-major
           attributes_out(ic, il, slot) =
               value; // 0 only when status says unavailable
           if (status_out)
@@ -986,6 +1054,7 @@ void GocartPackage::computeAttributes(const EnvironmentalStateView &env,
   }
 }
 
+// @copydoc GocartPackage::setSpeciesCurveConfig
 void GocartPackage::setSpeciesCurveConfig(
     const std::vector<SpeciesCurveConfig> &curves) {
   // Resolve through the store: resample radius onto config nodes + apply
@@ -994,17 +1063,19 @@ void GocartPackage::setSpeciesCurveConfig(
   MieTableStore::instance().apply_curve_config(curves);
 }
 
+// @copydoc GocartPackage::setAttributeActivation
 void GocartPackage::setAttributeActivation(
     const std::vector<std::string> &species, int categories_mask,
     const std::string &runtime_file_path) {
   auto &store = MieTableStore::instance();
   if (!runtime_file_path.empty()) {
     store.apply_runtime_file(
-        runtime_file_path); // FATAL on bad file, no fallback (FR-009)
+        runtime_file_path); // FATAL on bad file, no fallback
   }
   store.set_activation(species, categories_mask);
 }
 
+// @copydoc GocartPackage::queryAttribute
 AttributeStatus
 GocartPackage::queryAttribute(int species_index, AttributeCategory category,
                               int attribute_index, double rh,
@@ -1015,8 +1086,7 @@ GocartPackage::queryAttribute(int species_index, AttributeCategory category,
   const std::string name = species_names_[species_index];
   auto &store = MieTableStore::instance();
   const SpeciesCurve *c = store.find_curve(name);
-  const int radius_node =
-      c ? c->solver_radius_node : 0; // hot-path default bin (R9)
+  const int radius_node = c ? c->solver_radius_node : 0; // hot-path default bin
 
   double local_value = 0.0;
   Provenance prov;
@@ -1024,7 +1094,7 @@ GocartPackage::queryAttribute(int species_index, AttributeCategory category,
       store.query(name, category, attribute_index, rh, wavelength_m,
                   radius_node, &local_value, &prov);
 
-  // Write value only on an available/interpolated result (FR-008: never a
+  // Write value only on an available/interpolated result (never a
   // silent 0).
   const bool ok = status == AttributeStatus::Available ||
                   status == AttributeStatus::AvailableFile ||
@@ -1041,13 +1111,14 @@ GocartPackage::queryAttribute(int species_index, AttributeCategory category,
   return status;
 }
 
+// @copydoc GocartPackage::momentCounts
 void GocartPackage::momentCounts(int species_index, int *num_pol_out,
                                  int *num_moment_out) const {
   int n_pol = 0, n_moment = 0;
   if (species_index >= 0 && species_index < num_species_) {
     const std::string name = species_names_[species_index];
     const SpeciesCurve *c = MieTableStore::instance().find_curve(name);
-    // Counts are curve data gated by activation (FR-003/FR-008/FR-010); they
+    // Counts are curve data gated by activation ; they
     // must agree with the slot count computeAttributes() fills for the same
     // species.
     if (c && MieTableStore::instance().is_activated(
