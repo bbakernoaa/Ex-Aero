@@ -84,7 +84,13 @@ contains
     write(*,*) "Package instance created successfully."
 
     ! Prepare YAML string - written as a single, flat, continuous line of kind=c_char with no concatenations or trims!
-    yaml_string = c_char_"species: [{name: 'Dust', dry_density: 2600.0, molecular_weight: 100.0, dry_particle_diameter: 0.15e-6, hygroscopicity: 0.1, lognormal_sigma: 1.5, lognormal_dg: 0.1e-6, refractive_index_real: 1.55, refractive_index_imag: 0.002, mie_table: {source: DU}}]"  // c_null_char
+    yaml_string = c_char_"species: [{name: 'Dust', dry_density: 2600.0, " // &
+            c_char_"molecular_weight: 100.0, dry_particle_diameter: " // &
+            c_char_"0.15e-6, hygroscopicity: 0.1, lognormal_sigma: " // &
+            c_char_"1.5, lognormal_dg: 0.1e-6, " // &
+            c_char_"refractive_index_real: 1.55, " // &
+            c_char_"refractive_index_imag: 0.002, " // &
+            c_char_"mie_table: {source: DU}}]" // c_null_char
 
     ! Initialize package from Fortran
     write(*,*) "Initializing package from YAML..."
@@ -237,8 +243,21 @@ contains
       call exit(1)
     end if
 
-    mom_yaml = c_char_"{species: [{name: 'Dust', dry_density: 2600.0, molecular_weight: 100.0, dry_particle_diameter: 0.15e-6, hygroscopicity: 0.1, lognormal_sigma: 1.5, lognormal_dg: 0.1e-6, refractive_index_real: 1.55, refractive_index_imag: 0.002, mie_table: {source: DU}}, {name: 'SeaSalt', dry_density: 2600.0, molecular_weight: 100.0, dry_particle_diameter: 0.15e-6, hygroscopicity: 0.1, lognormal_sigma: 1.5, lognormal_dg: 0.1e-6, refractive_index_real: 1.55, refractive_index_imag: 0.002}], activation: {categories: [microphysical, spectral, polarized], data_file: '" &
-        // trim(data_dir) // "/mie_dust_monochromatic.txt'}}" // c_null_char
+    mom_yaml = c_char_"{species: [{name: 'Dust', dry_density: 2600.0, " // &
+           c_char_"molecular_weight: 100.0, dry_particle_diameter: " // &
+           c_char_"0.15e-6, hygroscopicity: 0.1, lognormal_sigma: " // &
+           c_char_"1.5, lognormal_dg: 0.1e-6, " // &
+           c_char_"refractive_index_real: 1.55, " // &
+           c_char_"refractive_index_imag: 0.002, " // &
+           c_char_"mie_table: {source: DU}}, {name: 'SeaSalt', " // &
+           c_char_"dry_density: 2600.0, molecular_weight: 100.0, " // &
+           c_char_"dry_particle_diameter: 0.15e-6, hygroscopicity: " // &
+           c_char_"0.1, lognormal_sigma: 1.5, lognormal_dg: " // &
+           c_char_"0.1e-6, refractive_index_real: 1.55, " // &
+           c_char_"refractive_index_imag: 0.002}], activation: " // &
+           c_char_"{categories: [microphysical, spectral, polarized], " // &
+           c_char_"data_file: '" // trim(data_dir) // &
+           "/mie_dust_monochromatic.txt'}}" // c_null_char
 
     mpkg = exaero_create_gocart_package()
     if (.not. c_associated(mpkg%ptr)) then
