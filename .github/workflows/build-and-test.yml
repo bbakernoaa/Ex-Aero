@@ -23,17 +23,35 @@ jobs:
             build-essential \
             cmake \
             gfortran \
-            libtrilinos-kokkos-dev \
             libyaml-cpp-dev \
             python3-netcdf4 \
             python3-numpy
-          sudo ln -s /usr/include/trilinos /usr/lib/include
+
+      - name: Build Kokkos 5.1.1
+        env:
+          KOKKOS_SOURCE: ${{ runner.temp }}/kokkos-src
+          KOKKOS_BUILD: ${{ runner.temp }}/kokkos-build
+          KOKKOS_INSTALL: ${{ runner.temp }}/kokkos-install
+        run: |
+          git init "$KOKKOS_SOURCE"
+          git -C "$KOKKOS_SOURCE" remote add origin https://github.com/kokkos/kokkos.git
+          git -C "$KOKKOS_SOURCE" fetch --depth 1 origin 267ebc25fc5c8b96bb321f34d78f97b1c30f8830
+          git -C "$KOKKOS_SOURCE" checkout --detach FETCH_HEAD
+          cmake -S "$KOKKOS_SOURCE" -B "$KOKKOS_BUILD" \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_CXX_STANDARD=20 \
+            -DCMAKE_INSTALL_PREFIX="$KOKKOS_INSTALL" \
+            -DKokkos_ENABLE_SERIAL=ON \
+            -DKokkos_ENABLE_OPENMP=ON
+          cmake --build "$KOKKOS_BUILD" --parallel 2
+          cmake --install "$KOKKOS_BUILD"
 
       - name: Configure
         run: >-
           cmake -S . -B build
           -DCMAKE_BUILD_TYPE=Release
           -DEXAERO_BUILD_CHEMISTRY=OFF
+          -DCMAKE_PREFIX_PATH=${{ runner.temp }}/kokkos-install
 
       - name: Build
         run: cmake --build build --parallel 2
