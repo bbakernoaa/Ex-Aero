@@ -1,4 +1,10 @@
-find_package(yaml-cpp REQUIRED)
+# Adopt a yaml-cpp the parent build already provides instead of re-running
+# find_package: config-mode discovery would re-create the imported target and
+# hard-fail ("already exists") when the parent vendored it via FetchContent.
+# Same guard pattern as Kokkos in the top-level CMakeLists.
+if(NOT TARGET yaml-cpp::yaml-cpp AND NOT TARGET yaml-cpp)
+  find_package(yaml-cpp REQUIRED)
+endif()
 
 # --- Build-time baked-in MIE table generation ---
 # The pinned GEOSmie RRTMG snapshot is converted into a deterministic float64
