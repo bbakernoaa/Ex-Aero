@@ -6,8 +6,8 @@ find_package(yaml-cpp REQUIRED)
 # on the rule.
 set(MIE_GENERATED_HEADER
     ${CMAKE_CURRENT_SOURCE_DIR}/data/generated/MieTableData.hpp)
-set(MIE_GENERATOR ${CMAKE_SOURCE_DIR}/tools/generate_mie_tables.py)
-set(MIE_SNAPSHOT_DIR ${CMAKE_SOURCE_DIR}/tools/geosmie_snapshot)
+set(MIE_GENERATOR ${EXAERO_REPO_ROOT}/tools/generate_mie_tables.py)
+set(MIE_SNAPSHOT_DIR ${EXAERO_REPO_ROOT}/tools/geosmie_snapshot)
 
 add_custom_command(
   OUTPUT ${MIE_GENERATED_HEADER}
