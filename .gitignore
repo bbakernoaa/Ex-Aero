@@ -1,6 +1,7 @@
 # --- Build Outputs & Cache Directories ---
 build/
 /build/
+build*/
 bin/
 lib/
 *.o
@@ -80,3 +81,23 @@ __pycache__/
 env/
 venv/
 ENV/
+
+# --- AI specs ---
+.superpowers/
+.specify/
+specs/
+docs/specs/
+.github/agents/
+.github/prompts/
+
+# --- Generated documentation ---
+docs/doxygen/
+
+**/*.nc
+
+# Pinned GEOSmie MIE snapshot must be version-controlled so baked-in table generation
+# is hermetic and reproducible offline (research R1, FR-016, SC-007). Negate the global
+# NetCDF ignore for exactly these inputs.
+!tools/geosmie_snapshot/*.nc
+# Generated baked-in header is committed as the reproducibility artifact (T039 CI diff gate).
+!src/src_impl/data/generated/MieTableData.hpp

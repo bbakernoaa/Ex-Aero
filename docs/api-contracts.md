@@ -16,8 +16,12 @@ namespace exaero {
     public:
         virtual ~IAerosolPackage() = default;
 
-        // Dynamic Initialization
+        // Dynamic Initialization (canonical YAML entry point)
         virtual void initialize(const std::string& config_yaml) = 0;
+
+        // Structured (no-YAML) initialization. Additive overload: packages that do
+        // not support structured configuration throw std::logic_error by default.
+        virtual void initialize(const GocartConfig& config);
 
         // Passive microphysics step (advances states like chemical mechanisms if applicable)
         virtual void executeMicrophysics(
@@ -52,6 +56,38 @@ namespace exaero {
 
 } // namespace exaero
 ```
+
+### 1A. Structured GOCART Configuration (`GocartConfig.hpp`)
+
+`exaero::GocartPackage` additionally accepts an in-memory configuration struct, so a C++
+caller (e.g. a CCPP host) can configure an entire package without producing YAML text.
+`src/exaero/GocartConfig.hpp` is Kokkos-free (ADR-001) and defines:
+
+| Type | Purpose |
+|------|---------|
+| `GocartConfig` | Top level: `species` list, optional `activation`, `emissions_mapping` list |
+| `GocartSpeciesConfig` | Per-species scalars plus optional `optics_lookup` / `mie_table` blocks |
+| `GocartLegacyOpticsLookup` | Parallel `rh`/`ext`/`ssa`/`asm_` vectors (Mode B lookup) |
+| `SpeciesCurveConfig` | `source_label`, `radius_nodes`, `interpolate`, `solver_radius_node`, `overrides` |
+| `GocartActivationConfig` | `categories` (`AttributeCategory` list), `species`, `data_file` |
+| `GocartEmissionsMappingConfig` | `raw_name` + `mappings` of target species / split fractions / modal fields |
+
+**Contract:**
+
+* **Behavioral parity.** `initialize(const GocartConfig&)` and
+  `initialize(const std::string& config_yaml)` share one orchestration core
+  (`initializeImpl(PackageConfigReader&)`); the `YamlReader` and `StructReader` adapters
+  feed it. Given equivalent inputs the two paths produce bit-identical pools, statuses,
+  and provenance (verified by `test_structured_config_full_equivalence`).
+* **Fail fast, fail loudly.** Every validation error throws `std::runtime_error` with the
+  `"EX-aero Error: "` prefix and the offending species name — never a silent fallback.
+* **Default-throw surface.** `IAerosolPackage::initialize(const GocartConfig&)` throws
+  `std::logic_error` for packages that do not implement structured configuration
+  (additive virtual, no ABI break for existing YAML-only implementers).
+* **Delivery precedence** is identical on both paths: `config > runtime file > baked-in`
+  (`DeliverySource::{BakedIn, RuntimeFile, Config}`).
+* **Overrides with an empty `radius_nodes`** are validated against the effective SOURCE
+  axis downstream in `MieTableStore::apply_curve_config`, exactly as on the YAML path.
 
 ---
 
@@ -128,3 +164,127 @@ These index codes map column-integrated optical thicknesses:
 | `FINE_MODE_SCATTERING_AOT` | `8` | Fine mode (sub-micron) scattering AOT | dimensionless |
 | `PM2_5_EXTINCTION_AOT` | `9` | PM2.5 extinction AOT | dimensionless |
 | `PM2_5_SCATTERING_AOT` | `10` | PM2.5 scattering AOT | dimensionless |
+
+---
+
+## 4. GEOSmie MIE Attribute Surface (`AttributeQuery.hpp`)
+
+Feature `001-geosmie-lut-attributes` adds a Kokkos-free, additive attribute surface to
+`IAerosolPackage` for surfacing NASA GOCART (GEOSmie) MIE table values — microphysical,
+spectral-optical, and polarized phase-function moments — with full provenance. New virtuals
+have defaults (`NotActivated` / no-op), so existing packages (MAM4xx wrapper, tests) compile
+and behave unchanged (Principle II). Public headers MUST NOT include `<Kokkos_Core.hpp>`
+(invariant C8; enforced by `tests/standalone_public_check.cpp`).
+
+### A. Enumerations
+
+`AttributeCategory`: `Microphysical=0`, `SpectralOptical=1`, `PolarizedMoment=2`.
+`attribute_category_bit(cat)` builds the activation mask bit `1 << cat`.
+
+`AttributeStatus` (availability, never a silent 0 — FR-008):
+
+| Constant | Value | Meaning |
+| :--- | :--- | :--- |
+| `Available` | `0` | Exact grid point, baked-in delivery |
+| `AvailableFile` | `1` | Exact grid point, runtime-file delivery (FR-012) |
+| `Interpolated` | `2` | Between grid points (FR-006) |
+| `NotActivated` | `3` | Species/category deselected (FR-010) |
+| `NotInSource` | `4` | Species lacks the data (FR-008) |
+| `AvailableConfig` | `5` | Exact point on a config override curve (R9) |
+
+`DeliverySource`: `BakedIn=0`, `RuntimeFile=1`, `Config=2` — the winning layer of the
+precedence chain **config > runtime-file > baked-in** (FR-012), reported on every value.
+
+### B. Attribute index codes (units are normative)
+
+Microphysical (`microphysical_indices`, no wavelength axis):
+
+| Constant | Value | Unit |
+| :--- | :--- | :--- |
+| `WET_PARTICLE_DENSITY` | `0` | kg m⁻³ |
+| `GROWTH_FACTOR` | `1` | fraction (wet/dry radius), ≥ 1 |
+| `EFFECTIVE_RADIUS` | `2` | m |
+| `MASS_MEAN_RADIUS` | `3` | m (no source var in RRTMG bands → `NotInSource`) |
+| `BIN_LOWER_RADIUS` | `4` | m |
+| `BIN_UPPER_RADIUS` | `5` | m |
+| `VOLUME_PER_MASS` | `6` | m³ kg⁻¹ |
+| `AREA_PER_MASS` | `7` | m² kg⁻¹ |
+| `PARTICLE_MASS` | `8` | kg |
+
+SpectralOptical (`spectral_optical_indices`, indexed by radius × rh × λ):
+
+| Constant | Value | Unit |
+| :--- | :--- | :--- |
+| `EXTINCTION_EFFICIENCY` | `0` | 1 (≥ 0) |
+| `SCATTERING_EFFICIENCY` | `1` | 1 (≤ qext) |
+| `ABSORPTION_EFFICIENCY` | `2` | 1 (derived qext − qsca) |
+| `MASS_EXTINCTION` | `3` | m² (kg dry mass)⁻¹ |
+| `MASS_SCATTERING` | `4` | m² (kg dry mass)⁻¹ |
+| `MASS_BACKSCATTER` | `5` | m² (kg dry mass)⁻¹ sr⁻¹ |
+| `LIDAR_RATIO` | `6` | sr (guarded division) |
+| `ASYMMETRY_FACTOR` | `7` | fraction [−1, 1] |
+| `SINGLE_SCATTERING_ALBEDO` | `8` | fraction [0, 1] |
+| `REFRACTIVE_INDEX_REAL` | `9` | 1 (> 0) |
+| `REFRACTIVE_INDEX_IMAG` | `10` | 1 (≥ 0) |
+
+PolarizedMoment (`polarized_moment_indices`): a single attribute `PHASE_FUNCTION_MOMENT=0`
+addressed by an encoded `attribute_index = moment * ELEMENT_STRIDE + element`, with the
+normative element ordering **P11, P12, P33, P34, P22, P44** (`ELEMENT_STRIDE=6`). The moment
+count is per-species DATA (the pinned release ships 3 for the spheroid species; none for
+spherical), never hardcoded: query `momentCounts()` (C++) / `exaero_get_moment_counts`
+(C/Fortran) to size outputs; out-of-range decompositions return `NotInSource`.
+
+### C. C++ methods (additive)
+
+```cpp
+// Hot-path bulk query mirroring computeOptics (FR-015). Output slots:
+//  Microphysical  -> NUM_ATTRIBUTES (wavelength ignored)
+//  SpectralOptical-> num_bands * NUM_ATTRIBUTES, band-major (slot = band*NUM_ATTR + attr)
+//  PolarizedMoment-> num_pol * num_moment dense row-major (element fastest), from the curve
+virtual void computeAttributes(const EnvironmentalStateView& env,
+    const View3D<const double>& state, int species_index, AttributeCategory category,
+    const View1D<const double>& wavelengths, View3D<double>& attributes_out,
+    View3D<int>* status_out = nullptr);
+
+// Scalar query for init-time / retrieval consumers. wavelength_m ignored (pass NaN) for
+// Microphysical. value_out/provenance written only when available/interpolated (FR-008).
+virtual AttributeStatus queryAttribute(int species_index, AttributeCategory category,
+    int attribute_index, double rh, double wavelength_m, double* value_out,
+    ProvenanceInfo* provenance_out = nullptr) const;
+
+// Activation (FR-010) + optional runtime extension/override file (FR-012). A file that
+// fails validation aborts with "FATAL ERROR:" and NO silent fallback (FR-009).
+virtual void setAttributeActivation(const std::vector<std::string>& species,
+    int categories_mask, const std::string& runtime_file_path = "");
+
+// Curve mapping (R9): bind source curves, redeclare bins, override values.
+virtual void setSpeciesCurveConfig(const std::vector<SpeciesCurveConfig>& curves);
+
+// Moment slot counts for one species (0/0 when the species carries no moments).
+virtual void momentCounts(int species_index, int* num_pol_out, int* num_moment_out) const;
+```
+
+`ProvenanceInfo` (POD, crosses C/Fortran by value) carries `species`, `unit`,
+`source_version`, `citation`, `delivery_source`, `interpolated`, `status`, and the resolved
+axis extents `num_radius` / `num_rh` / `num_lambda` / `num_pol` / `num_moment` (all data —
+the pinned default set is six RRTMG band species DU/SS/SU/BC/OC/NI; BR is file-only).
+
+### D. Interpolation semantics (ADR-003 curve model)
+
+A config species binds a source curve via `mie_table:`. Only the **radius** axis is
+resampled (linear) onto config `radius_nodes` at init; RH and wavelength keep full source
+resolution, so grid-point queries stay bit-identical to the source (≤ 1e-7 rel). Off-grid:
+RH blends linearly, the spectral axis blends **linear-in-log wavelength** (FR-006); a query
+between points reports `Interpolated` with `interpolated=1`. `overrides` supply constant
+per-node values (delivery=config); coordinates outside a curve's declared λ domain decline
+to the caller's analytical path (never a clamped wrong value).
+
+### E. C / Fortran boundary
+
+C entry points (all CCPP `errmsg`/`errflg`): `exaero_set_attribute_activation`,
+`exaero_set_species_curve_config` (flat arrays + explicit counts, override id =
+`category<<8 | index`), `exaero_compute_attributes`, `exaero_query_attribute`,
+`exaero_get_moment_counts`. Fortran mirrors in `exaero_interface.f90`: same subroutines plus
+`bind(c)` parameters `exaero_CAT_*`, `exaero_STATUS_*`, `exaero_PMOM_ELEMENT_STRIDE`, and the
+microphysical/spectral index constants. Arrays cross the boundary flat with explicit dims;
+`value_out` is written only on an available/interpolated status (FR-008).

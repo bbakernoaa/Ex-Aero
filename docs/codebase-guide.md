@@ -33,6 +33,7 @@ Ex-Aero/
 │   │   ├── IAerosolPackage_C.h     # C-linkage wrappers for Fortran binding
 │   │   ├── exaero_interface.f90    # ISO_C_BINDINGS Fortran adapter module
 │   │   ├── AerosolIndices.hpp      # Output diagnostics and optics index codes
+│   │   ├── AttributeQuery.hpp      # MIE attribute surface: enums, index codes, provenance
 │   │   ├── Environment.hpp         # Public environment lifecycle helpers
 │   │   └── MemoryMapper.hpp        # mdspan-to-Kokkos mapping templates
 │   └── src_impl/                   # PRIVATE IMPLEMENTATIONS (Internal only)
@@ -42,14 +43,26 @@ Ex-Aero/
 │       │   ├── GocartPackage.cpp   # Bridging logic
 │       │   ├── GocartSolver.cpp    # Parallel Kokkos kernels running on GPU
 │       │   └── GocartSpeciesParams.hpp # Species-specific parameter structures
+│       ├── loader/                 # GEOSmie MIE table store (host-side, Kokkos-free)
+│       │   ├── MieTableStore.hpp   # Singleton curve store: baked+file+config merge
+│       │   ├── MieFileLoader.hpp   # Portable text runtime-file parser (FR-009 fail-fast)
+│       │   └── Provenance.hpp      # Unit/version/citation/delivery provenance records
+│       ├── data/generated/         # Build-time generated baked-in tables
+│       │   └── MieTableData.hpp    # Deterministic float64 arrays from pinned snapshot
 │       └── third_party/            # Privately vendored header dependencies
 │           └── mdspan/             # Isolated single-header C++20 mdspan backport
+├── tools/                          # Generators and snapshot provenance
+│   ├── generate_mie_tables.py      # Pinned GEOSmie .nc -> MieTableData.hpp (FR-016)
+│   ├── make_test_fixtures.py       # Deterministic runtime-file fixtures (tests/data/)
+│   └── geosmie_snapshot/           # Version-tagged source .nc files + PROVENANCE.md
 └── tests/                          # Automated verification suites
     ├── CMakeLists.txt              # Unit test runner compilation instructions
     ├── test_main.cpp               # Standard physical & optical unit tests
+    ├── standalone_public_check.cpp # Public-header compile gate (no Kokkos include path)
     ├── test_memory_mapper.cpp      # Zero-copy mapping test suite
     ├── test_fuzzer.cpp             # Property-based invariants and crash fuzzer
-    └── test_fortran_interface.f90  # Fortran interface verification runner
+    ├── test_fortran_interface.f90  # Fortran interface verification runner
+    └── data/                       # MIE runtime-file fixtures (see data/README.md)
 ```
 
 ---
@@ -59,6 +72,7 @@ Ex-Aero/
 *   `exaero::`: Contains all public abstract classes, core structures, adapters, and environment helpers.
 *   `exaero::diagnostic_indices::`: Diagnostic index codes (MASS, PM2.5, PM10, etc.) used to write to multidimensional diagnostics buffers.
 *   `exaero::optical_indices::`: Optical index codes (extinction coefficient, scattering, AOT, etc.) used to write to multi-band optical property buffers.
+*   `exaero::microphysical_indices::` / `exaero::spectral_optical_indices::` / `exaero::polarized_moment_indices::`: Attribute index codes for the GEOSmie MIE attribute surface (`AttributeQuery.hpp`), with normative units.
 *   `exaero_mdspan::`: The custom, isolated namespace under which the privately vendored C++20 `std::experimental::mdspan` backport is compiled, preventing collisions with system-wide Kokkos mdspan types.
 
 ---
@@ -78,3 +92,42 @@ All GPU parallel kernels are housed under `src/src_impl/gocart/GocartSolver.cpp`
 *   RH Lookup Table 1D linear interpolation.
 *   Cloud droplet CCN activation thresholds over supersaturation bands.
 *   Column-integrated vertical accumulation algorithms.
+
+### C. GEOSmie MIE Attribute Surface (`loader/`, `AttributeQuery.hpp`)
+Feature `001-geosmie-lut-attributes` surfaces NASA GOCART (GEOSmie) MIE table attributes
+(microphysical, spectral-optical, polarized moments) with provenance. It spans the public
+boundary and one private host module:
+*   **Public surface (`src/exaero/AttributeQuery.hpp`):** Kokkos-free enums
+    (`AttributeCategory`, `AttributeStatus`, `DeliverySource`), normative index codes
+    (`microphysical_indices`, `spectral_optical_indices`, `polarized_moment_indices`),
+    `ProvenanceInfo`, and `SpeciesCurveConfig`. Additive `IAerosolPackage` virtuals
+    (`computeAttributes`, `queryAttribute`, `setAttributeActivation`,
+    `setSpeciesCurveConfig`, `momentCounts`) default to `NotActivated`/no-op so existing
+    packages compile unchanged. Mirrored in C (`IAerosolPackage_C.h`) and Fortran
+    (`exaero_interface.f90`).
+*   **Host store (`src/src_impl/loader/MieTableStore.{hpp,cpp}`):** process singleton that
+    merges three delivery layers by precedence **config > runtime-file > baked-in** (FR-012).
+    Baked-in arrays are generated at build time from the pinned snapshot
+    (`tools/generate_mie_tables.py` → `data/generated/MieTableData.hpp`, deterministic,
+    FR-016). A curve is a field over (radius, rh, λ[, pol, moment]) with dynamic axis
+    lengths — no bin/RH/band count is ever hardcoded (invariant C12). Grid-point reads are
+    bit-exact (≤ 1e-7); off-grid interpolation is linear in RH and linear-in-log wavelength
+    (FR-006).
+*   **Runtime file (`src/src_impl/loader/MieFileLoader.{hpp,cpp}`):** parses the native
+    portable text format (`# @format exaero_mie_v1`), validates units/version/schema, and
+    aborts with a `FATAL ERROR:` diagnostic on any failure — never a silent fallback
+    (FR-009).
+*   **Device path (`GocartSolver.cpp`):** at `create_solver_state` the activated curves are
+    uploaded ONCE into one flat `double` pool (raw `const double*` + extents, no mdspan per
+    ADR-001); kernels read it with zero host→device transfers in the timestep loop (FR-015).
+    A band coordinate outside a curve's λ domain declines to the analytical path.
+*   **Determinism gate (`tools/generate_mie_tables.py --check`):** the `ExaeroMieDeterminism`
+    ctest re-generates the baked header and fails on any diff (T039, SC-007).
+See `docs/api-contracts.md` §4 for the full contract and `specs/001-geosmie-lut-attributes/`
+for the design.
+
+### 3C. GOCART Structured Config (New — 2026-09-10)
+- `GocartConfig.hpp`: public Kokkos-free header defining `GocartConfig`, `GocartSpeciesConfig`, `GocartActivationConfig`, `GocartEmissionsMappingConfig`, `GocartLegacyOpticsLookup`.
+- `IAerosolPackage.hpp`: new virtual overload `initialize(const GocartConfig&)` (defaults to `std::logic_error` for unsupported packages).
+- `GocartPackage.cpp`: `PackageConfigReader` seam (`YamlReader` + `StructReader`) + `initializeImpl()` shared orchestration; `initialize(const GocartConfig&)` override.
+- `tests/test_main.cpp`: `test_structured_config_*` family (unsupported-package guard, species parity, full equivalence, fail-fast 5-case gate).

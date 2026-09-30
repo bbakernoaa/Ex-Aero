@@ -1,0 +1,61 @@
+name: Build and Test
+
+on:
+  pull_request:
+    branches: [develop]
+  push:
+    branches: [develop]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+
+      - name: Install build and test dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes --no-install-recommends \
+            build-essential \
+            cmake \
+            gfortran \
+            libyaml-cpp-dev \
+            python3-netcdf4 \
+            python3-numpy
+
+      - name: Build Kokkos 5.1.1
+        env:
+          KOKKOS_SOURCE: ${{ runner.temp }}/kokkos-src
+          KOKKOS_BUILD: ${{ runner.temp }}/kokkos-build
+          KOKKOS_INSTALL: ${{ runner.temp }}/kokkos-install
+        run: |
+          git init "$KOKKOS_SOURCE"
+          git -C "$KOKKOS_SOURCE" remote add origin https://github.com/kokkos/kokkos.git
+          git -C "$KOKKOS_SOURCE" fetch --depth 1 origin 267ebc25fc5c8b96bb321f34d78f97b1c30f8830
+          git -C "$KOKKOS_SOURCE" checkout --detach FETCH_HEAD
+          cmake -S "$KOKKOS_SOURCE" -B "$KOKKOS_BUILD" \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_CXX_STANDARD=20 \
+            -DCMAKE_POSITION_INDEPENDENT_CODE=ON \
+            -DCMAKE_INSTALL_PREFIX="$KOKKOS_INSTALL" \
+            -DKokkos_ENABLE_SERIAL=ON \
+            -DKokkos_ENABLE_OPENMP=ON
+          cmake --build "$KOKKOS_BUILD" --parallel 2
+          cmake --install "$KOKKOS_BUILD"
+
+      - name: Configure
+        run: >-
+          cmake -S . -B build
+          -DCMAKE_BUILD_TYPE=Release
+          -DEXAERO_BUILD_CHEMISTRY=OFF
+          -DCMAKE_PREFIX_PATH=${{ runner.temp }}/kokkos-install
+
+      - name: Build
+        run: cmake --build build --parallel 2
+
+      - name: Test
+        run: ctest --test-dir build --output-on-failure

@@ -1,0 +1,97 @@
+# Doxyfile - EX-aero API documentation
+#
+# NOAA NWS Office of Modeling and Development - Ex-Aero
+# Run `doxygen` from the repo root to regenerate into docs/doxygen/html.
+#
+# Design notes:
+#   - INPUT covers the public headers (src/exaero, include) and the private
+#     implementation (src/src_impl). The 42k-line auto-generated Mie LUT
+#     header is excluded (it is data, not documentation surface).
+#   - EXTRACT_ALL = NO so any undocumented public class/member surfaces as a
+#     warning: the warning count is the documentation-coverage gate.
+#   - Fortran (.f90) is enabled so the iso_c_binding module is documented.
+#   - Markdown + math (KaTeX via the web renderer) are on: the physics notes
+#     use ```mermaid-free markdown and @f$ ... @f$ LaTeX.
+
+PROJECT_NAME    = "EX-aero Aerosol Interface"
+PROJECT_BRIEF   = "High-performance aerosol microphysics/optics interface for UFS/CCPP"
+PROJECT_NUMBER  = "001-geosmie-lut-attributes"
+OUTPUT_LANGUAGE = English
+
+# --- Inputs -------------------------------------------------------------
+RECURSIVE       = YES
+INPUT           = src/exaero \
+                  src/src_impl \
+                  include \
+                  docs/api-contracts.md
+FILE_PATTERNS   = *.hpp *.h *.cpp *.f90 *.md
+EXCLUDE         = src/src_impl/data
+EXCLUDE_PATTERNS = */build*/* */build-rel*/*
+EXCLUDE_SYMLINKS = YES
+
+# The generated LUT header is pure data; skip it explicitly by pattern too.
+# (docs/api-contracts.md is pulled in as a page; adjust if it moves.)
+
+# --- Output -------------------------------------------------------------
+OUTPUT_DIRECTORY = docs/doxygen
+GENERATE_HTML    = YES
+GENERATE_LATEX   = NO
+HTML_OUTPUT      = html
+HTML_EXTRA_STYLESHEET =
+CREATE_SUBDIRS   = NO
+DISABLE_INDEX    = NO
+GENERATE_TREEVIEW = YES
+
+# --- Extraction / grouping ----------------------------------------------
+# Coverage gate: EXTRACT_ALL = NO means every *public* class/member must
+# carry a doc comment or doxygen warns. Private and anonymous-namespace
+# internals are intentionally documented with inline // comments for
+# source readers instead (the hot-path kernels are read in-editor, not in
+# generated HTML), so they are not extracted.
+EXTRACT_ALL      = NO
+EXTRACT_PRIVATE  = NO
+EXTRACT_STATIC   = NO
+EXTRACT_ANON_NSPACES = NO
+JAVADOC_AUTOBRIEF = YES
+QT_AUTOBRIEF     = NO
+DISTRIBUTE_GROUP_DOC = YES
+INLINE_INHERITED_MEMB = NO
+FULL_PATH_NAMES  = YES
+STRIP_FROM_PATH  = .
+
+# --- References / links -------------------------------------------------
+MARKDOWN_SUPPORT = YES
+AUTOLINK_SUPPORT = YES
+
+# LaTeX math inside @f$ ... @f$ and @f[ ... @f] renders via MathJax in HTML.
+MATHJAX_VERSION  = MathJax_2
+MATHJAX_RELPATH  = https://cdn.jsdelivr.net/npm/mathjax@2
+
+# --- Preprocessor (C++23 headers, Kokkos macros) ------------------------
+ENABLE_PREPROCESSING = YES
+MACRO_EXPANSION      = YES
+EXPAND_ONLY_PREDEF   = NO
+SEARCH_INCLUDES      = YES
+PREDEFINED           = "KOKKOS_INLINE_FUNCTION=" \
+                       "KOKKOS_LAMBDA=[=]" \
+                       "KOKKOS_CLASS_LAMBDA=[=]" \
+                       "EXAERO_WITH_CLOUDJ" \
+                       "EXAERO_WITH_ISORROPIALITE" \
+                       "__cplusplus=202302L"
+EXPAND_AS_DEFINED    =
+
+# --- Fortran ------------------------------------------------------------
+# Doxygen treats .f90 via its free-form Fortran parser automatically.
+
+# --- Diagnostics / warnings ---------------------------------------------
+WARNINGS           = YES
+WARN_IF_UNDOCUMENTED = YES
+WARN_IF_DOC_ERROR    = YES
+WARN_NO_PARAMDOC     = NO
+WARN_AS_ERROR        = NO
+QUIET              = YES
+
+# --- Misc ---------------------------------------------------------------
+USE_MDFILE_AS_MAINPAGE = docs/api-contracts.md
+GENERATE_XML           = NO
+REPEAT_BRIEF           = YES

@@ -1,0 +1,54 @@
+{
+  "schema_version": 1,
+  "tiers": {
+    "ci": {
+      "workflows": {
+        "doc-audit-update": {
+          "state": "installed",
+          "installed_at": "2026-07-27T14:05:15Z"
+        },
+        "doc-freshness-pr": {
+          "state": "installed",
+          "installed_at": "2026-07-27T14:05:15Z"
+        },
+        "doc-freshness-schedule": {
+          "state": "installed",
+          "installed_at": "2026-07-27T14:05:16Z"
+        },
+        "doc-index-update": {
+          "state": "installed",
+          "installed_at": "2026-07-27T14:05:16Z"
+        },
+        "doc-pr-full-cycle": {
+          "state": "installed",
+          "installed_at": "2026-07-27T14:05:16Z"
+        },
+        "doc-pr-release": {
+          "state": "installed",
+          "installed_at": "2026-07-27T14:05:16Z"
+        },
+        "doc-release": {
+          "state": "installed",
+          "installed_at": "2026-07-27T14:05:16Z"
+        },
+        "doc-review-pr": {
+          "state": "installed",
+          "installed_at": "2026-07-27T14:05:16Z"
+        },
+        "doc-spec-verify": {
+          "state": "installed",
+          "installed_at": "2026-07-27T14:05:16Z"
+        }
+      },
+      "tools": {
+        "state": "installed",
+        "dest": ".github/scripts",
+        "installed_at": "2026-07-27T14:05:16Z"
+      },
+      "helpers": {
+        "state": "installed",
+        "installed_at": "2026-07-27T14:05:16Z"
+      }
+    }
+  }
+}

@@ -27,6 +27,23 @@ contains
     character(len=32, kind=c_char) :: queried_name
     integer(c_int) :: resolved_idx
 
+    ! GEOSmie MIE attribute round-trip
+    real(c_double) :: mie_value
+    character(len=32, kind=c_char) :: mie_unit
+    character(len=128, kind=c_char) :: mie_version
+    integer(c_int) :: mie_status
+
+    ! GEOSmie polarized-moment round-trip
+    type(exaero_package_t) :: mpkg
+    character(len=4096, kind=c_char) :: mom_yaml
+    character(len=4096) :: data_dir
+    integer :: env_status
+    real(c_double) :: mom_value
+    integer(c_int) :: mom_status, n_pol, n_mom, rc
+    real(c_double) :: mom_attrs(1, 1, 18)
+    integer(c_int) :: mom_stat(1, 1, 18)
+    real(c_double) :: mom_wl(1)
+
     ! CCPP-standard error variables
     character(len=256, kind=c_char) :: errmsg
     integer(c_int) :: errflg
@@ -67,7 +84,13 @@ contains
     write(*,*) "Package instance created successfully."
 
     ! Prepare YAML string - written as a single, flat, continuous line of kind=c_char with no concatenations or trims!
-    yaml_string = c_char_"species: [{name: 'Dust', dry_density: 2600.0, molecular_weight: 100.0, dry_particle_diameter: 0.15e-6, hygroscopicity: 0.1, lognormal_sigma: 1.5, lognormal_dg: 0.1e-6, refractive_index_real: 1.55, refractive_index_imag: 0.002}]" // c_null_char
+    yaml_string = c_char_"species: [{name: 'Dust', dry_density: 2600.0, " // &
+            c_char_"molecular_weight: 100.0, dry_particle_diameter: " // &
+            c_char_"0.15e-6, hygroscopicity: 0.1, lognormal_sigma: " // &
+            c_char_"1.5, lognormal_dg: 0.1e-6, " // &
+            c_char_"refractive_index_real: 1.55, " // &
+            c_char_"refractive_index_imag: 0.002, " // &
+            c_char_"mie_table: {source: DU}}]" // c_null_char
 
     ! Initialize package from Fortran
     write(*,*) "Initializing package from YAML..."
@@ -82,7 +105,7 @@ contains
 
     ! --- Dynamic Metadata Queries Validation (Hole 4) ---
     write(*,*) "Running dynamic metadata queries..."
-    resolved_idx = exaero_get_species_index(pkg, "Dust" // char(0))
+    resolved_idx = exaero_get_species_index(pkg, "Dust"  // char(0))
     if (resolved_idx /= 0) then
       write(*,*) "Error: Failed to dynamically map Dust species to index offset!"
       call exit(1)
@@ -94,6 +117,33 @@ contains
       call exit(1)
     end if
     write(*,*) "Dynamic metadata queries completed successfully."
+
+    ! --- GEOSmie MIE microphysical round-trip query effective radius of the
+    ! DU-bound Dust species at the dry grid point through the C boundary. ---
+    write(*,*) "Querying MIE microphysical attribute..."
+    errmsg = ""
+    errflg = 0
+    mie_value = -1.0d0
+    call exaero_query_attribute(pkg, 0, exaero_CAT_MICROPHYSICAL, exaero_EFFECTIVE_RADIUS, &
+        0.0d0, 0.0d0, mie_value, mie_unit, 32, mie_version, 128, mie_status, errmsg, errflg)
+    if (errflg /= 0) then
+      write(*,*) "Error: MIE query failed: ", errmsg
+      call exit(1)
+    end if
+    if (mie_status /= exaero_STATUS_AVAILABLE) then
+      write(*,*) "Error: MIE status not Available:", mie_status
+      call exit(1)
+    end if
+    ! DU bin0 dry effective radius = 6.358845325848961e-07 m (pinned snapshot).
+    if (abs(mie_value - 6.358845325848961d-07) > 1d-13) then
+      write(*,*) "Error: MIE effective radius mismatch:", mie_value
+      call exit(1)
+    end if
+    if (mie_unit(1:1) /= 'm') then
+      write(*,*) "Error: MIE unit not meters:", mie_unit
+      call exit(1)
+    end if
+    write(*,*) "MIE microphysical round-trip completed successfully."
 
     ! Populate mock inputs
     temp = 298.0d0
@@ -182,7 +232,160 @@ contains
       write(*,*) "Error: Failed to compute emissions: ", errmsg
       call exit(1)
     end if
-    write(*,*) "Emissions mapping stub completed successfully."
+    ! --- GEOSmie polarized-moment round-trip a second package loads
+    ! the DU monochromatic runtime file, which carries the rank-5 pmom array over
+    ! (radius, rh, lambda, pol, moment) with the documented element ordering
+    ! P11,P12,P33,P34,P22,P44. Counts are curve DATA (6 x 3 here), never literals. ---
+    write(*,*) "Running polarized-moment round-trip..."
+    call get_environment_variable("EXAERO_TEST_DATA_DIR", data_dir, status=env_status)
+    if (env_status /= 0) then
+      write(*,*) "Error: EXAERO_TEST_DATA_DIR not set for moments fixture"
+      call exit(1)
+    end if
+
+    mom_yaml = c_char_"{species: [{name: 'Dust', dry_density: 2600.0, " // &
+           c_char_"molecular_weight: 100.0, dry_particle_diameter: " // &
+           c_char_"0.15e-6, hygroscopicity: 0.1, lognormal_sigma: " // &
+           c_char_"1.5, lognormal_dg: 0.1e-6, " // &
+           c_char_"refractive_index_real: 1.55, " // &
+           c_char_"refractive_index_imag: 0.002, " // &
+           c_char_"mie_table: {source: DU}}, {name: 'SeaSalt', " // &
+           c_char_"dry_density: 2600.0, molecular_weight: 100.0, " // &
+           c_char_"dry_particle_diameter: 0.15e-6, hygroscopicity: " // &
+           c_char_"0.1, lognormal_sigma: 1.5, lognormal_dg: " // &
+           c_char_"0.1e-6, refractive_index_real: 1.55, " // &
+           c_char_"refractive_index_imag: 0.002}], activation: " // &
+           c_char_"{categories: [microphysical, spectral, polarized], " // &
+           c_char_"data_file: '" // trim(data_dir) // &
+           "/mie_dust_monochromatic.txt'}}" // c_null_char
+
+    mpkg = exaero_create_gocart_package()
+    if (.not. c_associated(mpkg%ptr)) then
+      write(*,*) "Error: Failed to create moments package!"
+      call exit(1)
+    end if
+    errmsg = ""
+    errflg = 0
+    call exaero_initialize_package(mpkg, mom_yaml, errmsg, errflg)
+    if (errflg /= 0) then
+      write(*,*) "Error: moments package init failed: ", errmsg
+      call exit(1)
+    end if
+
+    ! (1) Counts are data: the fixture declares 6 elements x 3 moments.
+    errmsg = ""
+    errflg = 0
+    rc = exaero_get_moment_counts(mpkg, 0, n_pol, n_mom, errmsg, errflg)
+    if (errflg /= 0 .or. rc /= 0) then
+      write(*,*) "Error: moment counts failed: ", errmsg
+      call exit(1)
+    end if
+    if (n_pol /= 6 .or. n_mom /= 3) then
+      write(*,*) "Error: moment counts wrong:", n_pol, n_mom
+      call exit(1)
+    end if
+
+    ! (2) Scalar query: element P11 (0), moment 0 at the file's central band and the
+    ! rh=0.5 grid point -> DU qext[bin0,rh10,band2] = 1.9339340925216675, file-delivered.
+    mom_value = -1.0d0
+    call exaero_query_attribute(mpkg, 0, exaero_CAT_POLARIZED_MOMENT, &
+        exaero_PHASE_FUNCTION_MOMENT, 0.5d0, 5.5d-7, mom_value, &
+        mie_unit, 32, mie_version, 128, mom_status, errmsg, errflg)
+    if (errflg /= 0) then
+      write(*,*) "Error: moment query failed: ", errmsg
+      call exit(1)
+    end if
+    if (mom_status /= exaero_STATUS_AVAILABLE_FILE) then
+      write(*,*) "Error: moment status not AvailableFile:", mom_status
+      call exit(1)
+    end if
+    if (abs(mom_value - 1.9339340925216675d0) > 1d-13) then
+      write(*,*) "Error: P11 moment-0 value mismatch:", mom_value
+      call exit(1)
+    end if
+
+    ! (3) Documented ordering: element P22 (e=4, m=0) -> qe00 * 1.4.
+    mom_value = -1.0d0
+    call exaero_query_attribute(mpkg, 0, exaero_CAT_POLARIZED_MOMENT, &
+        0 * exaero_PMOM_ELEMENT_STRIDE + 4, 0.5d0, 5.5d-7, mom_value, &
+        mie_unit, 32, mie_version, 128, mom_status, errmsg, errflg)
+    if (errflg /= 0 .or. mom_status /= exaero_STATUS_AVAILABLE_FILE) then
+      write(*,*) "Error: P22 query failed:", mom_status
+      call exit(1)
+    end if
+    if (abs(mom_value - 2.7075077295303345d0) > 1d-13) then
+      write(*,*) "Error: P22 moment-0 value mismatch:", mom_value
+      call exit(1)
+    end if
+
+    ! (4) Moment 1 (idx = 1*STRIDE + 0) halves the value: 0.9669670462608337.
+    mom_value = -1.0d0
+    call exaero_query_attribute(mpkg, 0, exaero_CAT_POLARIZED_MOMENT, &
+        1 * exaero_PMOM_ELEMENT_STRIDE, 0.5d0, 5.5d-7, mom_value, &
+        mie_unit, 32, mie_version, 128, mom_status, errmsg, errflg)
+    if (errflg /= 0 .or. mom_status /= exaero_STATUS_AVAILABLE_FILE) then
+      write(*,*) "Error: moment-1 query failed:", mom_status
+      call exit(1)
+    end if
+    if (abs(mom_value - 0.9669670462608337d0) > 1d-13) then
+      write(*,*) "Error: P11 moment-1 value mismatch:", mom_value
+      call exit(1)
+    end if
+
+    ! (5) Out-of-range moment (M=3, idx 18): explicit NotInSource, value untouched.
+    mom_value = -777.0d0
+    call exaero_query_attribute(mpkg, 0, exaero_CAT_POLARIZED_MOMENT, &
+        3 * exaero_PMOM_ELEMENT_STRIDE, 0.5d0, 5.5d-7, mom_value, &
+        mie_unit, 32, mie_version, 128, mom_status, errmsg, errflg)
+    if (errflg /= 0 .or. mom_status /= exaero_STATUS_NOT_IN_SOURCE) then
+      write(*,*) "Error: out-of-range moment status:", mom_status
+      call exit(1)
+    end if
+    if (mom_value /= -777.0d0) then
+      write(*,*) "Error: out-of-range moment clobbered value!"
+      call exit(1)
+    end if
+
+    ! (6) A spherical species (SeaSalt, no moments): explicit NotInSource.
+    n_pol = -1
+    n_mom = -1
+    rc = exaero_get_moment_counts(mpkg, 1, n_pol, n_mom, errmsg, errflg)
+    if (errflg /= 0 .or. rc /= 0 .or. n_pol /= 0 .or. n_mom /= 0) then
+      write(*,*) "Error: SeaSalt counts should be 0:", n_pol, n_mom
+      call exit(1)
+    end if
+
+    ! (7) Bulk path: compute_attributes fills n_pol*n_moment = 18 slots, dense
+    ! row-major (element fastest); slot 5 (e=5,m=0) = qe00*1.5 = 2.900901138782501.
+    mom_attrs = -777.0d0
+    mom_stat = -1
+    mom_wl(1) = 5.5d-7
+    call exaero_compute_attributes(mpkg, 1, 1, temp, pres, dens, rh, thick, &
+        mass_state, 0, exaero_CAT_POLARIZED_MOMENT, 1, mom_wl, &
+        mom_attrs, mom_stat, errmsg, errflg)
+    if (errflg /= 0) then
+      write(*,*) "Error: moment bulk compute failed: ", errmsg
+      call exit(1)
+    end if
+    if (mom_stat(1, 1, 1) /= exaero_STATUS_AVAILABLE_FILE) then
+      write(*,*) "Error: bulk slot 0 status:", mom_stat(1, 1, 1)
+      call exit(1)
+    end if
+    if (abs(mom_attrs(1, 1, 1) - 1.9339340925216675d0) > 1d-13) then
+      write(*,*) "Error: bulk slot 0 value:", mom_attrs(1, 1, 1)
+      call exit(1)
+    end if
+    if (abs(mom_attrs(1, 1, 6) - 2.900901138782501d0) > 1d-13) then
+      write(*,*) "Error: bulk slot 5 (P44,m0) value:", mom_attrs(1, 1, 6)
+      call exit(1)
+    end if
+    if (abs(mom_attrs(1, 1, 18) - 0.7252252846956253d0) > 1d-13) then
+      write(*,*) "Error: bulk slot 17 (P44,m2) value:", mom_attrs(1, 1, 18)
+      call exit(1)
+    end if
+
+    call exaero_free_package(mpkg)
+    write(*,*) "Polarized-moment round-trip completed successfully."
 
     ! Manually free Gocart Package instance before Kokkos finalizes
     write(*,*) "Freeing package instance..."
