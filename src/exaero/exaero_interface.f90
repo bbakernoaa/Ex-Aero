@@ -18,10 +18,37 @@ module exaero_interface
   implicit none
 
   ! Public indices corresponding exactly to exaero/AerosolIndices.hpp
+  ! (diagnostic_indices).  Every slot is exported so a Fortran host names the
+  ! diagnostic by constant rather than hardcoding an integer -- the ordering is
+  ! part of the ABI and must never be reproduced by hand on the host side.
+  ! Append-only: existing values are frozen, new slots are added at the end.
+  integer(c_int), parameter :: exaero_MASS_CONCENTRATION = 0         !< [kg/m^3] per-species mass
   integer(c_int), parameter :: exaero_PM2_5_CONCENTRATION = 1  !< [kg/m^3] PM2.5 mass
+  integer(c_int), parameter :: exaero_PM10_CONCENTRATION = 2         !< [kg/m^3] PM10 mass
+  integer(c_int), parameter :: exaero_NUMBER_CONCENTRATION = 3       !< [#/m^3] derived number
+  integer(c_int), parameter :: exaero_SURFACE_AREA_DENSITY = 4       !< [m^2/m^3] SAD
+  integer(c_int), parameter :: exaero_AEROSOL_LIQUID_WATER = 5       !< [kg/m^3] ALW
+  integer(c_int), parameter :: exaero_GRAVITATIONAL_SETTLING_VELOCITY = 6 !< [m/s] Stokes v_g
+  integer(c_int), parameter :: exaero_SURFACE_MASS = 7               !< [kg/m^3] surface layer (level 0)
   integer(c_int), parameter :: exaero_COLUMN_MASS = 8          !< [kg/m^2] column mass
+  integer(c_int), parameter :: exaero_SURFACE_PM2_5_MASS = 9         !< [kg/m^3] surface PM2.5 (level 0)
+  integer(c_int), parameter :: exaero_COLUMN_PM2_5_MASS = 10         !< [kg/m^2] column PM2.5
+  integer(c_int), parameter :: exaero_NUM_DIAGNOSTICS = 11           !< diagnostic slab extent
+
+  ! Optical-properties slots (optical_indices).  3D coefficients fill
+  ! (cell, level, index); the column AOT values integrate over dz at level 0.
   integer(c_int), parameter :: exaero_EXTINCTION_COEFF = 0     !< [1/m] extinction coeff
+  integer(c_int), parameter :: exaero_SCATTERING_COEFF = 1          !< [1/m] scattering coeff
+  integer(c_int), parameter :: exaero_BACKSCATTER_COEFF = 2         !< [1/m/sr] hemispheric backscatter
+  integer(c_int), parameter :: exaero_ASYMMETRY_FACTOR = 3          !< g in [-1, 1]
+  integer(c_int), parameter :: exaero_LIDAR_BACKSCATTER = 4         !< [1/m/sr] lidar 180-deg backscatter
   integer(c_int), parameter :: exaero_EXTINCTION_AOT = 5       !< column AOT (550 nm)
+  integer(c_int), parameter :: exaero_SCATTERING_AOT = 6            !< column scattering AOT
+  integer(c_int), parameter :: exaero_FINE_MODE_EXTINCTION_AOT = 7  !< sub-micron extinction AOT
+  integer(c_int), parameter :: exaero_FINE_MODE_SCATTERING_AOT = 8  !< sub-micron scattering AOT
+  integer(c_int), parameter :: exaero_PM2_5_EXTINCTION_AOT = 9      !< PM2.5-cut extinction AOT
+  integer(c_int), parameter :: exaero_PM2_5_SCATTERING_AOT = 10     !< PM2.5-cut scattering AOT
+  integer(c_int), parameter :: exaero_NUM_OPTICS = 11               !< optics slab extent
 
   ! --- GEOSmie MIE attribute surface indices (exaero/AttributeQuery.hpp) ---
   ! Categories (AttributeCategory)
