@@ -27,6 +27,7 @@ jobs:
             libyaml-cpp-dev \
             python3-netcdf4 \
             python3-numpy
+          sudo ln -s /usr/include/trilinos /usr/lib/include
 
       - name: Configure
         run: >-
