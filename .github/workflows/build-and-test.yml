@@ -40,6 +40,7 @@ jobs:
           cmake -S "$KOKKOS_SOURCE" -B "$KOKKOS_BUILD" \
             -DCMAKE_BUILD_TYPE=Release \
             -DCMAKE_CXX_STANDARD=20 \
+            -DCMAKE_POSITION_INDEPENDENT_CODE=ON \
             -DCMAKE_INSTALL_PREFIX="$KOKKOS_INSTALL" \
             -DKokkos_ENABLE_SERIAL=ON \
             -DKokkos_ENABLE_OPENMP=ON
