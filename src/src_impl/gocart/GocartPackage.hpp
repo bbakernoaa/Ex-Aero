@@ -124,6 +124,16 @@ public:
                          const View1D<const double> &wavelengths,
                          View3D<double> &attributes_out,
                          View3D<int> *status_out = nullptr) override;
+  /// @brief Caller-anchored wet sizing over a flat point list (see
+  /// contract). Resolves the curve growth factor at each point's RH and
+  /// applies it to the caller's dry radius/density; gf = 1 returns the
+  /// dry particle bit-for-bit. A species with no bound curve reports
+  /// NotInSource and leaves the outputs at zero.
+  void computeWetSizing(const View1D<const double> &relative_humidity,
+                        int species_index, double radius_dry,
+                        double density_dry, View1D<double> &radius_wet_out,
+                        View1D<double> &density_wet_out,
+                        View1D<int> *status_out = nullptr) override;
   /// @brief Install config-species curve bindings (resolved at
   /// initialize(); bad config aborts with "FATAL ERROR:").
   void

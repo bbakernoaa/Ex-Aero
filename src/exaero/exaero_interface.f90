@@ -280,6 +280,25 @@ module exaero_interface
       integer(c_int), intent(out) :: errflg
     end subroutine exaero_query_attribute
 
+    ! Caller-anchored wet sizing over a flat point list. The C side writes
+    ! radius_wet_out / density_wet_out on EVERY path (the wet particle on an ok
+    ! status, 0 on not-activated / not-in-source), so intent(out) is ABI-safe
+    ! here -- unlike the conditional scalar value_out above.
+    subroutine exaero_compute_wet_sizing(pkg, num_points, rh_ptr, &
+        species_index, radius_dry, density_dry, radius_wet_out, &
+        density_wet_out, status_out, errmsg, errflg) &
+        bind(c, name="exaero_compute_wet_sizing")
+      import :: exaero_package_t, c_int, c_double, c_char
+      type(exaero_package_t), value :: pkg
+      integer(c_int), value :: num_points, species_index
+      real(c_double), intent(in) :: rh_ptr(*)
+      real(c_double), value :: radius_dry, density_dry
+      real(c_double), intent(out) :: radius_wet_out(*), density_wet_out(*)
+      integer(c_int), intent(out) :: status_out(*)
+      character(kind=c_char), intent(out) :: errmsg(*)
+      integer(c_int), intent(out) :: errflg
+    end subroutine exaero_compute_wet_sizing
+
     ! Polarized-moment count query num_slots = num_pol * num_moment for the
     ! species' curve (data, never a literal). Both are 0 for a species without moments.
     function exaero_get_moment_counts(pkg, species_index, num_pol_out, num_moment_out, &

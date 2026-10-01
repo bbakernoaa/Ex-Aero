@@ -612,6 +612,131 @@ void test_mie_not_available() {
   std::cout << "MIE Explicit Not-Available Statuses PASS" << std::endl;
 }
 
+void test_mie_wet_sizing() {
+  using namespace exaero::microphysical_indices;
+  // Caller-anchored bulk wet sizing: the curve supplies the growth factor,
+  // the caller's dry particle anchors the mixing (FR-008: no silent values).
+  std::string yaml = std::string(kMieSixYaml) +
+                     R"YAML(      - name: "MYSTERY"
+        dry_density: 1000.0
+        molecular_weight: 50.0
+        dry_particle_diameter: 0.1e-6
+        hygroscopicity: 0.0
+        lognormal_sigma: 1.5
+        lognormal_dg: 0.1e-6
+        refractive_index_real: 1.4
+        refractive_index_imag: 0.0
+)YAML";
+  exaero::GocartPackage package;
+  package.initialize(yaml);
+
+  constexpr double kRadiusDry = 1.0e-7; // [m]
+  constexpr double kDensityDry = 2600.0; // [kg m^-3]
+  const double rh_grid[4] = {0.0, 0.3, 0.5, 0.9};
+  exaero::View1D<const double> rh(rh_grid, 4);
+  double radius_wet[4] = {-1, -1, -1, -1};
+  double density_wet[4] = {-1, -1, -1, -1};
+  int status[4] = {-1, -1, -1, -1};
+  exaero::View1D<double> r_out(radius_wet, 4);
+  exaero::View1D<double> d_out(density_wet, 4);
+  exaero::View1D<int> s_out(status, 4);
+
+  // (1) Hydrophobic DU: gf is exactly 1 at every stored RH (baked-in dust),
+  // so the anchored sizing must return the caller's dry particle BIT-EXACT.
+  // This is the parity guarantee for transport models reusing exaero growth.
+  package.computeWetSizing(rh, 0, kRadiusDry, kDensityDry, r_out, d_out,
+                           &s_out);
+  for (int i = 0; i < 4; ++i) {
+    assert(status[i] == static_cast<int>(exaero::AttributeStatus::Available) ||
+           status[i] == static_cast<int>(exaero::AttributeStatus::Interpolated));
+    assert(radius_wet[i] == kRadiusDry);
+    assert(density_wet[i] == kDensityDry);
+  }
+
+  // (2) Hygroscopic SS at the rh=0.5 grid point: golden growth factor
+  // (mie_micro::GOLDEN[1]) drives the wet radius; the wet density must
+  // satisfy the physical invariant dry-mass + condensate-mass = wet-mass
+  // (independent of the algebraic mixing rearrangement).
+  double gf_ss = 0.0;
+  assert(package.queryAttribute(1, exaero::AttributeCategory::Microphysical,
+                                 GROWTH_FACTOR, 0.5, 0.0, &gf_ss, nullptr) ==
+         exaero::AttributeStatus::Available);
+  check_close(gf_ss, mie_micro::GOLDEN[1].growth_rh50, "SS gf");
+  assert(gf_ss > 1.0);
+  package.computeWetSizing(rh, 1, kRadiusDry, kDensityDry, r_out, d_out,
+                           &s_out);
+  {
+    const int i = 2; // rh[2] == 0.5, an exact grid point
+    assert(status[i] == static_cast<int>(exaero::AttributeStatus::Available));
+    check_close(radius_wet[i], gf_ss * kRadiusDry, "SS wet radius");
+    const double kWater = 1000.0;
+    const double dry_vol = (4.0 / 3.0) * M_PI * kRadiusDry * kRadiusDry *
+                           kRadiusDry;
+    const double wet_vol = (4.0 / 3.0) * M_PI * radius_wet[i] *
+                           radius_wet[i] * radius_wet[i];
+    // Mass conservation: rho_wet * V_wet == rho_dry * V_dry + water * dV.
+    check_close(density_wet[i] * wet_vol,
+                kDensityDry * dry_vol + kWater * (wet_vol - dry_vol),
+                "SS wet mass balance");
+    // Densified mixing bound: water dilutes, so dry < wet < ... strictly.
+    assert(density_wet[i] < kDensityDry);
+    assert(density_wet[i] > kWater);
+  }
+  // Monotone swelling with RH for a hygroscopic curve.
+  assert(radius_wet[3] > radius_wet[1]); // rh 0.9 vs 0.3
+  assert(density_wet[3] < density_wet[1]);
+
+  // (3) Curve-less species: NotInSource per point, outputs zeroed (never a
+  // silent dry-particle passthrough).
+  double r2[4] = {7, 7, 7, 7};
+  double d2[4] = {7, 7, 7, 7};
+  int s2[4] = {7, 7, 7, 7};
+  exaero::View1D<double> r2_out(r2, 4);
+  exaero::View1D<double> d2_out(d2, 4);
+  exaero::View1D<int> s2_out(s2, 4);
+  package.computeWetSizing(rh, 6, kRadiusDry, kDensityDry, r2_out, d2_out,
+                           &s2_out);
+  for (int i = 0; i < 4; ++i) {
+    assert(s2[i] == static_cast<int>(exaero::AttributeStatus::NotInSource));
+    assert(r2[i] == 0.0 && d2[i] == 0.0);
+  }
+
+  // (4) Null status pointer is legal; outputs still defined on ok.
+  package.computeWetSizing(rh, 0, kRadiusDry, kDensityDry, r_out, d_out,
+                           nullptr);
+  assert(radius_wet[1] == kRadiusDry);
+
+  // (5) Fail-fast inputs: out-of-range species and non-positive dry sizing
+  // throw (never silent).
+  bool threw = false;
+  try {
+    package.computeWetSizing(rh, 999, kRadiusDry, kDensityDry, r_out, d_out,
+                             nullptr);
+  } catch (const std::runtime_error &) {
+    threw = true;
+  }
+  assert(threw);
+  threw = false;
+  try {
+    package.computeWetSizing(rh, 0, 0.0, kDensityDry, r_out, d_out, nullptr);
+  } catch (const std::runtime_error &) {
+    threw = true;
+  }
+  assert(threw);
+
+  // (6) Determinism: same inputs -> identical outputs, twice.
+  double r3[4] = {0, 0, 0, 0};
+  double d3[4] = {0, 0, 0, 0};
+  exaero::View1D<double> r3_out(r3, 4);
+  exaero::View1D<double> d3_out(d3, 4);
+  package.computeWetSizing(rh, 1, kRadiusDry, kDensityDry, r3_out, d3_out,
+                           nullptr);
+  for (int i = 0; i < 4; ++i)
+    assert(r3[i] == radius_wet[i] && d3[i] == density_wet[i]);
+
+  std::cout << "MIE Caller-Anchored Wet Sizing PASS" << std::endl;
+}
+
 // Spectral RRTMG-band goldens at (radius bin 0, rh=0.5 grid point, band
 // index 3.0), read from the pinned snapshot at full float64 (ravel order
 // b*nH*nL + h*nL + l).
@@ -2636,6 +2761,7 @@ int main(int argc, char **argv) {
   test_mie_baked_in_microphysical();
   test_mie_provenance();
   test_mie_not_available();
+  test_mie_wet_sizing();
   test_mie_rrtmg_spectral();
   test_mie_interpolation();
   test_mie_compute_attributes_multiband();

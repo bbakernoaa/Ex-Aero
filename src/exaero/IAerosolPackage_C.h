@@ -257,6 +257,34 @@ void exaero_query_attribute(exaero_package_t pkg, int species_index,
                             int version_max, int *status_out, char *errmsg,
                             int *errflg);
 
+/// @brief Caller-anchored wet particle sizing over a flat point list.
+///
+/// Resolves the species' curve growth factor at each point's RH and applies
+/// it to the caller's dry particle: wet radius = growth * radius_dry, wet
+/// density = the volume-weighted mixture of the dry material with water.
+/// A growth of exactly 1 returns the dry particle unchanged, bit for bit.
+/// This is distinct from the curve-intrinsic Microphysical
+/// WET_PARTICLE_DENSITY attribute; use it when sizing the caller's own
+/// particle. Points whose species has no curve (or whose category is not
+/// activated) report the corresponding status and leave both outputs at
+/// zero -- never a silent plausible value (FR-008).
+/// @param pkg Opaque package handle.
+/// @param num_points Number of query points (length of the RH/outputs).
+/// @param rh_ptr [fraction 0-1] relative humidity, length num_points.
+/// @param species_index Target species (from exaero_get_species_index()).
+/// @param radius_dry [m] caller's dry particle radius; must be > 0.
+/// @param density_dry [kg m^-3] caller's dry particle density; must be > 0.
+/// @param[out] radius_wet_out [m] wet radius on an ok status, else 0.
+/// @param[out] density_wet_out [kg m^-3] wet density on an ok status, else 0.
+/// @param[out] status_out Optional AttributeStatus code per point; NULL to skip.
+/// @param[out] errmsg Caller-sized error buffer; "" on success.
+/// @param[out] errflg CCPP flag: 0 = success, 1 = fatal error.
+void exaero_compute_wet_sizing(exaero_package_t pkg, int num_points,
+                               const double *rh_ptr, int species_index,
+                               double radius_dry, double density_dry,
+                               double *radius_wet_out, double *density_wet_out,
+                               int *status_out, char *errmsg, int *errflg);
+
 /// @brief Query a species' polarized-moment (element, moment) slot counts.
 ///
 /// Sized from the curve data (never a literal); outputs are 0 for a
