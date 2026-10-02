@@ -33,7 +33,8 @@ module exaero_interface
   integer(c_int), parameter :: exaero_COLUMN_MASS = 8          !< [kg/m^2] column mass
   integer(c_int), parameter :: exaero_SURFACE_PM2_5_MASS = 9         !< [kg/m^3] surface PM2.5 (level 0)
   integer(c_int), parameter :: exaero_COLUMN_PM2_5_MASS = 10         !< [kg/m^2] column PM2.5
-  integer(c_int), parameter :: exaero_NUM_DIAGNOSTICS = 11           !< diagnostic slab extent
+  integer(c_int), parameter :: exaero_PM1_CONCENTRATION = 11  !< [kg/m^3] PM1 mass
+  integer(c_int), parameter :: exaero_NUM_DIAGNOSTICS = 12           !< diagnostic slab extent
 
   ! Optical-properties slots (optical_indices).  3D coefficients fill
   ! (cell, level, index); the column AOT values integrate over dz at level 0.

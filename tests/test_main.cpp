@@ -8,6 +8,7 @@
 #include <gocart/GocartPackage.hpp>
 #include <iostream>
 #include <loader/MieTableStore.hpp>
+#include <random>
 #include <regex>
 #include <string>
 #include <utils/DubovikSpheroidDatabase.hpp>
@@ -123,6 +124,237 @@ void test_zero_copy_mapping() {
                   expected_col_mass) < 1e-12);
 
   std::cout << "Memory Mapping Zero-Copy Integration Test: PASS" << std::endl;
+}
+
+// Shared synthetic state for the PM-cut tests: one cell, one level, three
+// bulk species with dry diameters straddling the 1.0 / 2.5 / 10 um cuts.
+struct PmCutFixture {
+  static constexpr int kSpecies = 3;
+  // FINE 0.8 um (in every cut), MID 2.0 um (in PM2.5/PM10, out of PM1),
+  // COARSE 3.0 um (in PM10 only).  Diameters sit strictly inside/outside
+  // each cut so the all-or-nothing modal cut is exercised unambiguously.
+  static constexpr double kMass[kSpecies] = {1.0e-6, 4.0e-6, 9.0e-6};
+  double temp[1] = {298.0};
+  double pres[1] = {101325.0};
+  double dens[1] = {1.2};
+  double rh[1] = {0.5};
+  double thick[1] = {100.0};
+  double state_raw[kSpecies] = {kMass[0], kMass[1], kMass[2]};
+  double diags_raw[exaero::diagnostic_indices::NUM_DIAGNOSTICS] = {0.0};
+
+  // Run the diagnostics kernel into diags_raw.  The output view must be a
+  // local lvalue because the package API takes View3D<double>& (the slab is
+  // written in place), so the views are built here rather than returned.
+  void run(exaero::GocartPackage &package) {
+    exaero::View2D<const double> temperature(temp, 1, 1);
+    exaero::View2D<const double> pressure(pres, 1, 1);
+    exaero::View2D<const double> air_density(dens, 1, 1);
+    exaero::View2D<const double> relative_humidity(rh, 1, 1);
+    exaero::View2D<const double> layer_thickness(thick, 1, 1);
+    exaero::EnvironmentalStateView env{temperature, pressure, air_density,
+                                       relative_humidity, layer_thickness};
+    exaero::View3D<const double> state(state_raw, 1, 1, kSpecies);
+    exaero::View3D<double> diags(
+        diags_raw, 1, 1, exaero::diagnostic_indices::NUM_DIAGNOSTICS);
+    package.computeDerivedDiagnostics(env, state, diags);
+  }
+};
+
+std::string pm_cut_yaml() {
+  return R"(
+    species:
+      - name: "FINE"
+        dry_density: 1700.0
+        molecular_weight: 96.06
+        dry_particle_diameter: 0.8e-6
+        hygroscopicity: 0.0
+        lognormal_sigma: 1.5
+        lognormal_dg: 0.8e-6
+        refractive_index_real: 1.45
+        refractive_index_imag: 0.001
+      - name: "MID"
+        dry_density: 1770.0
+        molecular_weight: 98.0
+        dry_particle_diameter: 2.0e-6
+        hygroscopicity: 0.0
+        lognormal_sigma: 1.5
+        lognormal_dg: 2.0e-6
+        refractive_index_real: 1.45
+        refractive_index_imag: 0.001
+      - name: "COARSE"
+        dry_density: 2200.0
+        molecular_weight: 58.5
+        dry_particle_diameter: 3.0e-6
+        hygroscopicity: 0.0
+        lognormal_sigma: 1.5
+        lognormal_dg: 3.0e-6
+        refractive_index_real: 1.4
+        refractive_index_imag: 0.001
+    )";
+}
+
+void test_gocart_pm1_cut() {
+  exaero::GocartPackage package;
+  package.initialize(pm_cut_yaml());
+
+  PmCutFixture fx;
+  fx.run(package);
+
+  const auto &diags = fx.diags_raw;
+  namespace Slot = exaero::diagnostic_indices;
+  // The dry-diameter cut is all-or-nothing per modal species: FINE (0.8 um)
+  // lands in every cut, MID (2.0 um) in PM2.5/PM10 only, COARSE (3.0 um) in
+  // PM10 only.
+  assert(diags[Slot::PM1_CONCENTRATION] == PmCutFixture::kMass[0]);
+  assert(diags[Slot::PM2_5_CONCENTRATION] ==
+         PmCutFixture::kMass[0] + PmCutFixture::kMass[1]);
+  assert(diags[Slot::PM10_CONCENTRATION] == PmCutFixture::kMass[0] +
+                                                PmCutFixture::kMass[1] +
+                                                PmCutFixture::kMass[2]);
+  // The legacy slots keep their semantics: mass concentration is the
+  // principal species mass, unchanged by the new slot.
+  assert(diags[Slot::MASS_CONCENTRATION] == PmCutFixture::kMass[0]);
+  assert(diags[Slot::NUMBER_CONCENTRATION] > 0.0);
+  assert(diags[Slot::SURFACE_AREA_DENSITY] > 0.0);
+
+  std::cout << "PM1 Dry-Diameter Cut Test: PASS" << std::endl;
+}
+
+void test_gocart_pm_above_cut_zero() {
+  // A column whose mass sits entirely above every PM cut answers an exact
+  // zero for each cut -- a real physical zero, never a missing value.
+  exaero::GocartPackage package;
+  std::string yaml = R"(
+    species:
+      - name: "COARSE_ONLY"
+        dry_density: 2200.0
+        molecular_weight: 58.5
+        dry_particle_diameter: 20.0e-6
+        hygroscopicity: 0.0
+        lognormal_sigma: 1.5
+        lognormal_dg: 20.0e-6
+        refractive_index_real: 1.4
+        refractive_index_imag: 0.001
+    )";
+  package.initialize(yaml);
+
+  double temp[1] = {298.0};
+  double pres[1] = {101325.0};
+  double dens[1] = {1.2};
+  double rh[1] = {0.5};
+  double thick[1] = {100.0};
+  double state_raw[1] = {5.0e-6};
+  double diags_raw[exaero::diagnostic_indices::NUM_DIAGNOSTICS];
+  for (double &x : diags_raw)
+    x = -777.0; // poison: every slot must be written
+
+  exaero::View2D<const double> temperature(temp, 1, 1);
+  exaero::View2D<const double> pressure(pres, 1, 1);
+  exaero::View2D<const double> air_density(dens, 1, 1);
+  exaero::View2D<const double> relative_humidity(rh, 1, 1);
+  exaero::View2D<const double> layer_thickness(thick, 1, 1);
+  exaero::EnvironmentalStateView env{temperature, pressure, air_density,
+                                     relative_humidity, layer_thickness};
+  exaero::View3D<const double> state(state_raw, 1, 1, 1);
+  exaero::View3D<double> diags(diags_raw, 1, 1,
+                               exaero::diagnostic_indices::NUM_DIAGNOSTICS);
+  package.computeDerivedDiagnostics(env, state, diags);
+
+  namespace Slot = exaero::diagnostic_indices;
+  assert(diags_raw[Slot::PM1_CONCENTRATION] == 0.0);
+  assert(diags_raw[Slot::PM2_5_CONCENTRATION] == 0.0);
+  assert(diags_raw[Slot::PM10_CONCENTRATION] == 0.0);
+  assert(diags_raw[Slot::NUMBER_CONCENTRATION] > 0.0); // species still counted
+
+  std::cout << "PM Above-Cut Real-Zero Test: PASS" << std::endl;
+}
+
+void test_gocart_pm_nesting_invariant() {
+  // Property test: for any non-negative state, PM1 <= PM2.5 <= PM10 at every
+  // point, and the per-species mass never exceeds the PM10 total.  The modal
+  // dry diameters are fixed by the configuration (nested cut sets), so the
+  // randomized degree of freedom is the per-species mass.  Seeded so the
+  // sweep is reproducible across platforms.
+  std::mt19937 rng(20261002U);
+  std::uniform_real_distribution<double> mass(0.0, 5.0e-6);
+
+  exaero::GocartPackage package;
+  package.initialize(pm_cut_yaml());
+  const int num_species = 3;
+
+  for (int trial = 0; trial < 200; ++trial) {
+    double temp[2] = {298.0, 290.0};
+    double pres[2] = {101325.0, 95000.0};
+    double dens[2] = {1.2, 1.0};
+    double rh[2] = {0.5, 0.9};
+    double thick[2] = {100.0, 250.0};
+    std::vector<double> state_raw(static_cast<std::size_t>(2) * num_species);
+    for (double &m : state_raw)
+      m = mass(rng);
+    std::vector<double> diags_raw(2 * exaero::diagnostic_indices::NUM_DIAGNOSTICS,
+                                  -777.0);
+
+    exaero::View2D<const double> temperature(temp, 2, 1);
+    exaero::View2D<const double> pressure(pres, 2, 1);
+    exaero::View2D<const double> air_density(dens, 2, 1);
+    exaero::View2D<const double> relative_humidity(rh, 2, 1);
+    exaero::View2D<const double> layer_thickness(thick, 2, 1);
+    exaero::EnvironmentalStateView env{temperature, pressure, air_density,
+                                       relative_humidity, layer_thickness};
+    exaero::View3D<const double> state(state_raw.data(), 2, 1, num_species);
+    exaero::View3D<double> diags(diags_raw.data(), 2, 1,
+                                 exaero::diagnostic_indices::NUM_DIAGNOSTICS);
+    package.computeDerivedDiagnostics(env, state, diags);
+
+    namespace Slot = exaero::diagnostic_indices;
+    for (int cell = 0; cell < 2; ++cell) {
+      const double pm1 = diags_raw[cell + 0 * 2 + Slot::PM1_CONCENTRATION * 2];
+      const double pm25 =
+          diags_raw[cell + 0 * 2 + Slot::PM2_5_CONCENTRATION * 2];
+      const double pm10 = diags_raw[cell + 0 * 2 + Slot::PM10_CONCENTRATION * 2];
+      assert(pm1 >= 0.0 && pm25 >= 0.0 && pm10 >= 0.0);
+      assert(pm1 <= pm25 + 1e-18);
+      assert(pm25 <= pm10 + 1e-18);
+      for (int s = 0; s < num_species; ++s)
+        assert(state_raw[static_cast<std::size_t>(s) * 2 + cell] <=
+               pm10 + 1e-18);
+    }
+  }
+
+  std::cout << "PM Nesting Property Test: PASS" << std::endl;
+}
+
+void test_gocart_diagnostic_extent_regression() {
+  // Adding the PM1 slot must not perturb the legacy slots: the same fixture
+  // run twice answers byte-identical slots 0..10, and the PM1 write lands
+  // only in its own slot.
+  exaero::GocartPackage package;
+  package.initialize(pm_cut_yaml());
+
+  PmCutFixture first;
+  first.run(package);
+  PmCutFixture second;
+  second.run(package);
+
+  namespace Slot = exaero::diagnostic_indices;
+  for (int slot = 0; slot <= Slot::COLUMN_PM2_5_MASS; ++slot) {
+    assert(std::memcmp(&first.diags_raw[slot], &second.diags_raw[slot],
+                       sizeof(double)) == 0);
+  }
+  assert(std::memcmp(first.diags_raw, second.diags_raw,
+                     sizeof(first.diags_raw)) == 0);
+
+  // The 2D PM2.5 surface/column slots keep their own dry-diameter cut and do
+  // not alias the new 3D slot.
+  assert(first.diags_raw[Slot::SURFACE_PM2_5_MASS] ==
+         PmCutFixture::kMass[0] + PmCutFixture::kMass[1]);
+  const double expected_col_pm25 =
+      (PmCutFixture::kMass[0] + PmCutFixture::kMass[1]) * 100.0;
+  assert(std::abs(first.diags_raw[Slot::COLUMN_PM2_5_MASS] -
+                  expected_col_pm25) < 1e-12);
+  assert(first.diags_raw[Slot::PM1_CONCENTRATION] == PmCutFixture::kMass[0]);
+
+  std::cout << "Diagnostic Extent Regression Test: PASS" << std::endl;
 }
 
 void test_gocart_optics() {
@@ -2755,6 +2987,10 @@ int main(int argc, char **argv) {
   test_lut_generator_stub();
   test_spheroid_database_interpolation();
   test_zero_copy_mapping();
+  test_gocart_pm1_cut();
+  test_gocart_pm_above_cut_zero();
+  test_gocart_pm_nesting_invariant();
+  test_gocart_diagnostic_extent_regression();
   test_gocart_optics();
   test_gocart_arbitrary_lookup_length();
   test_gocart_lookup_length_mismatch_fails();

@@ -37,7 +37,8 @@ void exaero_free_package(exaero_package_t pkg);
 void exaero_initialize_package(exaero_package_t pkg, const char *config_yaml,
                                char *errmsg, int *errflg);
 
-/// @brief Derived-diagnostics wrapper (PM2.5/PM10/number/column mass/ALW).
+/// @brief Derived-diagnostics wrapper (PM1/PM2.5/PM10/number/column
+/// mass/ALW).
 /// @param pkg Opaque package handle.
 /// @param num_cells Horizontal cell count (fastest-varying Fortran dim).
 /// @param num_levels Vertical level count.

@@ -300,8 +300,9 @@ void free_solver_state(GocartSolverState *state) {
 
 /// @brief Launch the derived-diagnostics kernels (3D fields + column/surface).
 ///
-/// Per (cell, level) the kernel sums, over species: mass-weighted PM2.5 /
-/// PM10 cuts (dry diameter <= 2.5 / 10 um), number concentration from
+/// Per (cell, level) the kernel sums, over species: mass-weighted PM1 /
+/// PM2.5 / PM10 cuts (dry diameter <= 1.0 / 2.5 / 10 um), number
+/// concentration from
 /// the lognormal volume relation
 /// @f$ N = M_{bulk} / [ (\pi/6) \rho_0 D_{gm}^3 e^{4.5 \ln^2 \sigma_g} ] @f$,
 /// surface area density, aerosol liquid water from the wet-minus-dry
@@ -350,6 +351,7 @@ void run_gocart_diagnostics(GocartSolverState *state, int num_cells,
       "GocartDiagnosticsKernel",
       Kokkos::MDRangePolicy<Kokkos::Rank<2>>({0, 0}, {num_cells, num_levels}),
       KOKKOS_LAMBDA(int i_cell, int i_level) {
+        double total_pm1_3d = 0.0;
         double total_pm2_5_3d = 0.0;
         double total_pm10_3d = 0.0;
         double total_number_3d = 0.0;
@@ -447,7 +449,10 @@ void run_gocart_diagnostics(GocartSolverState *state, int num_cells,
           weighted_vg_numerator += mass_conc * vg_spec;
           total_mass_vg_weight += mass_conc;
 
-          // 6. 3D PM2.5 and PM10 size cuts
+          // 6. 3D PM1, PM2.5 and PM10 size cuts
+          if (params.dry_particle_diameter <= 1.0e-6) {
+            total_pm1_3d += mass_conc;
+          }
           if (params.dry_particle_diameter <= 2.5e-6) {
             total_pm2_5_3d += mass_conc;
           }
@@ -459,6 +464,8 @@ void run_gocart_diagnostics(GocartSolverState *state, int num_cells,
         // Write 3D grid cell diagnostics
         d_diags(i_cell, i_level, diagnostic_indices::MASS_CONCENTRATION) =
             d_state(i_cell, i_level, 0); // principal species mass
+        d_diags(i_cell, i_level, diagnostic_indices::PM1_CONCENTRATION) =
+            total_pm1_3d;
         d_diags(i_cell, i_level, diagnostic_indices::PM2_5_CONCENTRATION) =
             total_pm2_5_3d;
         d_diags(i_cell, i_level, diagnostic_indices::PM10_CONCENTRATION) =

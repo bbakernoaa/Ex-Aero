@@ -64,7 +64,7 @@ contains
     real(c_double) :: mass_state(num_cells, num_levels)
 
     ! Outputs
-    real(c_double) :: diags(num_cells, num_levels, 11) ! NUM_DIAGNOSTICS is 11
+    real(c_double) :: diags(num_cells, num_levels, exaero_NUM_DIAGNOSTICS)
     real(c_double) :: optics(num_cells, num_levels, num_bands, 11) ! NUM_OPTICS is 11
     real(c_double) :: ccn(num_cells, num_levels, num_ss)
     real(c_double) :: raw_emit(num_cells, num_levels, 2)

@@ -164,7 +164,8 @@ public:
                       View3D<double> &state, // (cell, level, species)
                       double delta_time_sec) = 0;
 
-  /// @brief Derived-diagnostics step (PM2.5, PM10, number, column mass, ALW).
+  /// @brief Derived-diagnostics step (PM1, PM2.5, PM10, number, column
+  /// mass, ALW).
   ///
   /// Fills the diagnostic slab indexed by exaero::diagnostic_indices.
   /// Wet sizing uses the RH-clamped growth factor; number concentration
