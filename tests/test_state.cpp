@@ -3,7 +3,9 @@
 #include <vector>
 
 TEST(ExaeroStateTest, Instantiation) {
-  Kokkos::initialize();
+  // Exception-safe runtime ownership: the guard finalizes when the test body
+  // exits, including on assertion failure paths that skip a manual finalize.
+  Kokkos::ScopeGuard kokkos_scope;
   {
     exaero::ExaeroContext ctx("ChapmanCycle", 100);
     EXPECT_EQ(ctx.active_mechanism, "ChapmanCycle");
@@ -20,5 +22,4 @@ TEST(ExaeroStateTest, Instantiation) {
     EXPECT_EQ(state.concentrations.extent(1), 10);
     EXPECT_EQ(state.meteorology.extent(0), 10);
   }
-  Kokkos::finalize();
 }
