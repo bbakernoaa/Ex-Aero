@@ -57,9 +57,15 @@ struct UnmanagedDeviceState {
 struct SZA_Pair {
   double sza; ///< Solar zenith angle [deg] (sort key).
   int index;  ///< Original cell index (payload carried through the sort).
-  /// @brief Order ascending in SZA.
+  /// @brief Order ascending in SZA, tie-breaking on the cell index.
+  ///
+  /// Kokkos::sort is not guaranteed stable, so comparing only the solar zenith
+  /// angle leaves tied cells in a backend-dependent order. The cell index as
+  /// secondary key makes the sorted workload a pure function of the input,
+  /// bit-reproducible across backends and thread counts.
   KOKKOS_INLINE_FUNCTION bool operator<(const SZA_Pair &other) const {
-    return sza < other.sza;
+    if (sza != other.sza) return sza < other.sza;
+    return index < other.index;
   }
 };
 
