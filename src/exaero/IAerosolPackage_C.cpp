@@ -618,6 +618,55 @@ void exaero_query_attribute(exaero_package_t pkg, int species_index,
   }
 }
 
+// @copydoc exaero_compute_wet_sizing
+void exaero_compute_wet_sizing(exaero_package_t pkg, int num_points,
+                               const double *rh_ptr, int species_index,
+                               double radius_dry, double density_dry,
+                               double *radius_wet_out, double *density_wet_out,
+                               int *status_out, char *errmsg, int *errflg) {
+  if (!pkg) {
+    if (errflg)
+      *errflg = 1;
+    if (errmsg)
+      std::strcpy(errmsg, "EX-aero Error: Null package handle");
+    return;
+  }
+  try {
+    auto *package = static_cast<exaero::IAerosolPackage *>(pkg);
+    const std::size_t n = (num_points > 0) ? static_cast<std::size_t>(num_points)
+                                           : std::size_t{0};
+    exaero::View1D<const double> rh(rh_ptr, n);
+    exaero::View1D<double> radius_out(radius_wet_out, n);
+    exaero::View1D<double> density_out(density_wet_out, n);
+    exaero::View1D<int> stat_out;
+    exaero::View1D<int> *stat_ptr = nullptr;
+    if (status_out) {
+      stat_out = exaero::View1D<int>(status_out, n);
+      stat_ptr = &stat_out;
+    }
+    package->computeWetSizing(rh, species_index, radius_dry, density_dry,
+                              radius_out, density_out, stat_ptr);
+    if (errflg)
+      *errflg = 0;
+    if (errmsg)
+      errmsg[0] = '\0';
+  } catch (const std::exception &e) {
+    if (errflg)
+      *errflg = 1;
+    if (errmsg) {
+      std::strncpy(errmsg, e.what(), 255);
+      errmsg[255] = '\0';
+    }
+  } catch (...) {
+    if (errflg)
+      *errflg = 1;
+    if (errmsg)
+      std::strcpy(
+          errmsg,
+          "EX-aero Error: Unknown exception during compute_wet_sizing");
+  }
+}
+
 // @copydoc exaero_get_moment_counts
 int exaero_get_moment_counts(exaero_package_t pkg, int species_index,
                              int *num_pol_out, int *num_moment_out,

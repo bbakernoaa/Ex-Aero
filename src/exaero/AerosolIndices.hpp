@@ -37,8 +37,10 @@ constexpr int SURFACE_PM2_5_MASS =
     9; ///< Surface layer PM2.5 mass concentration [kg m^-3] (level 0)
 constexpr int COLUMN_PM2_5_MASS =
     10; ///< Column-integrated PM2.5 mass density [kg m^-2] (level 0)
+constexpr int PM1_CONCENTRATION =
+    11; ///< 3D PM1 mass concentration [kg m^-3] (dry-diameter cut)
 
-constexpr int NUM_DIAGNOSTICS = 11; ///< Total diagnostic slots (slab extent).
+constexpr int NUM_DIAGNOSTICS = 12; ///< Total diagnostic slots (slab extent).
 } // namespace diagnostic_indices
 
 /// @brief Slot indices for the optical-properties output slab.

@@ -64,7 +64,7 @@ contains
     real(c_double) :: mass_state(num_cells, num_levels)
 
     ! Outputs
-    real(c_double) :: diags(num_cells, num_levels, 11) ! NUM_DIAGNOSTICS is 11
+    real(c_double) :: diags(num_cells, num_levels, exaero_NUM_DIAGNOSTICS)
     real(c_double) :: optics(num_cells, num_levels, num_bands, 11) ! NUM_OPTICS is 11
     real(c_double) :: ccn(num_cells, num_levels, num_ss)
     real(c_double) :: raw_emit(num_cells, num_levels, 2)
@@ -73,6 +73,15 @@ contains
     ! Dynamic queries
     real(c_double) :: wavelengths(num_bands)
     real(c_double) :: supersaturations(num_ss)
+
+    ! Caller-anchored wet-sizing round-trip across the C boundary.
+    integer, parameter :: wet_n = 2
+    integer :: i
+    real(c_double) :: wet_rh(wet_n)
+    real(c_double) :: wet_radius(wet_n), wet_density(wet_n)
+    integer(c_int) :: wet_status(wet_n)
+    real(c_double), parameter :: wet_radius_dry = 1.0d-7
+    real(c_double), parameter :: wet_density_dry = 2600.0d0
 
     ! Create the GOCART Package instance
     write(*,*) "Creating package instance..."
@@ -386,6 +395,41 @@ contains
 
     call exaero_free_package(mpkg)
     write(*,*) "Polarized-moment round-trip completed successfully."
+
+    ! --- Caller-anchored wet sizing across the C boundary. Dust is bound to
+    ! the DU curve, which is hydrophobic (growth factor exactly 1 at every
+    ! stored RH), so the anchored sizing must return the caller's dry particle
+    ! bit-for-bit -- the parity guarantee for a Fortran transport model. ---
+    write(*,*) "Running caller-anchored wet-sizing round-trip..."
+    wet_rh = [0.3d0, 0.9d0]
+    wet_radius = -1.0d0
+    wet_density = -1.0d0
+    wet_status = -1_c_int
+    errmsg = ""
+    errflg = 0
+    call exaero_compute_wet_sizing(pkg, wet_n, wet_rh, 0, &
+        wet_radius_dry, wet_density_dry, wet_radius, wet_density, &
+        wet_status, errmsg, errflg)
+    if (errflg /= 0) then
+      write(*,*) "Error: wet-sizing compute failed: ", errmsg
+      call exit(1)
+    end if
+    do i = 1, wet_n
+      if (wet_status(i) /= exaero_STATUS_AVAILABLE .and. &
+          wet_status(i) /= exaero_STATUS_INTERPOLATED) then
+        write(*,*) "Error: wet-sizing status not ok:", wet_status(i)
+        call exit(1)
+      end if
+      if (wet_radius(i) /= wet_radius_dry) then
+        write(*,*) "Error: hydrophobic wet radius not bit-exact:", wet_radius(i)
+        call exit(1)
+      end if
+      if (wet_density(i) /= wet_density_dry) then
+        write(*,*) "Error: hydrophobic wet density not bit-exact:", wet_density(i)
+        call exit(1)
+      end if
+    end do
+    write(*,*) "Caller-anchored wet-sizing round-trip completed successfully."
 
     ! Manually free Gocart Package instance before Kokkos finalizes
     write(*,*) "Freeing package instance..."

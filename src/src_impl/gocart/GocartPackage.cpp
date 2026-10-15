@@ -1054,6 +1054,69 @@ void GocartPackage::computeAttributes(const EnvironmentalStateView &env,
   }
 }
 
+// @copydoc GocartPackage::computeWetSizing
+void GocartPackage::computeWetSizing(
+    const View1D<const double> &relative_humidity, int species_index,
+    double radius_dry, double density_dry, View1D<double> &radius_wet_out,
+    View1D<double> &density_wet_out, View1D<int> *status_out) {
+  if (species_index < 0 || species_index >= num_species_) {
+    throw std::runtime_error(
+        "EX-aero Error: computeWetSizing species index out of range");
+  }
+  if (!(radius_dry > 0.0) || !(density_dry > 0.0)) {
+    throw std::runtime_error(
+        "EX-aero Error: computeWetSizing requires positive dry radius and "
+        "density");
+  }
+  const std::size_t num_points = relative_humidity.extent(0);
+  if (radius_wet_out.extent(0) < num_points ||
+      density_wet_out.extent(0) < num_points) {
+    throw std::runtime_error(
+        "EX-aero Error: computeWetSizing output extent smaller than the "
+        "relative-humidity axis");
+  }
+  if (status_out && status_out->extent(0) < num_points) {
+    throw std::runtime_error(
+        "EX-aero Error: computeWetSizing status extent too small");
+  }
+
+  const std::string name = species_names_[species_index];
+  auto &store = MieTableStore::instance();
+  const SpeciesCurve *c = store.find_curve(name);
+  const int radius_node = c ? c->solver_radius_node : 0;
+
+  // Density of liquid water [kg m^-3]; matches the settling solver and the
+  // GOCART2G swelling kernels so a caller-anchored wet particle is
+  // bit-identical to the reference parameterization.
+  constexpr double kWaterDensity = 1000.0;
+
+  for (std::size_t i = 0; i < num_points; ++i) {
+    double gf = 0.0;
+    const AttributeStatus st = store.query(
+        name, AttributeCategory::Microphysical,
+        microphysical_indices::GROWTH_FACTOR, relative_humidity(i),
+        std::nan(""), radius_node, &gf, nullptr);
+    const bool ok = st == AttributeStatus::Available ||
+                    st == AttributeStatus::AvailableFile ||
+                    st == AttributeStatus::AvailableConfig ||
+                    st == AttributeStatus::Interpolated;
+    if (status_out)
+      (*status_out)(i) = static_cast<int>(st);
+    if (!ok) {
+      // Never a silent plausible value: an unavailable growth leaves the wet
+      // particle undefined, so the caller can fall back to its own scheme.
+      radius_wet_out(i) = 0.0;
+      density_wet_out(i) = 0.0;
+      continue;
+    }
+    const double radius_wet = gf * radius_dry;
+    double rrat = radius_dry / radius_wet;
+    rrat = rrat * rrat * rrat;
+    radius_wet_out(i) = radius_wet;
+    density_wet_out(i) = rrat * density_dry + (1.0 - rrat) * kWaterDensity;
+  }
+}
+
 // @copydoc GocartPackage::setSpeciesCurveConfig
 void GocartPackage::setSpeciesCurveConfig(
     const std::vector<SpeciesCurveConfig> &curves) {

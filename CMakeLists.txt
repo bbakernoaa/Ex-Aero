@@ -5,7 +5,28 @@ set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
-find_package(Kokkos REQUIRED)
+# Resolve this repository's root from the current list file, not from the
+# top-level project.  When EX-aero is consumed via add_subdirectory from a
+# parent build (e.g. CATChem), CMAKE_SOURCE_DIR points at the PARENT, so the
+# build-time MIE generator and the test fixtures would resolve against the wrong
+# tree.  CMAKE_CURRENT_SOURCE_DIR here is always this repo's root because this
+# list file lives at that root, in standalone and subproject mode alike.  Every
+# in-repo absolute path below is anchored to this variable.
+set(EXAERO_REPO_ROOT ${CMAKE_CURRENT_SOURCE_DIR})
+
+# Single documented home for the Fortran module files (exaero_interface.mod),
+# defined at this level so both the library scope (src/) and the test scope
+# (tests/) resolve it, and consuming hosts get it through the exaero target's
+# PUBLIC include interface.
+set(EXAERO_FORTRAN_MODULE_DIR ${CMAKE_CURRENT_BINARY_DIR}/src/fortran_modules)
+
+# Adopt a Kokkos the parent already located instead of re-running find_package
+# against a possibly different on-disk install (which hard-fails in the
+# exported-targets file with "Some (but not all) targets already defined"). Same
+# guard MKPP uses.
+if(NOT TARGET Kokkos::kokkos)
+  find_package(Kokkos REQUIRED)
+endif()
 find_package(Python3 REQUIRED COMPONENTS Interpreter)
 
 # ---------------------------------------------------------------------------
@@ -36,11 +57,18 @@ option(
   "Build the MKPP chemistry driver (requires generate_registry.py + registry/dispatcher headers)"
   OFF)
 
+option(
+  EXAERO_BUILD_TESTS
+  "Build the EX-aero test runners (unit, fuzz, Fortran interop, MIE determinism)"
+  ON)
+
 # --- Aerosol interface library: public C++/C/Fortran boundary + impl/solver ---
 add_subdirectory(src)
 
-enable_testing()
-add_subdirectory(tests)
+if(EXAERO_BUILD_TESTS)
+  enable_testing()
+  add_subdirectory(tests)
+endif()
 
 if(EXAERO_BUILD_CHEMISTRY)
   set(EXAERO_MECHANISMS

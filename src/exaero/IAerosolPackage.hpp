@@ -164,7 +164,8 @@ public:
                       View3D<double> &state, // (cell, level, species)
                       double delta_time_sec) = 0;
 
-  /// @brief Derived-diagnostics step (PM2.5, PM10, number, column mass, ALW).
+  /// @brief Derived-diagnostics step (PM1, PM2.5, PM10, number, column
+  /// mass, ALW).
   ///
   /// Fills the diagnostic slab indexed by exaero::diagnostic_indices.
   /// Wet sizing uses the RH-clamped growth factor; number concentration
@@ -267,6 +268,56 @@ public:
     (void)wavelengths;
     (void)attributes_out;
     (void)status_out;
+  }
+
+  /// @brief Caller-anchored wet particle sizing over a flat point list.
+  ///
+  /// Resolves the species' curve-backed hygroscopic growth factor at each
+  /// point's relative humidity, then applies it to the CALLER's dry
+  /// particle: wet radius = growth * radius_dry, and the wet density is
+  /// the volume-weighted mixture of the dry material with water
+  /// (rrat * density_dry + (1 - rrat) * 1000, rrat = (radius_dry /
+  /// radius_wet)^3). This is the sizing a transport/removal model needs:
+  /// the library owns the RH-dependent hygroscopic response, the model
+  /// owns its particle. A growth of exactly 1 returns the dry particle
+  /// unchanged, bit for bit.
+  ///
+  /// The Microphysical WET_PARTICLE_DENSITY attribute is a different
+  /// quantity: the bound curve's own mass over its own effective radius
+  /// (curve-intrinsic, independent of any caller's density). Consumers
+  /// sizing their own particles must use this anchored surface instead.
+  ///
+  /// Points whose species has no curve (or whose category is not
+  /// activated) report the corresponding status and leave both outputs
+  /// at zero -- never a silent plausible value (FR-008 convention).
+  /// @param relative_humidity RH [fraction 0-1], one value per point.
+  /// @param species_index Target species (from getSpeciesIndex()).
+  /// @param radius_dry Caller's dry particle radius [m]; must be > 0.
+  /// @param density_dry Caller's dry particle density [kg m^-3]; must be > 0.
+  /// @param[out] radius_wet_out Receives wet radius [m] on an ok status.
+  /// @param[out] density_wet_out Receives wet density [kg m^-3] on an ok status.
+  /// @param[out] status_out Optional; receives AttributeStatus per point.
+  /// @throws std::runtime_error on out-of-range species index, extent
+  ///         mismatch, or non-positive dry sizing inputs.
+  virtual void
+  computeWetSizing(const View1D<const double> &relative_humidity,
+                   int species_index, double radius_dry, double density_dry,
+                   View1D<double> &radius_wet_out,
+                   View1D<double> &density_wet_out,
+                   View1D<int> *status_out = nullptr) {
+    (void)species_index;
+    (void)radius_dry;
+    (void)density_dry;
+    // A package without an anchored-sizing implementation reports the whole
+    // surface as not activated and zeroes the outputs, so a caller never
+    // reads uninitialized memory or a stale value (FR-008 convention).
+    const std::size_t num_points = relative_humidity.extent(0);
+    for (std::size_t i = 0; i < num_points; ++i) {
+      radius_wet_out(i) = 0.0;
+      density_wet_out(i) = 0.0;
+      if (status_out)
+        (*status_out)(i) = static_cast<int>(AttributeStatus::NotActivated);
+    }
   }
 
   /// @brief Scalar attribute query for init-time / retrieval consumers.

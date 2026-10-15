@@ -17,7 +17,7 @@ add_test(NAME ExaeroUnitTests COMMAND exaero_test_runner)
 add_library(exaero_standalone_public_check OBJECT standalone_public_check.cpp)
 target_compile_features(exaero_standalone_public_check PRIVATE cxx_std_23)
 target_include_directories(exaero_standalone_public_check
-                           PRIVATE ${CMAKE_SOURCE_DIR}/src)
+                           PRIVATE ${EXAERO_REPO_ROOT}/src)
 # Deliberately NO target_link_libraries against exaero/Kokkos: keep the include
 # path clean.
 add_dependencies(exaero_standalone_public_check exaero_impl)
@@ -31,7 +31,8 @@ add_test(NAME ExaeroFuzzTests COMMAND exaero_fuzz_test)
 
 # Fortran C-Interoperability Integration Test
 add_executable(exaero_fortran_test test_fortran_interface.f90)
-target_include_directories(exaero_fortran_test PRIVATE ${CMAKE_BINARY_DIR}/src)
+target_include_directories(exaero_fortran_test
+                           PRIVATE ${EXAERO_FORTRAN_MODULE_DIR})
 target_link_libraries(exaero_fortran_test PRIVATE exaero)
 add_test(NAME ExaeroFortranTest COMMAND exaero_fortran_test)
 # The moments round-trip loads the runtime-file fixture by absolute path; pass
@@ -51,9 +52,9 @@ set_tests_properties(
 add_test(
   NAME ExaeroMieDeterminism
   COMMAND
-    ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/tools/generate_mie_tables.py
-    --check ${CMAKE_SOURCE_DIR}/src/src_impl/data/generated/MieTableData.hpp
-    ${CMAKE_SOURCE_DIR}/tools/geosmie_snapshot)
+    ${Python3_EXECUTABLE} ${EXAERO_REPO_ROOT}/tools/generate_mie_tables.py
+    --check ${EXAERO_REPO_ROOT}/src/src_impl/data/generated/MieTableData.hpp
+    ${EXAERO_REPO_ROOT}/tools/geosmie_snapshot)
 set_tests_properties(
   ExaeroMieDeterminism PROPERTIES PASS_REGULAR_EXPRESSION
                                   "deterministic \\(check mode")
