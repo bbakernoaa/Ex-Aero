@@ -29,8 +29,7 @@ TEST(RegistryTest, KnownMechanismResolves) {
 
 int main(int argc, char **argv) {
   ::testing::InitGoogleTest(&argc, argv);
-  Kokkos::initialize(argc, argv);
-  int result = RUN_ALL_TESTS();
-  Kokkos::finalize();
-  return result;
+  // Exception-safe runtime ownership; also consumes --kokkos-* tuning args (FR-013).
+  Kokkos::ScopeGuard kokkos_scope(argc, argv);
+  return RUN_ALL_TESTS();
 }
