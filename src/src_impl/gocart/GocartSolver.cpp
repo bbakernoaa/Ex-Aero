@@ -36,6 +36,8 @@
 #include <Kokkos_Core.hpp>
 #include <gocart/GocartSpeciesParams.hpp>
 
+#include <memory>
+
 namespace exaero {
 
 namespace {
@@ -209,19 +211,31 @@ species_moment_table(const GocartSpeciesParams &params, const double *pool,
 } // anonymous namespace
 
 // Implement public environment lifecycle routines (declared in
-// exaero/Environment.hpp)
+// exaero/Environment.hpp). The runtime lifetime is owned by a
+// Kokkos::ScopeGuard rather than a raw initialize()/finalize() pair: the guard
+// finalizes exactly once, is exception-safe, and refuses double
+// initialisation. The guard lives only while this library actually owns the
+// runtime; a host application that initialised Kokkos itself keeps ownership
+// and is untouched.
+namespace {
+std::unique_ptr<Kokkos::ScopeGuard>& runtime_guard() {
+  static std::unique_ptr<Kokkos::ScopeGuard> guard;
+  return guard;
+}
+}  // namespace
+
 // @copydoc exaero::initialize_environment
 void initialize_environment() {
-  if (!Kokkos::is_initialized()) {
-    Kokkos::initialize();
+  if (!Kokkos::is_initialized() && !Kokkos::is_finalized()) {
+    runtime_guard() = std::make_unique<Kokkos::ScopeGuard>();
   }
 }
 
 // @copydoc exaero::finalize_environment
 void finalize_environment() {
-  if (Kokkos::is_initialized()) {
-    Kokkos::finalize();
-  }
+  // Destroying the guard finalizes the runtime we own. If the host
+  // application owns the runtime (no guard), leave it to the owner.
+  runtime_guard().reset();
 }
 
 // @copydoc exaero::fence_environment
@@ -346,10 +360,16 @@ void run_gocart_diagnostics(GocartSolverState *state, int num_cells,
   auto d_species_params = state->d_species_params;
   auto d_curve_pool = state->d_curve_pool;
 
-  // Execute parallel diagnostics calculation on the GPU
+  // Execute parallel diagnostics calculation on the GPU.
+  // The caller buffers are column-major (cell is the unit-stride dimension),
+  // so the iteration order is pinned to Iterate::Left: the cell index strides
+  // fastest, keeping neighbouring work items on neighbouring addresses. The
+  // tile keeps 32 consecutive cells per tile (one coalesced memory transaction
+  // group) with a modest level block.
   Kokkos::parallel_for(
       "GocartDiagnosticsKernel",
-      Kokkos::MDRangePolicy<Kokkos::Rank<2>>({0, 0}, {num_cells, num_levels}),
+      Kokkos::MDRangePolicy<Kokkos::Rank<2, Kokkos::Iterate::Left, Kokkos::Iterate::Left>>(
+          {0, 0}, {num_cells, num_levels}, {32, 8}),
       KOKKOS_LAMBDA(int i_cell, int i_level) {
         double total_pm1_3d = 0.0;
         double total_pm2_5_3d = 0.0;
@@ -596,11 +616,14 @@ void run_gocart_optics(GocartSolverState *state, int num_cells, int num_levels,
   auto d_curve_pool = state->d_curve_pool;
 
   // 1. Calculate 3D Optical Coefficients (Extinction, Scattering, Lidar
-  // Backscatter, Asymmetry)
+  // Backscatter, Asymmetry).
+  // Iterate::Left matches the LayoutLeft buffers: consecutive work items walk
+  // consecutive cells, so the per-cell reads and the four per-point optics
+  // stores stay coalesced.
   Kokkos::parallel_for(
       "GocartOptics3D_Kernel",
-      Kokkos::MDRangePolicy<Kokkos::Rank<3>>(
-          {0, 0, 0}, {num_cells, num_levels, num_bands}),
+      Kokkos::MDRangePolicy<Kokkos::Rank<3, Kokkos::Iterate::Left, Kokkos::Iterate::Left>>(
+          {0, 0, 0}, {num_cells, num_levels, num_bands}, {32, 2, 2}),
       KOKKOS_LAMBDA(int i_cell, int i_level, int i_band) {
         double total_ext_coeff = 0.0;
         double total_sca_coeff = 0.0;
@@ -745,10 +768,14 @@ void run_gocart_optics(GocartSolverState *state, int num_cells, int num_levels,
       });
   Kokkos::fence();
 
-  // 2. Calculate 2D Column-Integrated Optical AOTs
+  // 2. Calculate 2D Column-Integrated Optical AOTs.
+  // Cell is the unit-stride dimension of every LayoutLeft buffer read here,
+  // so it must stride fastest (Iterate::Left); the small band tile keeps the
+  // wavelength broadcast inside one tile.
   Kokkos::parallel_for(
       "GocartOpticsAOT_Kernel",
-      Kokkos::MDRangePolicy<Kokkos::Rank<2>>({0, 0}, {num_cells, num_bands}),
+      Kokkos::MDRangePolicy<Kokkos::Rank<2, Kokkos::Iterate::Left, Kokkos::Iterate::Left>>(
+          {0, 0}, {num_cells, num_bands}, {32, 4}),
       KOKKOS_LAMBDA(int i_cell, int i_band) {
         double total_ext_aot = 0.0;
         double total_sca_aot = 0.0;
@@ -914,11 +941,13 @@ void run_gocart_ccn(GocartSolverState *state, int num_cells, int num_levels,
 
   auto d_species_params = state->d_species_params;
 
-  // Parallel Cloud CCN Activation Spectrum Solver on the GPU
+  // Parallel Cloud CCN Activation Spectrum Solver on the GPU.
+  // Iterate::Left again pins the cell index as the fastest-varying dimension
+  // to match the LayoutLeft (cell-unit-stride) input and output buffers.
   Kokkos::parallel_for(
       "GocartCcnSpectrumKernel",
-      Kokkos::MDRangePolicy<Kokkos::Rank<3>>({0, 0, 0},
-                                             {num_cells, num_levels, num_ss}),
+      Kokkos::MDRangePolicy<Kokkos::Rank<3, Kokkos::Iterate::Left, Kokkos::Iterate::Left>>(
+          {0, 0, 0}, {num_cells, num_levels, num_ss}, {32, 2, 2}),
       KOKKOS_LAMBDA(int i_cell, int i_level, int i_ss) {
         double total_activated_ccn = 0.0;
 
@@ -1004,10 +1033,12 @@ void run_gocart_emissions(GocartSolverState *state, int num_cells,
 
   auto d_species_params = state->d_species_params;
 
+  // LayoutLeft emission buffers: cell strides fastest (Iterate::Left) so the
+  // per-cell reads and the d_out store coalesce.
   Kokkos::parallel_for(
       "GocartEmissions_Kernel",
-      Kokkos::MDRangePolicy<Kokkos::Rank<3>>(
-          {0, 0, 0}, {num_cells, num_levels, num_target_species}),
+      Kokkos::MDRangePolicy<Kokkos::Rank<3, Kokkos::Iterate::Left, Kokkos::Iterate::Left>>(
+          {0, 0, 0}, {num_cells, num_levels, num_target_species}, {32, 2, 2}),
       KOKKOS_LAMBDA(int i_cell, int i_level, int i_spec) {
         const auto &params = d_species_params(i_spec);
         const auto &map = params.emissions_mapping;
