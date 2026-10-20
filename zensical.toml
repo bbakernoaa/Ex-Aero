@@ -5,6 +5,7 @@ docs_dir = "docs"
 nav = [
     { "Welcome" = "index.md" },
     { "Getting Started" = "guides/getting-started.md" },
+    { "Bulk and Modal Backends" = "guides/aerosol-backends.md" },
     { "Architecture" = [
         { "System Overview" = "architecture/system-overview.md" },
         { "Core Components" = "architecture/components.md" }

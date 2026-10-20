@@ -17,6 +17,12 @@ module exaero_interface
   use iso_c_binding
   implicit none
 
+  ! Representation, quantity and capability codes mirror StateField.hpp.
+  integer(c_int), parameter :: exaero_BULK = 0, exaero_MODAL = 1
+  integer(c_int), parameter :: exaero_STATE_MASS = 0, exaero_STATE_NUMBER = 1
+  integer(c_int), parameter :: exaero_CAP_MICROPHYSICS = 1, exaero_CAP_DIAGNOSTICS = 2
+  integer(c_int), parameter :: exaero_CAP_OPTICS = 4, exaero_CAP_CCN = 8, exaero_CAP_EMISSIONS = 16
+
   ! Public indices corresponding exactly to exaero/AerosolIndices.hpp
   ! (diagnostic_indices).  Every slot is exported so a Fortran host names the
   ! diagnostic by constant rather than hardcoding an integer -- the ordering is
@@ -118,6 +124,66 @@ module exaero_interface
   !> header for the full per-argument unit/index contract.
   ! Public C-bindings interfaces (CCPP-standard error signatures)
   interface
+    !> @brief Construct a bulk or modal backend; errors use the CCPP convention.
+    function exaero_create_package(backend, errmsg, errflg) result(pkg) bind(c, name="exaero_create_package")
+      import :: c_char, c_int, exaero_package_t
+      character(kind=c_char), intent(in) :: backend(*)
+      character(kind=c_char), intent(out) :: errmsg(*)
+      integer(c_int), intent(out) :: errflg
+      type(exaero_package_t) :: pkg
+    end function exaero_create_package
+
+    !> @brief Return 1 if the named backend is compiled into EX-aero.
+    function exaero_package_available(backend) result(available) bind(c, name="exaero_package_available")
+      import :: c_char, c_int
+      character(kind=c_char), intent(in) :: backend(*)
+      integer(c_int) :: available
+    end function exaero_package_available
+
+    !> @brief Query bulk/modal representation (-1 for a null package).
+    function exaero_get_representation(pkg) result(representation) bind(c, name="exaero_get_representation")
+      import :: c_int, exaero_package_t
+      type(exaero_package_t), value, intent(in) :: pkg
+      integer(c_int) :: representation
+    end function exaero_get_representation
+
+    !> @brief Query supported compute operations as a bitmask.
+    function exaero_get_capabilities(pkg) result(capabilities) bind(c, name="exaero_get_capabilities")
+      import :: c_int, exaero_package_t
+      type(exaero_package_t), value, intent(in) :: pkg
+      integer(c_int) :: capabilities
+    end function exaero_get_capabilities
+
+    !> @brief State field count; initialize GOCART first to load its species.
+    function exaero_get_state_field_count(pkg) result(count) bind(c, name="exaero_get_state_field_count")
+      import :: c_int, exaero_package_t
+      type(exaero_package_t), value, intent(in) :: pkg
+      integer(c_int) :: count
+    end function exaero_get_state_field_count
+
+    !> @brief Query zero-based field metadata; outputs change only on success.
+    function exaero_get_state_field_info(pkg, index, quantity, mode, cloudborne) &
+        result(status) bind(c, name="exaero_get_state_field_info")
+      import :: c_int, exaero_package_t
+      type(exaero_package_t), value, intent(in) :: pkg
+      integer(c_int), value, intent(in) :: index
+      integer(c_int), intent(inout) :: quantity, mode, cloudborne
+      integer(c_int) :: status
+    end function exaero_get_state_field_info
+
+    !> @brief Advance a (cell,level,field) state; units are field-specific.
+    subroutine exaero_execute_microphysics(pkg, nc, nl, nf, temp, pres, dens, rh, dz, state, dt, errmsg, errflg) &
+        bind(c, name="exaero_execute_microphysics")
+      import :: c_int, c_double, c_char, exaero_package_t
+      type(exaero_package_t), value, intent(in) :: pkg
+      integer(c_int), value, intent(in) :: nc, nl, nf
+      real(c_double), intent(in) :: temp(*), pres(*), dens(*), rh(*), dz(*)
+      real(c_double), intent(inout) :: state(*)
+      real(c_double), value, intent(in) :: dt
+      character(kind=c_char), intent(out) :: errmsg(*)
+      integer(c_int), intent(out) :: errflg
+    end subroutine exaero_execute_microphysics
+
     function exaero_create_gocart_package() result(pkg) bind(c, name="exaero_create_gocart_package")
       import :: c_ptr, exaero_package_t
       type(exaero_package_t) :: pkg

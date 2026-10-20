@@ -20,6 +20,7 @@
 #include <exaero/AerosolIndices.hpp>
 #include <exaero/AttributeQuery.hpp>
 #include <exaero/GocartConfig.hpp>
+#include <exaero/StateField.hpp>
 #include <stdexcept>
 #include <string>
 #include <vector>
@@ -157,7 +158,8 @@ public:
   /// under the supplied environment. Mass-conserving: no thermodynamic
   /// state is mutated.
   /// @param env Read-only environmental boundary conditions.
-  /// @param[in,out] state Aerosol state, (cell, level, species) [kg m^-3].
+  /// @param[in,out] state Aerosol state, (cell, level, field); units from
+  /// stateFields().
   /// @param delta_time_sec Integration timestep length [s].
   virtual void
   executeMicrophysics(const EnvironmentalStateView &env,
@@ -395,6 +397,19 @@ public:
       *num_pol_out = 0;
     if (num_moment_out)
       *num_moment_out = 0;
+  }
+  /// @brief Population representation. Existing out-of-tree packages default to
+  /// bulk.
+  virtual AerosolRepresentation representation() const {
+    return AerosolRepresentation::Bulk;
+  }
+  /// @brief Packed state metadata, in species-axis order; empty for legacy
+  /// packages.
+  virtual std::vector<StateField> stateFields() const { return {}; }
+  /// @brief Bitmask of supported compute surfaces; unsupported calls must
+  /// throw.
+  virtual unsigned capabilities() const {
+    return Microphysics | Diagnostics | Optics | CCN | Emissions;
   }
 };
 

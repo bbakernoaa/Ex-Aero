@@ -21,6 +21,42 @@ extern "C" {
 /// Fortran side — pass back to the exaero_* routines unchanged.
 typedef void *exaero_package_t;
 
+/// @brief Construct "gocart" or "mam4xx"; NULL and CCPP error on failure.
+/// @param backend NUL-terminated, lowercase backend name.
+/// @param errmsg Error buffer of at least 256 bytes (may be NULL).
+/// @param errflg 0 on success, 1 on failure (may be NULL).
+exaero_package_t exaero_create_package(const char *backend, char *errmsg,
+                                       int *errflg);
+/// @brief Return 1 if backend is compiled in; 0 for unknown/disabled/NULL
+/// names.
+int exaero_package_available(const char *backend);
+/// @brief Representation: 0 bulk, 1 modal; -1 for NULL.
+int exaero_get_representation(exaero_package_t pkg);
+/// @brief Supported compute bits: microphysics=1, diagnostics=2, optics=4,
+/// CCN=8, emissions=16.
+int exaero_get_capabilities(exaero_package_t pkg);
+/// @brief Number of packed fields after initialization; -1 on failure.
+int exaero_get_state_field_count(exaero_package_t pkg);
+/// @brief Query a field: quantity=0 mass [kg/m3], 1 number [particles/m3].
+/// @param mode -1 for bulk; 0 accumulation, 1 Aitken, 2 coarse, 3 primary
+/// carbon.
+/// @param cloudborne 0 interstitial, 1 cloudborne. Return 0 success, 1 error.
+int exaero_get_state_field_info(exaero_package_t pkg, int index, int *quantity,
+                                int *mode, int *cloudborne);
+
+/// @brief Advance the selected package's state in place, preserving
+/// layout_left.
+/// @param state_ptr (cell,level,field); field units from
+/// exaero_get_state_field_info.
+/// @param delta_time_sec Finite nonnegative timestep [s].
+/// @param errmsg At least 256 bytes; empty on success.
+void exaero_execute_microphysics(exaero_package_t pkg, int num_cells,
+                                 int num_levels, int num_fields,
+                                 const double *temp_ptr, const double *pres_ptr,
+                                 const double *dens_ptr, const double *rh_ptr,
+                                 const double *thick_ptr, double *state_ptr,
+                                 double delta_time_sec, char *errmsg,
+                                 int *errflg);
 /// @brief Allocate a GocartPackage and return its opaque handle.
 /// @return Handle for use in all other calls, or NULL on failure.
 exaero_package_t exaero_create_gocart_package();
@@ -49,7 +85,8 @@ void exaero_initialize_package(exaero_package_t pkg, const char *config_yaml,
 /// @param rh_ptr [fraction 0-1] relative humidity, column-major (cell, level).
 /// @param thick_ptr [m] layer thickness, column-major (cell, level).
 /// @param state_ptr [kg m^-3] aerosol mass, column-major (cell, level,
-/// species).
+/// species). For modal packages, field units come from
+/// exaero_get_state_field_info().
 /// @param[out] diags_ptr Column-major (cell, level, NUM_DIAGNOSTICS); slot
 ///             ordering per exaero::diagnostic_indices.
 /// @param[out] errmsg Caller-sized error buffer; "" on success.
@@ -97,7 +134,8 @@ void exaero_compute_emissions(exaero_package_t pkg, int num_cells,
 /// @param rh_ptr [fraction 0-1] relative humidity, column-major (cell, level).
 /// @param thick_ptr [m] layer thickness, column-major (cell, level).
 /// @param state_ptr [kg m^-3] aerosol mass, column-major (cell, level,
-/// species).
+/// species). For modal packages, field units come from
+/// exaero_get_state_field_info().
 /// @param[out] optics_ptr Column-major (cell, level, num_bands, NUM_OPTICS);
 ///             slot ordering per exaero::optical_indices.
 /// @param[out] errmsg Caller-sized error buffer; "" on success.
@@ -120,7 +158,8 @@ void exaero_compute_optics(exaero_package_t pkg, int num_cells, int num_levels,
 /// @param temp_ptr [K] temperature, column-major (cell, level).
 /// @param rh_ptr [fraction 0-1] relative humidity, column-major (cell, level).
 /// @param state_ptr [kg m^-3] aerosol mass, column-major (cell, level,
-/// species).
+/// species). For modal packages, field units come from
+/// exaero_get_state_field_info().
 /// @param[out] ccn_ptr Column-major (cell, level, num_ss, 1) activated CCN
 ///             number concentration [particles m^-3].
 /// @param[out] errmsg Caller-sized error buffer; "" on success.

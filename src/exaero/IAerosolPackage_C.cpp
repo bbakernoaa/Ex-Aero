@@ -16,20 +16,144 @@
 #include <exaero/AerosolIndices.hpp>
 #include <exaero/Environment.hpp>
 #include <exaero/IAerosolPackage_C.h>
+#include <exaero/PackageFactory.hpp>
 #include <exception>
-#include <gocart/GocartPackage.hpp>
 
 extern "C" {
 
+// @copydoc exaero_create_package
+exaero_package_t exaero_create_package(const char *backend, char *errmsg,
+                                       int *errflg) {
+  try {
+    if (!backend)
+      throw std::invalid_argument("FATAL ERROR: null aerosol backend name");
+    auto package = exaero::createPackage(backend);
+    if (errflg)
+      *errflg = 0;
+    if (errmsg)
+      errmsg[0] = '\0';
+    return package.release();
+  } catch (const std::exception &e) {
+    if (errmsg) {
+      std::strncpy(errmsg, e.what(), 255);
+      errmsg[255] = '\0';
+    }
+  } catch (...) {
+    if (errmsg)
+      std::strcpy(errmsg, "FATAL ERROR: aerosol package construction failed");
+  }
+  if (errflg)
+    *errflg = 1;
+  return nullptr;
+}
+
+// @copydoc exaero_package_available
+int exaero_package_available(const char *backend) {
+  return backend && exaero::packageAvailable(backend);
+}
+// @copydoc exaero_get_representation
+int exaero_get_representation(exaero_package_t pkg) {
+  if (!pkg)
+    return -1;
+  try {
+    return static_cast<int>(
+        static_cast<exaero::IAerosolPackage *>(pkg)->representation());
+  } catch (...) {
+    return -1;
+  }
+}
+// @copydoc exaero_get_capabilities
+int exaero_get_capabilities(exaero_package_t pkg) {
+  if (!pkg)
+    return 0;
+  try {
+    return static_cast<int>(
+        static_cast<exaero::IAerosolPackage *>(pkg)->capabilities());
+  } catch (...) {
+    return 0;
+  }
+}
+// @copydoc exaero_get_state_field_count
+int exaero_get_state_field_count(exaero_package_t pkg) {
+  if (!pkg)
+    return -1;
+  try {
+    return static_cast<int>(
+        static_cast<exaero::IAerosolPackage *>(pkg)->stateFields().size());
+  } catch (...) {
+    return -1;
+  }
+}
+// @copydoc exaero_get_state_field_info
+int exaero_get_state_field_info(exaero_package_t pkg, int index, int *quantity,
+                                int *mode, int *cloudborne) {
+  if (!pkg || index < 0 || !quantity || !mode || !cloudborne)
+    return 1;
+  try {
+    const auto field =
+        static_cast<exaero::IAerosolPackage *>(pkg)->stateFields().at(index);
+    *quantity = static_cast<int>(field.quantity);
+    *mode = field.mode;
+    *cloudborne = field.cloudborne;
+    return 0;
+  } catch (...) {
+    return 1;
+  }
+}
+
+// @copydoc exaero_execute_microphysics
+void exaero_execute_microphysics(exaero_package_t pkg, int num_cells,
+                                 int num_levels, int num_fields,
+                                 const double *temp_ptr, const double *pres_ptr,
+                                 const double *dens_ptr, const double *rh_ptr,
+                                 const double *thick_ptr, double *state_ptr,
+                                 double delta_time_sec, char *errmsg,
+                                 int *errflg) {
+  try {
+    if (!pkg || num_cells <= 0 || num_levels <= 0 || num_fields <= 0 ||
+        !temp_ptr || !pres_ptr || !dens_ptr || !rh_ptr || !thick_ptr ||
+        !state_ptr)
+      throw std::invalid_argument(
+          "FATAL ERROR: invalid microphysics handle, extent or data pointer");
+    const exaero::EnvironmentalStateView env{
+        exaero::View2D<const double>(temp_ptr, num_cells, num_levels),
+        exaero::View2D<const double>(pres_ptr, num_cells, num_levels),
+        exaero::View2D<const double>(dens_ptr, num_cells, num_levels),
+        exaero::View2D<const double>(rh_ptr, num_cells, num_levels),
+        exaero::View2D<const double>(thick_ptr, num_cells, num_levels)};
+    exaero::View3D<double> state(state_ptr, num_cells, num_levels, num_fields);
+    static_cast<exaero::IAerosolPackage *>(pkg)->executeMicrophysics(
+        env, state, delta_time_sec);
+    if (errflg)
+      *errflg = 0;
+    if (errmsg)
+      errmsg[0] = '\0';
+    return;
+  } catch (const std::exception &e) {
+    if (errmsg) {
+      std::strncpy(errmsg, e.what(), 255);
+      errmsg[255] = '\0';
+    }
+  } catch (...) {
+    if (errmsg)
+      std::strcpy(errmsg, "FATAL ERROR: aerosol microphysics failed");
+  }
+  if (errflg)
+    *errflg = 1;
+}
 // @copydoc exaero_create_gocart_package
 exaero_package_t exaero_create_gocart_package() {
-  return static_cast<exaero_package_t>(new exaero::GocartPackage());
+  try {
+    return exaero::createPackage("gocart").release();
+  } catch (...) {
+    return nullptr;
+  }
 }
 
 // @copydoc exaero_free_package
 void exaero_free_package(exaero_package_t pkg) {
   if (pkg) {
-    delete static_cast<exaero::GocartPackage *>(pkg);
+    delete static_cast<exaero::IAerosolPackage *>(pkg);
   }
 }
 
@@ -45,7 +169,7 @@ void exaero_initialize_package(exaero_package_t pkg, const char *config_yaml,
     return;
   }
   try {
-    static_cast<exaero::GocartPackage *>(pkg)->initialize(
+    static_cast<exaero::IAerosolPackage *>(pkg)->initialize(
         std::string(config_yaml));
     if (errflg)
       *errflg = 0;
@@ -85,7 +209,7 @@ void exaero_compute_diagnostics(exaero_package_t pkg, int num_cells,
     return;
   }
   try {
-    auto *package = static_cast<exaero::GocartPackage *>(pkg);
+    auto *package = static_cast<exaero::IAerosolPackage *>(pkg);
 
     // Map incoming flat Fortran/C raw pointers to standard layout C++20 mdspan
     // Views on-the-fly (LayoutLeft)
@@ -209,7 +333,7 @@ void exaero_compute_optics(exaero_package_t pkg, int num_cells, int num_levels,
     return;
   }
   try {
-    auto *package = static_cast<exaero::GocartPackage *>(pkg);
+    auto *package = static_cast<exaero::IAerosolPackage *>(pkg);
 
     exaero::View2D<const double> temperature(temp_ptr, num_cells, num_levels);
     exaero::View2D<const double> pressure(pres_ptr, num_cells, num_levels);
@@ -267,7 +391,7 @@ void exaero_compute_ccn(exaero_package_t pkg, int num_cells, int num_levels,
     return;
   }
   try {
-    auto *package = static_cast<exaero::GocartPackage *>(pkg);
+    auto *package = static_cast<exaero::IAerosolPackage *>(pkg);
 
     exaero::View2D<const double> temperature(temp_ptr, num_cells, num_levels);
     exaero::View2D<const double> relative_humidity(rh_ptr, num_cells,
@@ -320,8 +444,12 @@ void exaero_compute_ccn(exaero_package_t pkg, int num_cells, int num_levels,
 int exaero_get_species_index(exaero_package_t pkg, const char *name) {
   if (!pkg || !name)
     return -1;
-  return static_cast<exaero::GocartPackage *>(pkg)->getSpeciesIndex(
-      std::string(name));
+  try {
+    return static_cast<exaero::IAerosolPackage *>(pkg)->getSpeciesIndex(
+        std::string(name));
+  } catch (...) {
+    return -1;
+  }
 }
 
 // @copydoc exaero_get_species_name
@@ -331,7 +459,7 @@ void exaero_get_species_name(exaero_package_t pkg, int index, char *name_out,
     return;
   try {
     std::string name =
-        static_cast<exaero::GocartPackage *>(pkg)->getSpeciesName(index);
+        static_cast<exaero::IAerosolPackage *>(pkg)->getSpeciesName(index);
     int len = static_cast<int>(name.length());
     if (len >= max_len) {
       len = max_len - 1;

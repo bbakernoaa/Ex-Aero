@@ -1,4 +1,21 @@
 # GOCART Diagnostics and YAML Parsing Test Runner
+add_executable(exaero_package_selection_test test_package_selection.cpp)
+target_link_libraries(exaero_package_selection_test PRIVATE exaero)
+add_test(NAME ExaeroPackageSelection COMMAND exaero_package_selection_test)
+add_executable(exaero_backend_fortran_test test_backend_fortran.f90)
+target_link_libraries(exaero_backend_fortran_test PRIVATE exaero)
+add_test(NAME ExaeroBackendFortran COMMAND exaero_backend_fortran_test)
+
+if(EXAERO_ENABLE_MAM4XX)
+  find_package(Catch2 CONFIG REQUIRED)
+  add_executable(exaero_mam4xx_test test_mam4xx.cpp)
+  target_link_libraries(exaero_mam4xx_test
+                        PRIVATE exaero exaero_mam4xx_dependency Catch2::Catch2)
+  add_test(NAME ExaeroMam4xx COMMAND exaero_mam4xx_test)
+  set_tests_properties(
+    ExaeroMam4xx PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2;OMP_PROC_BIND=false")
+endif()
+
 add_executable(exaero_test_runner test_main.cpp)
 target_include_directories(exaero_test_runner
                            PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/../src/src_impl)
@@ -18,6 +35,7 @@ add_library(exaero_standalone_public_check OBJECT standalone_public_check.cpp)
 target_compile_features(exaero_standalone_public_check PRIVATE cxx_std_23)
 target_include_directories(exaero_standalone_public_check
                            PRIVATE ${EXAERO_REPO_ROOT}/src)
+target_link_libraries(exaero_standalone_public_check PRIVATE exaero_mdspan)
 # Deliberately NO target_link_libraries against exaero/Kokkos: keep the include
 # path clean.
 add_dependencies(exaero_standalone_public_check exaero_impl)

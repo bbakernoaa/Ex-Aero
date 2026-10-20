@@ -1,0 +1,127 @@
+# Bulk and modal aerosol backends
+
+EX-aero can select `gocart` (bulk) or the optional, experimental `mam4xx`
+(modal) package at runtime. Both use the same column-major
+`(cell, level, field)` boundary. GOCART remains the default build and the
+existing `exaero_create_gocart_package()` entry point remains available.
+Rebuild consuming C++ applications after upgrading the interface library.
+
+## Build
+
+GOCART uses the existing Kokkos and yaml-cpp dependencies. MAM4xx additionally
+needs EKAT built against **the same Kokkos**, with its Kokkos utilities enabled.
+The pinned MAM4xx revision is `c994f6889f270c3da4aca8a4703a1ebe30f92f69`.
+The EKAT revision used by that upstream checkout is
+`007bdcff6cb26948517d2d26f3d7ca005363d119`.
+
+```sh
+git submodule update --init --recursive
+cmake -S . -B build -DEXAERO_ENABLE_MAM4XX=ON \
+  -DCMAKE_PREFIX_PATH="${KOKKOS_PREFIX};${EKAT_PREFIX};${YAML_CPP_PREFIX}"
+cmake --build build --parallel 2
+ctest --test-dir build --output-on-failure
+```
+
+The optional build compiles the pinned upstream library sources, reusing the
+host's Kokkos and EKAT targets. It does not invoke the upstream standalone
+driver, fetch a second Kokkos, or download validation datasets at configure
+time. An existing parent-provided `mam4xx` target is also accepted; its
+precision must be double. With `EXAERO_ENABLE_MAM4XX=OFF`, neither EKAT nor
+initialized MAM4xx sources are required.
+
+## Select a package
+
+```cpp
+#include <exaero/PackageFactory.hpp>
+
+auto package = exaero::createPackage("mam4xx");
+package->initialize("backend: mam4xx");
+const auto fields = package->stateFields();
+```
+
+For C/Fortran hosts, use `exaero_create_package("gocart", ...)` or
+`exaero_create_package("mam4xx", ...)`. A disabled or unknown backend returns
+a null handle and an error; it never falls back to GOCART. Query
+`exaero_package_available`, `exaero_get_representation`,
+`exaero_get_capabilities`, `exaero_get_state_field_count`, and
+`exaero_get_state_field_info` before allocating buffers or calling optional
+operations. `exaero_execute_microphysics` advances either backend through the
+generic interface. These routines are mirrored in `exaero_interface.f90`.
+
+## Packed modal state and units
+
+GOCART keeps one mass concentration per configured bulk species. MAM4xx has
+64 fields: 32 interstitial fields followed by 32 cloudborne fields. Each
+phase has four modes in upstream order: accumulation, Aitken, coarse, primary
+carbon. Each mode has seven mass fields in **global AeroId order** (SOA, SO4,
+POM, BC, NaCl, DST, MOM), then one independently prognosed number field.
+This is not the mode-local species ordering used by some other upstream
+MAM4xx processes.
+
+Names are `<species>_<mode>_<i|c>` and `num_<mode>_<i|c>`, for example
+`SO4_accumulation_i` and `num_aitken_c`. Use the name queries or the constants
+and index functions in `exaero/Mam4xxConfig.hpp`.
+
+Mass is **kg/m³** and number is **particles/m³**, including cloudborne fields
+expressed per volume of air. Number must never be treated as another mass
+species. The full species axis preserves material transferred by coagulation
+into coated primary-carbon particles. Hosts should initialize species absent
+from a mode to zero. A populated mode must have both positive total mass and
+positive number; an empty mode has both zero. Invalid shapes, negative or
+nonfinite values, and inconsistent mass/number pairs fail before modifying
+the caller's state. Zero timestep leaves the state unchanged.
+
+The public views refer to **host memory**. The MAM4xx solver stages them to
+the configured Kokkos execution space and copies results back synchronously.
+Initialize the EX-aero/Kokkos environment before computing and release all
+packages before finalizing it. GPU execution has not yet been validated.
+
+## Supported physics and current limits
+
+| Surface | GOCART bulk | Experimental MAM4xx modal |
+| --- | --- | --- |
+| Microphysics | Existing bulk step | Upstream clear-air coagulation |
+| Wet sizing | Existing GOCART sizing | Upstream MAM4xx water uptake and hysteresis |
+| Diagnostics | Existing diagnostics | Both phases: mass, number, water, area, size cuts, settling, columns |
+| CCN spectrum | Existing bulk activation | Modal lognormal kappa-Kohler integral |
+| Emissions | Configured raw-species mapping | Already-speciated 64-field mass/number rates |
+| Optics | Existing GOCART/GEOSmie optics | Unavailable; explicit error |
+
+MAM4xx initialization currently accepts an empty YAML mapping or
+`backend: mam4xx`; unknown settings are rejected. The timestep updates
+interstitial coagulation only. Cloudborne state is carried unchanged;
+diagnostics include both phases. Gas chemistry, nucleation, condensation,
+aging, mode renaming, cloud activation tendencies, and wet/dry deposition
+are not yet connected. This is not a complete MAM4 atmosphere driver or
+production scientific validation.
+
+Dry geometric sizes use each mode's mass-derived volume, independent number,
+and upstream lognormal width. Wet sizes use upstream material properties and
+the water-uptake kernel, with RH capped at 0.98 as in upstream MAM4xx.
+PM1 is a dry geometric diameter cut. PM2.5/PM10 use wet aerodynamic diameter
+with a spherical density correction; slip and nonspherical corrections are
+omitted. Settling uses mass-weighted lognormal Stokes velocity and Sutherland
+air viscosity, omitting slip correction. Column and surface diagnostics are
+written at level 0, which is assumed to be the surface.
+
+CCN uses the lognormal kappa-Kohler integral underlying MAM4's
+`ndrop::ccncalc`, extended to the caller's supersaturation axis. It returns
+particles/m³, includes both phases, and does not impose upstream's
+fixed-axis number clipping. This is a spectrum diagnostic, not a cloud
+droplet tendency. Optical properties require validated internally mixed
+modal tables; the bulk GOCART tables are not substituted.
+
+For modal emissions, input/output field order is identical to the state.
+Concentration rates are kg/m³/s or particles/m³/s according to field metadata.
+Area fluxes are kg/m²/s or particles/m²/s and are divided by positive layer
+thickness. This does not split a bulk inventory into modes or infer emitted
+number. Hosts must supply both mass and number consistently.
+
+## Validation
+
+The modal tests compare dry-air coagulation with the native pinned kernel
+over multiple columns and levels, check mass conservation and number
+evolution, preserve cloudborne state, verify column integrals and CCN bounds,
+and exercise C/Fortran selection and failure paths. Existing GOCART tests
+run in both build configurations. These are software and limited physics
+checks, not a substitute for reference-case scientific validation.
