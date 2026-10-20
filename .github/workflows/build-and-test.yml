@@ -13,8 +13,13 @@ permissions:
 jobs:
   build-and-test:
     runs-on: ubuntu-24.04
+    strategy:
+      matrix:
+        mam4xx: ["OFF", "ON"]
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          submodules: recursive
 
       - name: Install build and test dependencies
         run: |
@@ -47,15 +52,43 @@ jobs:
           cmake --build "$KOKKOS_BUILD" --parallel 2
           cmake --install "$KOKKOS_BUILD"
 
+      - name: Build pinned EKAT for the modal backend
+        if: matrix.mam4xx == 'ON'
+        env:
+          EKAT_SOURCE: ${{ runner.temp }}/ekat-src
+          EKAT_BUILD: ${{ runner.temp }}/ekat-build
+          EKAT_INSTALL: ${{ runner.temp }}/ekat-install
+          KOKKOS_INSTALL: ${{ runner.temp }}/kokkos-install
+        run: |
+          git init "$EKAT_SOURCE"
+          git -C "$EKAT_SOURCE" remote add origin https://github.com/E3SM-Project/EKAT.git
+          git -C "$EKAT_SOURCE" fetch --depth 1 origin 007bdcff6cb26948517d2d26f3d7ca005363d119
+          git -C "$EKAT_SOURCE" checkout --detach FETCH_HEAD
+          cmake -S "$EKAT_SOURCE" -B "$EKAT_BUILD" \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_POSITION_INDEPENDENT_CODE=ON \
+            -DCMAKE_INSTALL_PREFIX="$EKAT_INSTALL" \
+            -DKokkos_DIR="$KOKKOS_INSTALL/lib/cmake/Kokkos" \
+            -DEKAT_ENABLE_TESTS=OFF \
+            -DEKAT_ENABLE_FORTRAN=OFF \
+            -DEKAT_ENABLE_MPI=OFF \
+            -DEKAT_ENABLE_KOKKOS=ON
+          cmake --build "$EKAT_BUILD" --parallel 2
+          cmake --install "$EKAT_BUILD"
+
       - name: Configure
         run: >-
           cmake -S . -B build
           -DCMAKE_BUILD_TYPE=Release
           -DEXAERO_BUILD_CHEMISTRY=OFF
-          -DCMAKE_PREFIX_PATH=${{ runner.temp }}/kokkos-install
+          -DEXAERO_ENABLE_MAM4XX=${{ matrix.mam4xx }}
+          -DCMAKE_PREFIX_PATH="${{ runner.temp }}/kokkos-install;${{ runner.temp }}/ekat-install"
 
       - name: Build
         run: cmake --build build --parallel 2
 
       - name: Test
+        env:
+          OMP_NUM_THREADS: 2
+          OMP_PROC_BIND: "false"
         run: ctest --test-dir build --output-on-failure

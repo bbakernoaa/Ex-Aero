@@ -62,6 +62,9 @@ option(
   "Build the EX-aero test runners (unit, fuzz, Fortran interop, MIE determinism)"
   ON)
 
+option(EXAERO_ENABLE_MAM4XX "Build the optional MAM4xx modal aerosol backend"
+       OFF)
+
 # --- Aerosol interface library: public C++/C/Fortran boundary + impl/solver ---
 add_subdirectory(src)
 

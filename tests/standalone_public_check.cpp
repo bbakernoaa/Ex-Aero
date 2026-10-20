@@ -81,3 +81,5 @@ int main() {
              ? 0
              : 1;
 }
+#include <exaero/Mam4xxConfig.hpp>
+#include <exaero/PackageFactory.hpp>

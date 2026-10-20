@@ -31,6 +31,15 @@ struct GocartSolverState;
 /// activation / curve config / moment counts). See IAerosolPackage.hpp
 /// for the per-routine parameter and unit contracts overridden here.
 class GocartPackage : public IAerosolPackage {
+public:
+  /// @brief Bulk mass field names and units in configured species order.
+  std::vector<StateField> stateFields() const override {
+    std::vector<StateField> fields;
+    for (const auto &name : species_names_)
+      fields.push_back({name, StateQuantity::Mass, -1, false});
+    return fields;
+  }
+
 private:
   int num_species_ = 0; ///< Active species count (state axis length).
   std::vector<GocartSpeciesParams> h_species_params_;

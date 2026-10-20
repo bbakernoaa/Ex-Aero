@@ -46,6 +46,14 @@ Ex-Aero/
 
 ## 3. Supported Physical & Optical Solvers
 
+GOCART provides the bulk aerosol backend. The optional, experimental MAM4xx
+backend adds modal mass/number state, upstream clear-air coagulation and water
+uptake, modal diagnostics/CCN, and already-speciated emissions. Select either
+backend through the C++ factory or C/Fortran package constructor. MAM4xx optics
+and additional gas/cloud processes are not yet connected. See the
+[backend guide](docs/guides/aerosol-backends.md) for build options, state units,
+capabilities, and validation limits.
+
 The GOCART proof of concept implements advanced exascale aerosol solvers executing performance-portably on GPUs:
 
 ### **A. Mass Sizing & ESM Diagnostics (Task 5)**
