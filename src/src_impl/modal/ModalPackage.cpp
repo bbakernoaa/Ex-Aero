@@ -4,6 +4,11 @@
 /// @details History: 2026-10. Input: YAML/in-memory host arrays; no file
 /// output.
 #include <algorithm>
+#include <exaero/ModalPresets.hpp>
+#include <exaero/PackageFactory.hpp>
+#ifdef EXAERO_ENABLE_MAM4XX
+#include <mam4xx/Mam4xxSolver.hpp>
+#endif
 #include <cmath>
 #include <limits>
 #include <loader/MieFileLoader.hpp>
@@ -165,13 +170,71 @@ void addOptics(const ModalOpticalResult &a, View4D<double> &out, std::size_t c,
 void ModalPackage::initialize(const std::string &yaml) {
   try {
     const auto root = YAML::Load(yaml);
-    keys(root, {"backend", "species", "modes", "coagulation",
-                "coagulation_routes", "transfer_routes", "nucleation"});
+    keys(root, {"backend", "preset", "processes", "constants", "species",
+                "modes", "mode_overrides", "coagulation", "coagulation_routes",
+                "transfer_routes", "nucleation"});
     require(!root["backend"] || root["backend"].as<std::string>() == "modal",
             "backend must be modal");
-    require(root["species"].IsSequence() && root["modes"].IsSequence(),
-            "species and modes must be sequences");
     ModalConfig config;
+    if (root["preset"]) {
+      const auto preset = root["preset"].as<std::string>();
+      require(preset == "mam4" || preset == "mam4xx_reference",
+              "unknown modal preset");
+      config =
+          preset == "mam4" ? mam4ModalConfig() : mam4xxReferenceModalConfig();
+    }
+    require((root["species"] && root["species"].IsSequence()) ||
+                (!root["species"] && !config.species.empty()),
+            "species must be a sequence or supplied by a preset");
+    require((root["modes"] && root["modes"].IsSequence()) ||
+                (!root["modes"] && !config.modes.empty()),
+            "modes must be a sequence or supplied by a preset");
+    if (root["species"])
+      config.species.clear();
+    if (root["modes"]) {
+      config.modes.clear();
+      // Routes name modes: a replacement mode list needs explicit routes.
+      config.coagulation_routes.clear();
+      config.transfer_routes.clear();
+    }
+    if (const auto processes = root["processes"]) {
+      keys(processes, {"coagulation", "water_uptake"});
+      if (processes["coagulation"]) {
+        require(!root["coagulation"],
+                "coagulation and processes.coagulation conflict");
+        const auto name = processes["coagulation"].as<std::string>();
+        require(name == "none" || name == "brownian" || name == "mam4xx",
+                "unknown coagulation process");
+        config.coagulation = name != "none";
+        config.coagulation_model = name == "mam4xx"
+                                       ? ModalCoagulationModel::Mam4xx
+                                       : ModalCoagulationModel::Brownian;
+        if (name == "mam4xx")
+          config.coagulation_routes.clear();
+      }
+      if (processes["water_uptake"]) {
+        const auto name = processes["water_uptake"].as<std::string>();
+        require(name == "kappa_equilibrium" || name == "mam4xx",
+                "unknown water uptake process");
+        config.water_uptake = name == "mam4xx"
+                                  ? ModalWaterUptakeModel::Mam4xx
+                                  : ModalWaterUptakeModel::KappaEquilibrium;
+      }
+    }
+    if (const auto constants = root["constants"]) {
+      keys(constants, {"gravity", "water_molecular_weight", "gas_constant",
+                       "surface_tension"});
+      if (constants["gravity"])
+        config.constants.gravity = constants["gravity"].as<double>();
+      if (constants["water_molecular_weight"])
+        config.constants.water_molecular_weight =
+            constants["water_molecular_weight"].as<double>();
+      if (constants["gas_constant"])
+        config.constants.gas_constant = constants["gas_constant"].as<double>();
+      if (constants["surface_tension"])
+        config.constants.surface_tension =
+            constants["surface_tension"].as<double>();
+    }
     if (root["coagulation"])
       config.coagulation = root["coagulation"].as<bool>();
     for (const auto &n : root["species"]) {
@@ -228,9 +291,13 @@ void ModalPackage::initialize(const std::string &yaml) {
     }
     for (const auto &n : root["modes"]) {
       keys(n, {"name", "geometric_radius", "geometric_std_dev", "species",
-               "optical_treatment"});
+               "optical_treatment", "crystallization_rh", "deliquescence_rh"});
       ModalModeConfig m;
       m.name = n["name"].as<std::string>();
+      if (n["crystallization_rh"])
+        m.crystallization_rh = n["crystallization_rh"].as<double>();
+      if (n["deliquescence_rh"])
+        m.deliquescence_rh = n["deliquescence_rh"].as<double>();
       m.geometric_radius = n["geometric_radius"].as<double>();
       m.geometric_std_dev = n["geometric_std_dev"].as<double>();
       if (n["species"])
@@ -245,10 +312,35 @@ void ModalPackage::initialize(const std::string &yaml) {
       }
       config.modes.push_back(std::move(m));
     }
+    if (const auto overrides = root["mode_overrides"]) {
+      require(overrides.IsMap(),
+              "mode_overrides must be a name-to-settings mapping");
+      std::set<std::string> overridden;
+      for (const auto &entry : overrides) {
+        const auto name = entry.first.as<std::string>();
+        auto mode = std::find_if(config.modes.begin(), config.modes.end(),
+                                 [&](const auto &m) { return m.name == name; });
+        require(mode != config.modes.end() && overridden.insert(name).second,
+                "unknown or duplicate mode override: " + name);
+        const auto &n = entry.second;
+        keys(n, {"geometric_radius", "geometric_std_dev", "crystallization_rh",
+                 "deliquescence_rh"});
+        if (n["geometric_radius"])
+          mode->geometric_radius = n["geometric_radius"].as<double>();
+        if (n["geometric_std_dev"])
+          mode->geometric_std_dev = n["geometric_std_dev"].as<double>();
+        if (n["crystallization_rh"])
+          mode->crystallization_rh = n["crystallization_rh"].as<double>();
+        if (n["deliquescence_rh"])
+          mode->deliquescence_rh = n["deliquescence_rh"].as<double>();
+      }
+    }
     for (const char *key : {"coagulation_routes", "transfer_routes"})
       if (root[key])
         require(root[key].IsSequence(),
                 std::string(key) + " must be a sequence");
+    if (root["coagulation_routes"])
+      config.coagulation_routes.clear();
     if (root["coagulation_routes"])
       for (const auto &n : root["coagulation_routes"]) {
         keys(n, {"first", "second", "destination"});
@@ -295,7 +387,54 @@ void ModalPackage::initializeModal(const ModalConfig &config) {
                         nm,
           "configuration exceeds supported index range");
   modal::Parameters p;
-  p.coagulation = config.coagulation;
+  const auto &constants = config.constants;
+  require(positive(constants.gravity) &&
+              positive(constants.water_molecular_weight) &&
+              positive(constants.gas_constant) &&
+              positive(constants.surface_tension),
+          "physical constants must be finite and positive");
+  p.gravity = constants.gravity;
+  p.water_molecular_weight = constants.water_molecular_weight;
+  p.gas_constant = constants.gas_constant;
+  p.surface_tension = constants.surface_tension;
+  require(config.coagulation_model == ModalCoagulationModel::Brownian ||
+              config.coagulation_model == ModalCoagulationModel::Mam4xx,
+          "unknown coagulation model");
+  require(config.water_uptake == ModalWaterUptakeModel::KappaEquilibrium ||
+              config.water_uptake == ModalWaterUptakeModel::Mam4xx,
+          "unknown water uptake model");
+  const bool native_coagulation =
+      config.coagulation &&
+      config.coagulation_model == ModalCoagulationModel::Mam4xx;
+  p.mam4xx_water = config.water_uptake == ModalWaterUptakeModel::Mam4xx;
+  require((!native_coagulation && !p.mam4xx_water) ||
+              packageAvailable("mam4xx"),
+          "selected native process requires EXAERO_ENABLE_MAM4XX=ON");
+  p.coagulation = config.coagulation && !native_coagulation;
+  if (native_coagulation) {
+    const auto reference = mam4xxReferenceModalConfig();
+    require(ns == 7 && nm == 4 && p.mam4xx_water &&
+                config.coagulation_routes.empty(),
+            "native coagulation requires four MAM4 modes, seven materials, "
+            "native water and fixed native routes");
+    for (std::size_t s = 0; s < ns; ++s) {
+      const auto &a = config.species[s], &b = reference.species[s];
+      require(a.name == b.name && std::abs(a.density / b.density - 1) < 1e-12 &&
+                  std::abs(a.hygroscopicity - b.hygroscopicity) < 1e-14,
+              "native coagulation requires MAM4 material order/density/kappa");
+    }
+    for (std::size_t m = 0; m < nm; ++m) {
+      const auto &a = config.modes[m], &b = reference.modes[m];
+      require(
+          a.name == b.name &&
+              std::abs(a.geometric_radius / b.geometric_radius - 1) < 1e-12 &&
+              std::abs(a.geometric_std_dev / b.geometric_std_dev - 1) < 1e-12 &&
+              a.crystallization_rh == b.crystallization_rh &&
+              a.deliquescence_rh == b.deliquescence_rh && a.species.empty(),
+          "native coagulation requires native mode order/widths/water "
+          "thresholds and coating slots");
+    }
+  }
   std::map<std::string, int> species, modes;
   for (std::size_t s = 0; s < ns; ++s) {
     const auto &v = config.species[s];
@@ -324,6 +463,15 @@ void ModalPackage::initializeModal(const ModalConfig &config) {
     require(v.optical_treatment == ModalOpticalTreatment::ComponentTables ||
                 v.optical_treatment == ModalOpticalTreatment::InternalMixture,
             "invalid optical treatment");
+    require(std::isfinite(v.crystallization_rh) &&
+                std::isfinite(v.deliquescence_rh) &&
+                v.crystallization_rh >= 0 &&
+                v.crystallization_rh < v.deliquescence_rh &&
+                v.deliquescence_rh <= 1,
+            "water transition RH must satisfy 0 <= crystallization < "
+            "deliquescence <= 1");
+    p.crystallization_rh.push_back(v.crystallization_rh);
+    p.deliquescence_rh.push_back(v.deliquescence_rh);
     p.radius.push_back(v.geometric_radius);
     p.sigma.push_back(v.geometric_std_dev);
     std::set<std::string> permitted;
@@ -364,7 +512,7 @@ void ModalPackage::initializeModal(const ModalConfig &config) {
     compatible(b, d);
     p.destinations[a * nm + b] = p.destinations[b * nm + a] = d;
   }
-  if (config.coagulation)
+  if (p.coagulation)
     for (int dest : p.destinations)
       require(dest >= 0,
               "every unordered intermode pair needs a coagulation destination");
@@ -562,8 +710,25 @@ void ModalPackage::executeMicrophysics(const EnvironmentalStateView &e,
   // Preserve atomicity even if the kernel's result violates paired-state rules.
   std::vector<double> tmp(state.data_handle(),
                           state.data_handle() + state.size());
-  modal::advance(solver(), state.extent(0), state.extent(1), raw(e), tmp.data(),
-                 dt);
+  if (config_.coagulation &&
+      config_.coagulation_model == ModalCoagulationModel::Mam4xx) {
+#ifdef EXAERO_ENABLE_MAM4XX
+    // First 32 LayoutLeft field slabs are identical to native interstitial
+    // storage. Pad the carried cloudborne phase with zeros for this bridge.
+    std::vector<double> native(tmp.size() * 2, 0);
+    std::copy(tmp.begin(), tmp.end(), native.begin());
+    const Mam4xxEnvironment env{
+        e.temperature.data_handle(), e.pressure.data_handle(),
+        e.air_density.data_handle(), e.relative_humidity.data_handle(),
+        e.layer_thickness.data_handle()};
+    mam4xxMicrophysics(state.extent(0), state.extent(1), env, native.data(),
+                       dt);
+    std::copy_n(native.begin(), tmp.size(), tmp.begin());
+#endif
+  }
+  if (parameters_.coagulation || !parameters_.transfer_radius.empty())
+    modal::advance(solver(), state.extent(0), state.extent(1), raw(e),
+                   tmp.data(), dt);
   validate(e, View3D<const double>(tmp.data(), state.extent(0), state.extent(1),
                                    state.extent(2)));
   std::copy(tmp.begin(), tmp.end(), state.data_handle());
@@ -574,6 +739,9 @@ void ModalPackage::modalProperties(const EnvironmentalStateView &e,
                                    View4D<double> &out,
                                    View4D<double> *jac) const {
   validate(e, state, false);
+  require(!jac || config_.water_uptake != ModalWaterUptakeModel::Mam4xx,
+          "native water property Jacobians are unavailable; dry uptake "
+          "Jacobians remain supported");
   shape(out, state.extent(0), state.extent(1), config_.modes.size(),
         modal_properties::COUNT);
   if (jac)

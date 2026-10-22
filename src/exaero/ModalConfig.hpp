@@ -15,6 +15,11 @@ enum class ModalTableKind { Unknown, ParticleResolved, LognormalAverage };
 /// @brief Select constituent addition or a supplied internally mixed provider.
 enum class ModalOpticalTreatment { ComponentTables, InternalMixture };
 
+/// @brief Select generic quadrature or the fixed-layout native MAM4xx kernel.
+enum class ModalCoagulationModel { Brownian, Mam4xx };
+/// @brief Select equilibrium kappa sizing or native MAM4xx Kohler/hysteresis.
+enum class ModalWaterUptakeModel { KappaEquilibrium, Mam4xx };
+
 /// @brief Optical semantics supplied alongside an existing GEOSmie curve.
 /// Radius must represent dry particle radius or dry geometric mean radius,
 /// respectively. Coefficients are per kg of dry material and already include
@@ -46,6 +51,8 @@ struct ModalModeConfig {
   std::vector<std::string> species; ///< Permitted species; empty means all.
   ModalOpticalTreatment optical_treatment =
       ModalOpticalTreatment::ComponentTables;
+  double crystallization_rh = 0.35; ///< Native water lower transition RH.
+  double deliquescence_rh = 0.8;    ///< Native water upper transition RH.
 };
 
 /// @brief Destination for an intermode Brownian collision (unordered pair).
@@ -69,6 +76,13 @@ struct ModalNucleationConfig {
   std::vector<double> mass_fractions; ///< Species order; sum must equal one.
   double precursor_molecular_weight = 0.098079; ///< H2SO4 kg/mol.
 };
+/// @brief Diagnostic/transport constants; defaults retain the generic model.
+struct ModalPhysicalConstants {
+  double gravity = 9.80665;                  ///< Settling acceleration [m/s2].
+  double water_molecular_weight = .01801528; ///< CCN water [kg/mol].
+  double gas_constant = 8.314462618;         ///< CCN/dry uptake [J/mol/K].
+  double surface_tension = .076;             ///< CCN surface tension [N/m].
+};
 /// @brief Complete configuration, identical for YAML and structured callers.
 struct ModalConfig {
   std::vector<ModalSpeciesConfig> species;
@@ -77,5 +91,8 @@ struct ModalConfig {
   std::vector<ModalCoagulationRoute> coagulation_routes;
   std::vector<ModalTransferRoute> transfer_routes;
   std::optional<ModalNucleationConfig> nucleation;
+  ModalCoagulationModel coagulation_model = ModalCoagulationModel::Brownian;
+  ModalWaterUptakeModel water_uptake = ModalWaterUptakeModel::KappaEquilibrium;
+  ModalPhysicalConstants constants;
 };
 } // namespace exaero

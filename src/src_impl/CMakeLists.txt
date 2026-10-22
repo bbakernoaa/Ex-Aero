@@ -88,6 +88,7 @@ add_library(
   exaero_impl OBJECT
   PackageFactory.cpp
   modal/ModalPackage.cpp
+  modal/ModalPresets.cpp
   modal/ModalCoupling_C.cpp
   gocart/GocartPackage.cpp
   utils/LutGenerator.cpp
@@ -110,6 +111,8 @@ target_link_libraries(exaero PUBLIC exaero_mdspan)
 if(EXAERO_ENABLE_MAM4XX)
   include(${EXAERO_REPO_ROOT}/cmake/Mam4xx.cmake)
   target_sources(exaero_impl PRIVATE mam4xx/Mam4xxPackage.cpp)
+  target_link_libraries(exaero_solver PRIVATE exaero_mam4xx_dependency)
+  target_compile_definitions(exaero_solver PRIVATE EXAERO_ENABLE_MAM4XX=1)
   target_compile_definitions(exaero_impl PRIVATE EXAERO_ENABLE_MAM4XX=1)
   add_library(exaero_mam4xx_solver STATIC mam4xx/Mam4xxSolver.cpp)
   target_include_directories(

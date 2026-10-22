@@ -8,6 +8,9 @@
 #include <exaero/AerosolIndices.hpp>
 #include <modal/ModalSolver.hpp>
 #include <stdexcept>
+#ifdef EXAERO_ENABLE_MAM4XX
+#include <mam4xx/water_uptake.hpp>
+#endif
 
 namespace exaero::modal {
 namespace {
@@ -77,17 +80,24 @@ struct TableDescriptor {
 class Solver {
 public:
   int ns, nm, nf;
-  bool coagulation;
-  D1 density, kappa, radius, sigma, transfer_radius, pool;
+  bool coagulation, mam4xx_water;
+  double gravity, water_molecular_weight, gas_constant, surface_tension;
+  D1 density, kappa, radius, sigma, crystallization_rh, deliquescence_rh,
+      transfer_radius, pool;
   I1 allowed, destinations, transfer_source, transfer_destination;
   Kokkos::View<TableDescriptor *> tables;
   /// @brief Construct and upload the adapter's validated snapshots.
   Solver(const Parameters &p, const std::vector<Table> &t)
       : ns(p.density.size()), nm(p.radius.size()), nf(nm * (ns + 1)),
-        coagulation(p.coagulation), density(upload(p.density)),
-        kappa(upload(p.kappa)), radius(upload(p.radius)),
-        sigma(upload(p.sigma)), transfer_radius(upload(p.transfer_radius)),
-        allowed(upload(p.allowed)), destinations(upload(p.destinations)),
+        coagulation(p.coagulation), mam4xx_water(p.mam4xx_water),
+        gravity(p.gravity), water_molecular_weight(p.water_molecular_weight),
+        gas_constant(p.gas_constant), surface_tension(p.surface_tension),
+        density(upload(p.density)), kappa(upload(p.kappa)),
+        radius(upload(p.radius)), sigma(upload(p.sigma)),
+        crystallization_rh(upload(p.crystallization_rh)),
+        deliquescence_rh(upload(p.deliquescence_rh)),
+        transfer_radius(upload(p.transfer_radius)), allowed(upload(p.allowed)),
+        destinations(upload(p.destinations)),
         transfer_source(upload(p.transfer_source)),
         transfer_destination(upload(p.transfer_destination)),
         tables("modal_tables", t.size()) {
@@ -159,6 +169,31 @@ KOKKOS_INLINE_FUNCTION Moments moments(const Solver &p, const Snapshot &d,
   a.r = a.n > 0 ? Kokkos::cbrt(a.volume / a.n / factor) : p.radius(m);
   a.wet_r = a.n > 0 ? Kokkos::cbrt(a.wet_volume / a.n / factor) : a.r;
   a.water = 1000 * a.hyg_volume * f;
+#ifdef EXAERO_ENABLE_MAM4XX
+  if (p.mam4xx_water && a.n > 0) {
+    const double dry_mean_volume = a.volume / a.n;
+    const double dry_mean_radius = Kokkos::cbrt(3 * dry_mean_volume / (4 * pi));
+    const double rh = Kokkos::min(d.rh(c, k), .98);
+    double wet_mean_radius = dry_mean_radius;
+    mam4::water_uptake::modal_aero_kohler(dry_mean_radius, a.kappa, rh,
+                                          wet_mean_radius);
+    wet_mean_radius = Kokkos::max(wet_mean_radius, dry_mean_radius);
+    double water_volume = Kokkos::max(
+        0., 4 * pi / 3 * wet_mean_radius * wet_mean_radius * wet_mean_radius -
+                dry_mean_volume);
+    const double ramp =
+        rh < p.crystallization_rh(m) ? 0.
+        : rh >= p.deliquescence_rh(m)
+            ? 1.
+            : (rh - p.crystallization_rh(m)) /
+                  Kokkos::max(1e-5,
+                              p.deliquescence_rh(m) - p.crystallization_rh(m));
+    water_volume *= ramp;
+    a.wet_volume = a.volume + a.n * water_volume;
+    a.water = 1000 * a.n * water_volume;
+    a.wet_r = a.r * Kokkos::cbrt(a.wet_volume / a.volume);
+  }
+#endif
   a.density = a.wet_volume > 0 ? (a.mass + a.water) / a.wet_volume : 1000;
   a.area = 4 * pi * a.n * a.wet_r * a.wet_r * Kokkos::exp(2 * ln * ln);
   return a;
@@ -444,7 +479,7 @@ void diagnostics(const Solver &p, std::size_t nc, std::size_t nl,
               a.mass * fraction(aero, p.sigma(m), 1.25e-6);
           result(c, k, PM10_CONCENTRATION) +=
               a.mass * fraction(aero, p.sigma(m), 5e-6);
-          settle += a.mass * 2 * a.density * 9.80665 * a.wet_r * a.wet_r *
+          settle += a.mass * 2 * a.density * p.gravity * a.wet_r * a.wet_r *
                     Kokkos::exp(8 * ln * ln) /
                     (9 * viscosity(d.temperature(c, k)));
         }
@@ -478,8 +513,8 @@ void ccn(const Solver &p, std::size_t nc, std::size_t nl,
   Kokkos::parallel_for(
       "modal_ccn", nc * nl, KOKKOS_LAMBDA(int point) {
         const int c = point % nc, k = point / nc;
-        const double kelvin =
-            4 * .076 * .01801528 / (8.314462618 * d.temperature(c, k) * 1000);
+        const double kelvin = 4 * p.surface_tension * p.water_molecular_weight /
+                              (p.gas_constant * d.temperature(c, k) * 1000);
         for (int m = 0; m < p.nm; ++m) {
           const auto a = moments(p, d, c, k, m);
           if (a.n == 0 || a.kappa == 0)
@@ -517,7 +552,7 @@ void uptake(const Solver &p, std::size_t nc, std::size_t nl,
             continue;
           for (int gas = 0; gas < nv; ++gas) {
             const double speed =
-                Kokkos::sqrt(8 * 8.314462618 * d.temperature(c, k) /
+                Kokkos::sqrt(8 * p.gas_constant * d.temperature(c, k) /
                              (pi * v(gas).molecular_weight));
             const double path = 3 * v(gas).diffusivity / speed;
             const double alpha = v(gas).accommodation;

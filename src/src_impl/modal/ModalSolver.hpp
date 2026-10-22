@@ -16,6 +16,10 @@ struct Parameters {
   std::vector<int> allowed, destinations, transfer_source, transfer_destination;
   std::vector<double> transfer_radius;
   bool coagulation = true;
+  bool mam4xx_water = false;
+  double gravity = 9.80665, water_molecular_weight = .01801528;
+  double gas_constant = 8.314462618, surface_tension = .076;
+  std::vector<double> crystallization_rh, deliquescence_rh;
 };
 /// @brief Immutable host environmental buffers, (cell,level), layout_left.
 struct Environment {

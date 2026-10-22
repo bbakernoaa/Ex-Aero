@@ -62,6 +62,8 @@ MKPP coupling. Generated GEOSmie component optics cover sulfate, black carbon,
 organic material, sea salt, spherical dust, and ammonium nitrate. See the
 [generic modal guide](docs/guides/generic-modal.md) for configuration examples,
 selectable optical mixing treatments, scientific assumptions, and interfaces.
+Editable MAM4 presets and optional native coagulation/water processes are described
+in the [MAM4 profile guide](docs/guides/modal-mam4.md).
 
 The GOCART proof of concept implements advanced exascale aerosol solvers executing performance-portably on GPUs:
 

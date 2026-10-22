@@ -69,6 +69,8 @@ public:
   virtual std::vector<ModalOpticalTableInfo> opticalTables() const = 0;
   /// @brief Query properties and optional d(property)/d(state_field).
   /// Derivatives shape: (cell,level,mode,property*field_count+field).
+  /// Native MAM4xx wet-property Jacobians are unavailable and fail atomically.
+  /// Dry uptake Jacobians remain supported.
   /// Dry radius derivatives at an empty mode are defined as zero; its reference
   /// radius is returned. Wet-radius/density derivatives hold RH fixed.
   virtual void modalProperties(const EnvironmentalStateView &,

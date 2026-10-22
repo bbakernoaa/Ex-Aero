@@ -7,6 +7,10 @@ It is a generic, experimental two-moment model inspired by modal aerosol methods
 with explicit process equations and limits below. It does not reproduce MAM4 or
 MADE as a complete scientific model.
 
+Editable MAM4 mode/material presets and optional native coagulation/water
+processes are documented in [the MAM4 profile guide](modal-mam4.md). The generic
+profile remains independent of MAM4xx; native process choices require it.
+
 ## State, sizing, and configuration
 
 Each mode packs all configured species masses in species order, followed by its
@@ -16,7 +20,7 @@ particles/m3, including on the C/Fortran boundaries. Arrays are host memory,
 `layout_left`, `(cell,level,field)`. Kernels stage to the selected Kokkos space and
 return synchronously. Release packages before finalizing the environment.
 
-Every mode specifies a reference **dry geometric radius** in metres and a fixed
+With the default generic process choices, every mode specifies a reference **dry geometric radius** in metres and a fixed
 geometric standard deviation greater than one. Its evolving radius is
 
 \[
@@ -56,7 +60,7 @@ illustration, not an atmospheric calibration.
   at each mode's configured width. Apply routes in topological order. This is a
   declared modal reclosure approximation; repeated calls are not a sectional
   solution of the size-distribution equation.
-- **Water:** volume-weighted kappa and equilibrium growth
+- **Default water:** volume-weighted kappa and equilibrium growth
   \(r_w/r_d=[1+\kappa RH/(1-RH)]^{1/3}\), with RH capped at 0.98 for sizing.
   This neglects the Kelvin term in subsaturated sizing and does not implement
   deliquescence/efflorescence hysteresis. Water mass and wet density use the
@@ -144,7 +148,8 @@ and mirrored in `exaero_interface.f90`.
 `modalProperties` returns `(cell,level,mode,9)` with dry/wet radius, number,
 mass, dry volume, kappa, wet surface area, wet density, and water. Optional
 derivatives are `(cell,level,mode,property*field_count+field)`, holding RH fixed.
-Empty-mode radius derivatives are defined as zero; new-particle seeding is a
+Native MAM4xx water rejects wet-property Jacobian requests; dry uptake
+derivatives remain available. Empty-mode radius derivatives are defined as zero; new-particle seeding is a
 separate source operation. `modalUptake` returns dry-geometry Fuchs-Sutugin
 transport coefficients [s^-1], with optional analytic state derivatives.
 MKPP supplies diffusivity [m2/s], molecular weight [kg/mol], accommodation,
