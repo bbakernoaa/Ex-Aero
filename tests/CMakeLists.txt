@@ -15,6 +15,13 @@ add_test(
     ${Python3_EXECUTABLE} ${EXAERO_REPO_ROOT}/tools/generate_modal_optics.py
     --snapshot ${EXAERO_REPO_ROOT}/tools/modal_optics/modal_mie_v1.nc --header
     ${EXAERO_REPO_ROOT}/src/src_impl/data/generated/ModalOpticsData.hpp --check)
+add_test(
+  NAME ExaeroMam4xxMieDeterminism
+  COMMAND
+    ${Python3_EXECUTABLE} ${EXAERO_REPO_ROOT}/tools/generate_modal_optics.py
+    --snapshot ${EXAERO_REPO_ROOT}/tools/modal_optics/mam4xx_mie_v1.nc --header
+    ${EXAERO_REPO_ROOT}/src/src_impl/data/generated/Mam4xxOpticsData.hpp
+    --namespace mie_mam4xx --check)
 add_executable(exaero_modal_fortran_test test_modal_fortran.f90)
 target_link_libraries(exaero_modal_fortran_test PRIVATE exaero)
 add_test(NAME ExaeroModalFortran COMMAND exaero_modal_fortran_test)

@@ -187,3 +187,8 @@ References: Fuchs (1964), *The Mechanics of Aerosols*; Seinfeld & Pandis (2016),
 doi:10.5194/acp-7-1961-2007; Hess et al. (1998), OPAC,
 doi:10.1175/1520-0477(1998)079<0831:OPAACT>2.0.CO;2; and the pinned
 [GEOSmie documentation](https://github.com/bbakernoaa/GEOSmie/tree/c535388356c7e8982ead98deeebff33985254f9c).
+
+The optional [MAM4xx adapter](aerosol-backends.md#mam4xx-component-optics) uses
+this same component integrator with a separate GEOSmie recipe matching native
+MAM4xx densities and kappa. The `MAM4_*` curves are also available to structured
+generic-modal callers that use those exact material properties.

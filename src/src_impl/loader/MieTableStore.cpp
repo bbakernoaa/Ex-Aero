@@ -29,6 +29,7 @@
 #include <loader/MieFileLoader.hpp>
 #include <loader/MieTableStore.hpp>
 
+#include <data/generated/Mam4xxOpticsData.hpp>
 #include <data/generated/MieTableData.hpp>
 #include <data/generated/ModalOpticsData.hpp>
 
@@ -356,43 +357,49 @@ void MieTableStore::ensure_baked_in_loaded() {
 
 void MieTableStore::ensure_modal_loaded() {
   ensure_baked_in_loaded();
-  for (const auto &a : mie_modal::curves) {
-    if (curves_.count(a.label))
-      continue;
-    SpeciesCurve c;
-    c.source_label = c.species_name = a.label;
-    c.source_version =
-        std::string(mie_modal::source_version) + "/" + mie_modal::recipe_sha256;
-    c.citation = mie_modal::citation;
-    c.radius = slice(a.radius, a.nr);
-    c.rh = slice(a.rh, a.nh);
-    c.lambda = slice(a.wavelength, a.nl);
-    c.radius_resamplable = true;
-    c.modal_particle_resolved = true;
-    c.physical_wavelengths = true;
-    c.modal_density = a.density;
-    c.modal_kappa = a.kappa;
-    const auto put = [&](const char *name, const double *values, int rank) {
-      CurveField field;
-      field.rank = rank;
-      field.unit = unit_for_field_impl(name);
-      field.values = slice(values, a.nr * a.nh * (rank == 3 ? a.nl : 1));
-      c.fields[name] = std::move(field);
-    };
-    put("rEff", a.rEff, 2);
-    put("particle_mass", a.particle_mass, 2);
-    put("qext", a.qext, 3);
-    put("qsca", a.qsca, 3);
-    put("bext", a.bext, 3);
-    put("bsca", a.bsca, 3);
-    put("bbck", a.bbck, 3);
-    put("g", a.g, 3);
-    put("refreal", a.refreal, 3);
-    put("refimag", a.refimag, 3);
-    derive_fields(c);
-    validate_curve(c);
-    curves_[a.label] = std::move(c);
-  }
+  const auto load = [&](const auto &curves, const char *version,
+                        const char *recipe, const char *citation) {
+    for (const auto &a : curves) {
+      if (curves_.count(a.label))
+        continue;
+      SpeciesCurve c;
+      c.source_label = c.species_name = a.label;
+      c.source_version = std::string(version) + "/" + recipe;
+      c.citation = citation;
+      c.radius = slice(a.radius, a.nr);
+      c.rh = slice(a.rh, a.nh);
+      c.lambda = slice(a.wavelength, a.nl);
+      c.radius_resamplable = true;
+      c.modal_particle_resolved = true;
+      c.physical_wavelengths = true;
+      c.modal_density = a.density;
+      c.modal_kappa = a.kappa;
+      const auto put = [&](const char *name, const double *values, int rank) {
+        CurveField field;
+        field.rank = rank;
+        field.unit = unit_for_field_impl(name);
+        field.values = slice(values, a.nr * a.nh * (rank == 3 ? a.nl : 1));
+        c.fields[name] = std::move(field);
+      };
+      put("rEff", a.rEff, 2);
+      put("particle_mass", a.particle_mass, 2);
+      put("qext", a.qext, 3);
+      put("qsca", a.qsca, 3);
+      put("bext", a.bext, 3);
+      put("bsca", a.bsca, 3);
+      put("bbck", a.bbck, 3);
+      put("g", a.g, 3);
+      put("refreal", a.refreal, 3);
+      put("refimag", a.refimag, 3);
+      derive_fields(c);
+      validate_curve(c);
+      curves_[a.label] = std::move(c);
+    }
+  };
+  load(mie_modal::curves, mie_modal::source_version, mie_modal::recipe_sha256,
+       mie_modal::citation);
+  load(mie_mam4xx::curves, mie_mam4xx::source_version,
+       mie_mam4xx::recipe_sha256, mie_mam4xx::citation);
 }
 
 // True when a field is present and came from a layer above baked (file/config):

@@ -33,9 +33,10 @@ python -m pytest tests/test_modal_optics_generator.py
 ```
 
 The pinned Mie solver has small roundoff excess of scattering over extinction
-in effectively nonabsorbing small-particle cases. Only excess up to `1e-6`
-relative is clipped to extinction; larger violations fail generation. No
-placeholder optical coefficients are used.
+in effectively nonabsorbing small-particle cases. The generic snapshot clips
+excess up to `1e-6` relative. The current generator and MAM4xx snapshot allow up
+to `2e-6` relative (observed maximum below `1.6e-6`) to be clipped to extinction.
+Larger violations fail generation. No placeholder optical coefficients are used.
 
 These are visible/NIR starter tables, not full RRTMG bands. The dust calculation
 assumes spheres. Nitrate is normalized to complete dry ammonium-nitrate-equivalent
@@ -47,3 +48,32 @@ Refractive indices are distributed with the pinned GEOSmie source. See
 [`GEOSmie/LICENSE`](https://github.com/bbakernoaa/GEOSmie/blob/c535388356c7e8982ead98deeebff33985254f9c/LICENSE)
 and the notices in its pymiecoated source. The snapshot contains derived
 numerical results; it does not vendor the solver source.
+
+
+## MAM4xx material variant
+
+`mam4xx_manifest.json` defines seven native MAM4xx materials with densities and
+kappa matching the pinned upstream revision. SOA, POM and MOM explicitly use
+configurable OPAC `waso00` surrogates. Set each material's `refractive_index`
+(and `format: wsv` for a three-column input) to change the surrogate, then
+regenerate. The output records the exact recipe and input hashes. This does
+not change native MAM4xx microphysics or its water-uptake hysteresis.
+
+```sh
+python tools/generate_modal_optics.py --source GEOSmie \
+  --manifest tools/modal_optics/mam4xx_manifest.json \
+  --snapshot tools/modal_optics/mam4xx_mie_v1.nc \
+  --header src/src_impl/data/generated/Mam4xxOpticsData.hpp \
+  --namespace mie_mam4xx
+python tools/generate_modal_optics.py \
+  --snapshot tools/modal_optics/mam4xx_mie_v1.nc \
+  --header src/src_impl/data/generated/Mam4xxOpticsData.hpp \
+  --namespace mie_mam4xx --check
+```
+
+The radius range extends to 200 micrometres to cover the coarse-mode mass tail.
+The same physical bounds and dry-mass normalization checks apply to both sets.
+Normal builds use committed snapshots and deterministic headers; GEOSmie is
+required only for offline regeneration. See the
+[MAM4xx guide](../../docs/guides/aerosol-backends.md#mam4xx-component-optics)
+for configuration, phase selection, validity domain and optical approximations.

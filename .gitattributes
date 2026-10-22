@@ -2,3 +2,4 @@
 docs/.doc-index.json merge=doc-index
 # Deterministic scientific data serialization; review the recipe and snapshot.
 src/src_impl/data/generated/ModalOpticsData.hpp linguist-generated=true
+src/src_impl/data/generated/Mam4xxOpticsData.hpp linguist-generated=true

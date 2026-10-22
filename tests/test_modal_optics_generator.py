@@ -55,9 +55,12 @@ def test_eager_and_lazy_optical_generation(lazy: bool) -> None:
     xr.testing.assert_allclose(result.compute(), eager)
 
 
-def test_generated_snapshot_rayleigh_limit_and_mass_normalization() -> None:
+@pytest.mark.parametrize("snapshot", ["modal_mie_v1.nc", "mam4xx_mie_v1.nc"])
+def test_generated_snapshot_rayleigh_limit_and_mass_normalization(
+    snapshot: str,
+) -> None:
     """Check the Mie small-sphere limit independently of the GEOSmie engine."""
-    with xr.open_dataset(ROOT / "tools/modal_optics/modal_mie_v1.nc") as ds:
+    with xr.open_dataset(ROOT / "tools/modal_optics" / snapshot) as ds:
         GENERATOR.validate(ds)
         recipe = json.loads(ds.attrs["recipe"])
         assert ds.attrs["geosmie_commit"] == recipe["geosmie_commit"]
@@ -84,4 +87,38 @@ def test_committed_header_is_deterministic() -> None:
         ROOT / "tools/modal_optics/modal_mie_v1.nc",
         ROOT / "src/src_impl/data/generated/ModalOpticsData.hpp",
         True,
+    )
+
+
+def test_mam4xx_recipe_and_header() -> None:
+    """Verify native material properties, surrogate labels and deterministic bake."""
+    recipe = json.loads((ROOT / "tools/modal_optics/mam4xx_manifest.json").read_text())
+    assert [m["density"] for m in recipe["materials"]] == [
+        1000,
+        1770,
+        1000,
+        1700,
+        1900,
+        2600,
+        1601,
+    ]
+    assert [m["kappa"] for m in recipe["materials"]] == [
+        0.1,
+        0.507,
+        1e-10,
+        1e-10,
+        1.16,
+        0.14,
+        0.1,
+    ]
+    for m in recipe["materials"]:
+        if m["label"] in ("MAM4_SOA", "MAM4_POM", "MAM4_MOM"):
+            assert m["surrogate"] and "surrogate" in m["description"]
+    with xr.open_dataset(ROOT / "tools/modal_optics/mam4xx_mie_v1.nc") as ds:
+        assert json.loads(ds.attrs["recipe"]) == recipe
+    GENERATOR.bake(
+        ROOT / "tools/modal_optics/mam4xx_mie_v1.nc",
+        ROOT / "src/src_impl/data/generated/Mam4xxOpticsData.hpp",
+        True,
+        "mie_mam4xx",
     )

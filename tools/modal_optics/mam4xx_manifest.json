@@ -1,0 +1,82 @@
+{
+  "format": "exaero_modal_mie_v1",
+  "geosmie_repository": "https://github.com/bbakernoaa/GEOSmie",
+  "geosmie_commit": "c535388356c7e8982ead98deeebff33985254f9c",
+  "radius": {
+    "minimum": 1e-10,
+    "maximum": 0.0002,
+    "count": 320
+  },
+  "rh": [
+    0.0,
+    0.5,
+    0.8,
+    0.9,
+    0.95,
+    0.98
+  ],
+  "wavelength": [
+    3.55e-07,
+    5.5e-07,
+    8.7e-07,
+    1.064e-06,
+    1.64e-06
+  ],
+  "growth": "kappa_equilibrium_no_kelvin",
+  "mixing": "homogeneous_volume_weighted_dry_material_and_water",
+  "normalization": "per_kg_dry_material",
+  "materials": [
+    {
+      "label": "MAM4_SOA",
+      "refractive_index": "waso00",
+      "density": 1000,
+      "kappa": 0.1,
+      "description": "SOA uses configurable OPAC water-soluble organic surrogate (waso00); not a dedicated MAM4 material refractive index",
+      "surrogate": true
+    },
+    {
+      "label": "MAM4_SO4",
+      "refractive_index": "suso00",
+      "density": 1770,
+      "kappa": 0.507
+    },
+    {
+      "label": "MAM4_POM",
+      "refractive_index": "waso00",
+      "density": 1000,
+      "kappa": 1e-10,
+      "description": "POM uses configurable OPAC water-soluble organic surrogate (waso00); not a dedicated MAM4 material refractive index",
+      "surrogate": true
+    },
+    {
+      "label": "MAM4_BC",
+      "refractive_index": "soot00",
+      "density": 1700,
+      "kappa": 1e-10
+    },
+    {
+      "label": "MAM4_NACL",
+      "refractive_index": "sscm00",
+      "density": 1900,
+      "kappa": 1.16
+    },
+    {
+      "label": "MAM4_DST",
+      "refractive_index": "ri-dust.wsv",
+      "density": 2600,
+      "kappa": 0.14,
+      "format": "wsv",
+      "description": "Spherical mineral dust; not a nonspherical optical model"
+    },
+    {
+      "label": "MAM4_MOM",
+      "refractive_index": "waso00",
+      "density": 1601,
+      "kappa": 0.1,
+      "description": "MOM uses configurable OPAC water-soluble organic surrogate (waso00); not a dedicated MAM4 material refractive index",
+      "surrogate": true
+    }
+  ],
+  "mam4xx_commit": "c994f6889f270c3da4aca8a4703a1ebe30f92f69",
+  "purpose": "MAM4xx component-table approximation; native material density and kappa; equilibrium optical growth differs from native hysteretic water diagnostics"
+}

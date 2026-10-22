@@ -2,8 +2,8 @@
 
 The separate configurable `modal` backend is documented in the
 [generic modal guide](generic-modal.md), including its generated GEOSmie optics
-and MKPP contract. The fixed MAM4xx backend described below retains its existing
-scope and state layout.
+and MKPP contract. The fixed MAM4xx backend described below has a separate
+opt-in adapter for tables matching its native material properties.
 
 EX-aero can select `gocart` (bulk) or the optional, experimental `mam4xx`
 (modal) package at runtime. Both use the same column-major
@@ -90,10 +90,10 @@ packages before finalizing it. GPU execution has not yet been validated.
 | Diagnostics | Existing diagnostics | Both phases: mass, number, water, area, size cuts, settling, columns |
 | CCN spectrum | Existing bulk activation | Modal lognormal kappa-Kohler integral |
 | Emissions | Configured raw-species mapping | Already-speciated 64-field mass/number rates |
-| Optics | Existing GOCART/GEOSmie optics | Unavailable; explicit error |
+| Optics | Existing GOCART/GEOSmie optics | Opt-in GEOSmie component-table approximation |
 
-MAM4xx initialization currently accepts an empty YAML mapping or
-`backend: mam4xx`; unknown settings are rejected. The timestep updates
+MAM4xx initialization accepts an empty YAML mapping, `backend: mam4xx`, and
+the optional `optics` mapping described below; unknown settings are rejected. The timestep updates
 interstitial coagulation only. Cloudborne state is carried unchanged;
 diagnostics include both phases. Gas chemistry, nucleation, condensation,
 aging, mode renaming, cloud activation tendencies, and wet/dry deposition
@@ -113,14 +113,66 @@ CCN uses the lognormal kappa-Kohler integral underlying MAM4's
 `ndrop::ccncalc`, extended to the caller's supersaturation axis. It returns
 particles/m³, includes both phases, and does not impose upstream's
 fixed-axis number clipping. This is a spectrum diagnostic, not a cloud
-droplet tendency. Optical properties require validated internally mixed
-modal tables; the bulk GOCART tables are not substituted.
+droplet tendency. Optical properties use the explicit approximation below.
 
 For modal emissions, input/output field order is identical to the state.
 Concentration rates are kg/m³/s or particles/m³/s according to field metadata.
 Area fluxes are kg/m²/s or particles/m²/s and are divided by positive layer
 thickness. This does not split a bulk inventory into modes or infer emitted
 number. Hosts must supply both mass and number consistently.
+
+## MAM4xx component optics
+
+Enable the shared generic-modal integrator explicitly:
+
+```yaml
+backend: mam4xx
+optics:
+  treatment: component_tables
+  include_cloudborne: false
+  # Optional source aliases; names use the public global species order.
+  sources: {SOA: MAM4_SOA, SO4: MAM4_SO4, POM: MAM4_POM, BC: MAM4_BC,
+            NaCl: MAM4_NACL, DST: MAM4_DST, MOM: MAM4_MOM}
+```
+
+The adapter reads native MAM4xx densities, hygroscopicities and fixed mode
+widths, and integrates the dedicated GEOSmie particle tables over each mode's
+mass/number-derived dry lognormal distribution. It shares the existing 64-field
+state without repacking or modifying it. Native microphysics and diagnostics
+continue to use MAM4xx. Reinitializing without `optics` disables optical support;
+failed initialization leaves the previous configuration intact.
+
+The seven `MAM4_*` curves are embedded in `Mam4xxOpticsData.hpp`, independently
+of the generic `MODAL_*` defaults and legacy GOCART tables. Their
+[recipe](../../tools/modal_optics/mam4xx_manifest.json) pins GEOSmie and MAM4xx,
+records density and kappa, and **labels SOA, POM and MOM as configurable OPAC
+`waso00` refractive-index surrogates**. Change those recipe entries and regenerate
+for alternative organic materials. These surrogates do not constitute validated
+MAM4 organic optical constants. Dust is spherical. Native MAM4 has no nitrate
+state field; nitrate remains available to the generic modal backend.
+
+This is a component-table optical approximation: components share their mode's
+dry radius distribution, and their extinction/scattering are added by dry mass.
+It does not reproduce the native internally mixed MAM optical calculation.
+Each table includes its material's equilibrium kappa growth and mixing with
+water exactly once. Native MAM water diagnostics instead use mixture kappa and
+hysteresis, so their wet sizes need not match this optical approximation.
+No diagnostic wet radius or water mass is applied again in optics.
+
+Default optics include interstitial aerosol only. `include_cloudborne: true`
+adds the carried cloudborne particle distributions as ambient aerosol; it does
+not compute cloud-droplet optics. Tables cover dry radii 0.1 nm–200 micrometres,
+RH 0–0.98 and five wavelengths 355–1640 nm. The integrator rejects an unsupported
+RH/wavelength or a distribution with more than 1e-8 of its dry mass outside the
+radius range. It does not extrapolate. These are visible/NIR starter tables,
+not full RRTMG bands. The generic guide documents output slots and integration.
+
+Optional `sources` entries select alternate curve labels; an optional `data_file`
+is merged through the existing EX-aero MIE loader before resolving them. Every
+curve must carry recognized particle/distribution semantics, physical wavelength
+nodes and compatible density/kappa metadata. Legacy bulk tables cannot be
+silently substituted. For the initial embedded set, configure refractive indices
+in the offline recipe and regenerate the snapshot/header together.
 
 ## Validation
 

@@ -47,6 +47,20 @@ add_custom_command(
   VERBATIM)
 add_custom_target(exaero_modal_mie_data DEPENDS ${MODAL_MIE_HEADER})
 
+set(MAM4XX_MIE_HEADER
+    ${CMAKE_CURRENT_SOURCE_DIR}/data/generated/Mam4xxOpticsData.hpp)
+add_custom_command(
+  OUTPUT ${MAM4XX_MIE_HEADER}
+  COMMAND
+    Python3::Interpreter ${EXAERO_REPO_ROOT}/tools/generate_modal_optics.py
+    --snapshot ${EXAERO_REPO_ROOT}/tools/modal_optics/mam4xx_mie_v1.nc --header
+    ${MAM4XX_MIE_HEADER} --namespace mie_mam4xx
+  DEPENDS ${EXAERO_REPO_ROOT}/tools/generate_modal_optics.py
+          ${EXAERO_REPO_ROOT}/tools/modal_optics/mam4xx_mie_v1.nc
+  COMMENT "Baking committed GEOSmie MAM4xx component curves"
+  VERBATIM)
+add_custom_target(exaero_mam4xx_mie_data DEPENDS ${MAM4XX_MIE_HEADER})
+
 # Private Header Target for mdspan backport
 add_library(exaero_mdspan INTERFACE)
 target_include_directories(
@@ -82,7 +96,7 @@ add_library(
   loader/MieFileLoader.cpp
   loader/Provenance.cpp)
 add_dependencies(exaero_impl exaero_mie_data)
-add_dependencies(exaero_impl exaero_modal_mie_data)
+add_dependencies(exaero_impl exaero_modal_mie_data exaero_mam4xx_mie_data)
 target_include_directories(exaero_impl PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}
                                                ${CMAKE_CURRENT_SOURCE_DIR}/..)
 target_link_libraries(exaero_impl PUBLIC exaero_mdspan yaml-cpp::yaml-cpp)

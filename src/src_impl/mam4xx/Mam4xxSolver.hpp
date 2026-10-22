@@ -2,9 +2,17 @@
 /// @file Mam4xxSolver.hpp
 /// @brief Private host-pointer bridge, isolated from both mdspan and MAM4xx
 /// headers.
+#include <array>
 #include <cstddef>
 
 namespace exaero {
+/// @brief Native optical material and mode parameters without Kokkos types.
+struct Mam4xxOpticalParameters {
+  std::array<double, 7> density, kappa, molecular_weight;
+  std::array<double, 4> radius, sigma;
+};
+/// @brief Read pinned upstream defaults without allocating device storage.
+Mam4xxOpticalParameters mam4xxOpticalParameters();
 /// @brief Read-only contiguous host buffers, each (cell, level), layout_left.
 struct Mam4xxEnvironment {
   const double *temperature; ///< Air temperature [K].

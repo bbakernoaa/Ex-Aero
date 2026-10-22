@@ -16,7 +16,7 @@ repos:
       - id: check-added-large-files
         description: Prevents accidental commits of large datasets or pre-built binaries.
         # Reviewed scientific snapshot and its deterministic text serialization.
-        exclude: ^(tools/modal_optics/modal_mie_v1\.nc|src/src_impl/data/generated/ModalOpticsData\.hpp)$
+        exclude: ^(tools/modal_optics/(modal|mam4xx)_mie_v1\.nc|src/src_impl/data/generated/(Modal|Mam4xx)OpticsData\.hpp)$
       - id: check-merge-conflict
         description: Prevents committing files with unresolved git merge conflict markers.
       - id: check-case-conflict

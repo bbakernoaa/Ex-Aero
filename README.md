@@ -49,8 +49,10 @@ Ex-Aero/
 GOCART provides the bulk aerosol backend. The optional, experimental MAM4xx
 backend adds modal mass/number state, upstream clear-air coagulation and water
 uptake, modal diagnostics/CCN, and already-speciated emissions. Select either
-backend through the C++ factory or C/Fortran package constructor. MAM4xx optics
-and additional gas/cloud processes are not yet connected. See the
+backend through the C++ factory or C/Fortran package constructor. MAM4xx can
+opt into generated GEOSmie component optics using native material properties,
+with labeled OPAC organic surrogates. Additional gas/cloud processes are not
+yet connected. See the
 [backend guide](docs/guides/aerosol-backends.md) for build options, state units,
 capabilities, and validation limits.
 

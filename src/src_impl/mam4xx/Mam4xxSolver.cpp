@@ -13,6 +13,25 @@
 #include <type_traits>
 
 namespace exaero {
+Mam4xxOpticalParameters mam4xxOpticalParameters() {
+  using namespace mam4::defaults;
+  using C = mam4::Constants;
+  Mam4xxOpticalParameters p{
+      {mam4_density_soa, mam4_density_so4, mam4_density_pom, mam4_density_bc,
+       mam4_density_nacl, mam4_density_dst, mam4_density_mom},
+      {mam4_hyg_soa, mam4_hyg_so4, mam4_hyg_pom, mam4_hyg_bc, mam4_hyg_nacl,
+       mam4_hyg_dst, mam4_hyg_mom},
+      {C::molec_weight_c, C::molec_weight_so4, C::molec_weight_c,
+       C::molec_weight_c, C::molec_weight_nacl, mam4_molec_weight_dst,
+       mam4_molec_weight_mom},
+      {},
+      {}};
+  for (int m = 0; m < 4; ++m) {
+    p.radius[m] = mam4::modes(m).nom_diameter / 2;
+    p.sigma[m] = mam4::modes(m).mean_std_dev;
+  }
+  return p;
+}
 namespace {
 static_assert(std::is_same_v<mam4::Real, double>,
               "EX-aero requires double-precision MAM4xx");
