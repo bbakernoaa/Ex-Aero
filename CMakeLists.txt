@@ -25,7 +25,12 @@ set(EXAERO_FORTRAN_MODULE_DIR ${CMAKE_CURRENT_BINARY_DIR}/src/fortran_modules)
 # exported-targets file with "Some (but not all) targets already defined"). Same
 # guard MKPP uses.
 if(NOT TARGET Kokkos::kokkos)
-  find_package(Kokkos REQUIRED)
+  find_package(Kokkos 5.1.1 CONFIG REQUIRED)
+elseif(DEFINED Kokkos_VERSION AND Kokkos_VERSION VERSION_LESS 5.1.1)
+  message(
+    FATAL_ERROR
+      "FATAL ERROR: EX-aero requires Kokkos 5.1.1 or newer; host provides ${Kokkos_VERSION}"
+  )
 endif()
 find_package(Python3 REQUIRED COMPONENTS Interpreter)
 

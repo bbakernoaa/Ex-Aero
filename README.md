@@ -1,6 +1,6 @@
 # EX-aero: Exascale Aerosol Interface
 
-**EX-aero** (**EX**ascale **AERO**sol Interface) is an independent, zero-dependency, layout-agnostic C++20 and Kokkos interface library. It is designed to decouple host atmospheric dynamical and physical cores (such as CATChem, CECE, or CCPP) from advanced aerosol microphysics and optics engines.
+**EX-aero** (**EX**ascale **AERO**sol Interface) is an independent, zero-dependency, layout-agnostic C++23 and Kokkos interface library. It is designed to decouple host atmospheric dynamical and physical cores (such as CATChem, CECE, or CCPP) from advanced aerosol microphysics and optics engines.
 
 EX-aero serves as a high-performance, GPU-portable aerosol state and microphysics boundary. This repository contains the complete software scaffolding, a privately vendored single-header `mdspan` backport, and a fully functional, dynamic-YAML-driven **GOCART (bulk aerosol) proof of concept (PoC)** solver.
 
@@ -8,7 +8,7 @@ EX-aero serves as a high-performance, GPU-portable aerosol state and microphysic
 
 ## 1. Core Architecture & Separation of Concerns
 
-EX-aero implements a target-level compiler isolation model to prevent template, header guard, and namespace collisions between C++20 `std::experimental::mdspan` and `<Kokkos_Core.hpp>` (such as known adjacent template parameter pack parsing bugs on Apple Clang):
+EX-aero implements a target-level compiler isolation model to prevent template, header guard, and namespace collisions between C++23 `std::experimental::mdspan` and `<Kokkos_Core.hpp>` (such as known adjacent template parameter pack parsing bugs on Apple Clang):
 
 *   **Public API Layer (`src/exaero/`):** Defines clean abstract interfaces (like `IAerosolPackage`) using layout-agnostic `mdspan` views. It has absolutely **zero** dependencies on Kokkos headers, keeping host builds lightweight and clean.
 *   **GPU Solver Layer (`exaero_solver` target):** Contains raw C++ and Kokkos GPU parallel kernels. It includes `<Kokkos_Core.hpp>` but has **zero** access to public `mdspan` headers, keeping compilation isolated and compile-safe.
@@ -22,7 +22,7 @@ The repository is organized to strictly enforce compilation isolation:
 
 ```text
 Ex-Aero/
-├── CMakeLists.txt                  # Top-level C++20 build system
+├── CMakeLists.txt                  # Top-level C++23 build system
 ├── README.md                       # Documentation
 ├── docs/                           # Specifications and Charters
 └── src/
@@ -39,7 +39,7 @@ Ex-Aero/
         │   ├── GocartSolver.cpp    # Kokkos GPU parallel kernels
         │   └── GocartSpeciesParams.hpp # Isolated species structures
         └── third_party/            # Privately vendored dependencies
-            └── mdspan/             # Isolated single-header C++20 mdspan
+            └── mdspan/             # Isolated single-header C++23 mdspan
 ```
 
 ---
@@ -94,8 +94,8 @@ Supports multi-band radiative transfer queries (such as RRTMG) across any arbitr
 
 ### **A. Prerequisites**
 Ensure that the following dependencies are installed and discoverable on your platform (e.g. via Homebrew or standard environment modules):
-*   CMake (VERSION >= 3.18)
-*   Kokkos (built with your active execution space, e.g. CUDA, HIP, or OpenMP)
+*   CMake (VERSION >= 3.24)
+*   Kokkos 5.1.1 or newer (CI pins 5.1.1; build with your active execution space, e.g. CUDA, HIP, or OpenMP)
 *   `yaml-cpp`
 *   OpenMP (if compiling for CPU targets)
 
@@ -105,7 +105,7 @@ Ensure that the following dependencies are installed and discoverable on your pl
 Configure passing the Homebrew `libomp` compiler flags explicitly to enable OpenMP:
 ```bash
 cmake -S . -B build \
-  -DCMAKE_CXX_STANDARD=20 \
+  -DCMAKE_CXX_STANDARD=23 \
   -DOpenMP_CXX_FLAGS="-Xpreprocessor -fopenmp -I/opt/homebrew/opt/libomp/include" \
   -DOpenMP_CXX_LIB_NAMES="omp" \
   -DOpenMP_omp_LIBRARY=/opt/homebrew/opt/libomp/lib/libomp.dylib
@@ -115,7 +115,7 @@ cmake --build build
 
 #### **Linux (GCC + Native OpenMP):**
 ```bash
-cmake -S . -B build -DCMAKE_CXX_STANDARD=20
+cmake -S . -B build -DCMAKE_CXX_STANDARD=23
 cmake --build build
 ```
 
@@ -131,7 +131,7 @@ Executes deterministic physical and optical validations:
 ./build/tests/exaero_test_runner
 ```
 *   **YAML Parsing Unit Test:** Confirms YAML dynamic species loading and deep-copying configurations to GPU default execution space views.
-*   **Memory Mapping Zero-Copy Test:** Confirms raw pointers wrapped in C++20 `mdspan` are mapped to unmanaged Kokkos Views, integrated over vertical layer thicknesses, and written back to raw host memory in-place zero-copy.
+*   **Memory Mapping Zero-Copy Test:** Confirms raw pointers wrapped in C++23 `mdspan` are mapped to unmanaged Kokkos Views, integrated over vertical layer thicknesses, and written back to raw host memory in-place zero-copy.
 *   **GOCART Optics Dual-Mode Test:** Asserts that 1D linear relative humidity lookups and ADT analytical Mie solvers calculate and scale correctly across multiple bands (550nm and 870nm) on the GPU.
 *   **GOCART Cloud CCN Spectra Test:** Verifies that cloud droplet activation matches Kohler thresholds and is physically monotonic across standard supersaturations.
 

@@ -13,7 +13,10 @@ Rebuild consuming C++ applications after upgrading the interface library.
 
 ## Build
 
-GOCART uses the existing Kokkos and yaml-cpp dependencies. MAM4xx additionally
+All backends require Kokkos 5.1.1 or newer; CI pins Kokkos 5.1.1 at revision
+`267ebc25fc5c8b96bb321f34d78f97b1c30f8830`. CMake rejects older discovered
+packages, and compilation also checks the version for host-provided targets.
+GOCART uses Kokkos and yaml-cpp. MAM4xx additionally
 needs EKAT built against **the same Kokkos**, with its Kokkos utilities enabled.
 The pinned MAM4xx revision is `c994f6889f270c3da4aca8a4703a1ebe30f92f69`.
 The EKAT revision used by that upstream checkout is
