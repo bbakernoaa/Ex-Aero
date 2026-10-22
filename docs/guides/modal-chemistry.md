@@ -351,6 +351,8 @@ Tests cover independent shell-volume references, material/number conservation,
 geometry and thermodynamic Jacobian finite differences, evaporation boundaries,
 gross coagulation gains, transfer ownership, native MAM4xx budgets, and C/Fortran
 column-major interoperability. Run the normal CTest suite with MAM4xx ON and OFF
-using Kokkos 5.1.1. These checks validate the coupling and generic closure; native
-MAM4 aging parity, generated-mechanism integration, thermodynamic calibration,
-and GPU validation remain separate work.
+using Kokkos 5.1.1. These checks validate the coupling and generic closure;
+calibrated MAM4 aging equivalence, implicit generated-mechanism integration,
+thermodynamic calibration, and GPU validation remain separate work. The
+[dry-box comparison harness](modal-comparison.md) measures process differences
+and can execute a generated MKPP mechanism with frozen host stage coefficients.

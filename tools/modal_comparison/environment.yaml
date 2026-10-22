@@ -1,0 +1,44 @@
+# Compiler analysis state only; runtime box cases are defined in the driver.
+environment:
+  temperature: 280.0
+  pressure: 90000.0
+initial_concentrations:
+  H2SO4: 1.0e6
+  SOA_accumulation: 1.0e5
+  SO4_accumulation: 1.0e5
+  POM_accumulation: 1.0e5
+  BC_accumulation: 1.0e5
+  NaCl_accumulation: 1.0e5
+  DST_accumulation: 1.0e5
+  MOM_accumulation: 1.0e5
+  N_accumulation: 1.0e3
+  SOA_aitken: 1.0e5
+  SO4_aitken: 1.0e5
+  POM_aitken: 1.0e5
+  BC_aitken: 1.0e5
+  NaCl_aitken: 1.0e5
+  DST_aitken: 1.0e5
+  MOM_aitken: 1.0e5
+  N_aitken: 1.0e3
+  SOA_coarse: 1.0e5
+  SO4_coarse: 1.0e5
+  POM_coarse: 1.0e5
+  BC_coarse: 1.0e5
+  NaCl_coarse: 1.0e5
+  DST_coarse: 1.0e5
+  MOM_coarse: 1.0e5
+  N_coarse: 1.0e3
+  SOA_primary_carbon: 1.0e5
+  SO4_primary_carbon: 1.0e5
+  POM_primary_carbon: 1.0e5
+  BC_primary_carbon: 1.0e5
+  NaCl_primary_carbon: 1.0e5
+  DST_primary_carbon: 1.0e5
+  MOM_primary_carbon: 1.0e5
+  N_primary_carbon: 1.0e3
+  K0: 0.001
+  K1: 0.001
+  K2: 0.001
+  K3: 0.001
+  J: 1.0
+  AGE: 0.001

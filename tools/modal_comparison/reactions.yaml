@@ -1,0 +1,112 @@
+# Frozen stage coefficients from EX-aero; material units/cm3 and particles/cm3.
+# This validates the generated MKPP RHS used by the comparison box integrator.
+# Coefficients are refreshed each host substep; their geometry derivatives are
+# outside this frozen-coefficient benchmark. See docs/guides/modal-comparison.md.
+name: modal_mam4_comparison
+species:
+  - {name: H2SO4, phase: gas}
+  - {name: SOA_accumulation, phase: aerosol}
+  - {name: SO4_accumulation, phase: aerosol}
+  - {name: POM_accumulation, phase: aerosol}
+  - {name: BC_accumulation, phase: aerosol}
+  - {name: NaCl_accumulation, phase: aerosol}
+  - {name: DST_accumulation, phase: aerosol}
+  - {name: MOM_accumulation, phase: aerosol}
+  - {name: N_accumulation, phase: aerosol}
+  - {name: SOA_aitken, phase: aerosol}
+  - {name: SO4_aitken, phase: aerosol}
+  - {name: POM_aitken, phase: aerosol}
+  - {name: BC_aitken, phase: aerosol}
+  - {name: NaCl_aitken, phase: aerosol}
+  - {name: DST_aitken, phase: aerosol}
+  - {name: MOM_aitken, phase: aerosol}
+  - {name: N_aitken, phase: aerosol}
+  - {name: SOA_coarse, phase: aerosol}
+  - {name: SO4_coarse, phase: aerosol}
+  - {name: POM_coarse, phase: aerosol}
+  - {name: BC_coarse, phase: aerosol}
+  - {name: NaCl_coarse, phase: aerosol}
+  - {name: DST_coarse, phase: aerosol}
+  - {name: MOM_coarse, phase: aerosol}
+  - {name: N_coarse, phase: aerosol}
+  - {name: SOA_primary_carbon, phase: aerosol}
+  - {name: SO4_primary_carbon, phase: aerosol}
+  - {name: POM_primary_carbon, phase: aerosol}
+  - {name: BC_primary_carbon, phase: aerosol}
+  - {name: NaCl_primary_carbon, phase: aerosol}
+  - {name: DST_primary_carbon, phase: aerosol}
+  - {name: MOM_primary_carbon, phase: aerosol}
+  - {name: N_primary_carbon, phase: aerosol}
+  - {name: K0, role: fixed, phase: gas}
+  - {name: K1, role: fixed, phase: gas}
+  - {name: K2, role: fixed, phase: gas}
+  - {name: K3, role: fixed, phase: gas}
+  - {name: J, role: fixed, phase: gas}
+  - {name: AGE, role: fixed, phase: gas}
+reactions:
+  - type: CUSTOM
+    reactants: {H2SO4: 1}
+    products: {SO4_accumulation: 1}
+    parameters: {rate_expression: C_K0}
+    stiff: true
+  - type: CUSTOM
+    reactants: {H2SO4: 1}
+    products: {SO4_aitken: 1}
+    parameters: {rate_expression: C_K1}
+    stiff: true
+  - type: CUSTOM
+    reactants: {H2SO4: 1}
+    products: {SO4_coarse: 1}
+    parameters: {rate_expression: C_K2}
+    stiff: true
+  - type: CUSTOM
+    reactants: {H2SO4: 1}
+    products: {SO4_primary_carbon: 1}
+    parameters: {rate_expression: C_K3}
+    stiff: true
+  # Common controlled seed: 100 acid molecules, SO4-equivalent dry mass.
+  - type: CUSTOM
+    reactants: {H2SO4: 100}
+    products: {SO4_aitken: 100, N_aitken: 1}
+    parameters: {rate_basis: flux, rate_expression: C_J}
+    stiff: true
+  - type: CUSTOM
+    reactants: {SOA_primary_carbon: 1}
+    products: {SOA_accumulation: 1}
+    parameters: {rate_expression: C_AGE}
+    stiff: true
+  - type: CUSTOM
+    reactants: {SO4_primary_carbon: 1}
+    products: {SO4_accumulation: 1}
+    parameters: {rate_expression: C_AGE}
+    stiff: true
+  - type: CUSTOM
+    reactants: {POM_primary_carbon: 1}
+    products: {POM_accumulation: 1}
+    parameters: {rate_expression: C_AGE}
+    stiff: true
+  - type: CUSTOM
+    reactants: {BC_primary_carbon: 1}
+    products: {BC_accumulation: 1}
+    parameters: {rate_expression: C_AGE}
+    stiff: true
+  - type: CUSTOM
+    reactants: {NaCl_primary_carbon: 1}
+    products: {NaCl_accumulation: 1}
+    parameters: {rate_expression: C_AGE}
+    stiff: true
+  - type: CUSTOM
+    reactants: {DST_primary_carbon: 1}
+    products: {DST_accumulation: 1}
+    parameters: {rate_expression: C_AGE}
+    stiff: true
+  - type: CUSTOM
+    reactants: {MOM_primary_carbon: 1}
+    products: {MOM_accumulation: 1}
+    parameters: {rate_expression: C_AGE}
+    stiff: true
+  - type: CUSTOM
+    reactants: {N_primary_carbon: 1}
+    products: {N_accumulation: 1}
+    parameters: {rate_expression: C_AGE}
+    stiff: true

@@ -154,6 +154,10 @@ transfer, CCN diagnostics, emissions and coupling interfaces remain available.
 
 ## Validation and build
 
+The [process-comparison harness](modal-comparison.md) provides independent native
+kernel comparisons, matched-law controls, combined trajectories, optional
+generated MKPP execution, and time-step sensitivity reports.
+
 Tests compare all standard diagnostic slots over multiple columns/levels and
 RH regimes, and compare coagulation state updates against the fixed MAM4xx
 wrapper. Additional tests exercise arbitrary mode/material counts, dry-uptake derivative finite differences, conservation,

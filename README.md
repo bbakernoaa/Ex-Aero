@@ -67,6 +67,8 @@ in the [MAM4 profile guide](docs/guides/modal-mam4.md).
 [Chemical coupling](docs/guides/modal-chemistry.md), including explicit MKPP reaction
 YAML examples, supplies balanced phase exchange,
 coating aging rates/Jacobians, gross coagulation gains, and host-owned renaming.
+The [MAM4xx comparison harness](docs/guides/modal-comparison.md) runs process
+comparisons and combined dry-box trajectories with optional generated MKPP code.
 
 The GOCART proof of concept implements advanced exascale aerosol solvers executing performance-portably on GPUs:
 
