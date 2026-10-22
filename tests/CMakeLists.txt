@@ -1,4 +1,27 @@
 # GOCART Diagnostics and YAML Parsing Test Runner
+find_package(Catch2 2 CONFIG REQUIRED)
+add_executable(exaero_modal_test test_modal.cpp test_modal_main.cpp)
+target_link_libraries(exaero_modal_test PRIVATE exaero Catch2::Catch2)
+target_compile_definitions(
+  exaero_modal_test
+  PRIVATE EXAERO_TEST_DATA_DIR="${CMAKE_CURRENT_SOURCE_DIR}/data"
+          EXAERO_TEST_SOURCE_DIR="${EXAERO_REPO_ROOT}")
+add_test(NAME ExaeroModal COMMAND exaero_modal_test)
+set_tests_properties(
+  ExaeroModal PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2;OMP_PROC_BIND=false")
+add_test(
+  NAME ExaeroModalMieDeterminism
+  COMMAND
+    ${Python3_EXECUTABLE} ${EXAERO_REPO_ROOT}/tools/generate_modal_optics.py
+    --snapshot ${EXAERO_REPO_ROOT}/tools/modal_optics/modal_mie_v1.nc --header
+    ${EXAERO_REPO_ROOT}/src/src_impl/data/generated/ModalOpticsData.hpp --check)
+add_executable(exaero_modal_fortran_test test_modal_fortran.f90)
+target_link_libraries(exaero_modal_fortran_test PRIVATE exaero)
+add_test(NAME ExaeroModalFortran COMMAND exaero_modal_fortran_test)
+set_tests_properties(
+  ExaeroModalFortran PROPERTIES ENVIRONMENT
+                                "OMP_NUM_THREADS=2;OMP_PROC_BIND=false")
+
 add_executable(exaero_package_selection_test test_package_selection.cpp)
 target_link_libraries(exaero_package_selection_test PRIVATE exaero)
 add_test(NAME ExaeroPackageSelection COMMAND exaero_package_selection_test)

@@ -54,6 +54,13 @@ and additional gas/cloud processes are not yet connected. See the
 [backend guide](docs/guides/aerosol-backends.md) for build options, state units,
 capabilities, and validation limits.
 
+The independent experimental `modal` backend supports configurable lognormal
+modes, prognostic mass/number, Brownian coagulation, growth transfer, CCN, and
+MKPP coupling. Generated GEOSmie component optics cover sulfate, black carbon,
+organic material, sea salt, spherical dust, and ammonium nitrate. See the
+[generic modal guide](docs/guides/generic-modal.md) for configuration examples,
+selectable optical mixing treatments, scientific assumptions, and interfaces.
+
 The GOCART proof of concept implements advanced exascale aerosol solvers executing performance-portably on GPUs:
 
 ### **A. Mass Sizing & ESM Diagnostics (Task 5)**

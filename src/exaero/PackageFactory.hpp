@@ -6,7 +6,7 @@
 #include <string_view>
 
 namespace exaero {
-/// @brief Construct "gocart" (bulk) or "mam4xx" (modal), without
+/// @brief Construct "gocart" (bulk), "modal" (generic), or "mam4xx", without
 /// initialization.
 /// @throws std::invalid_argument for unknown or disabled backends.
 std::unique_ptr<IAerosolPackage> createPackage(std::string_view backend);

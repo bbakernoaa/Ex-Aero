@@ -31,6 +31,22 @@ add_custom_command(
 
 add_custom_target(exaero_mie_data DEPENDS ${MIE_GENERATED_HEADER})
 
+# Modal curves are generated offline with the pinned GEOSmie Mie engine. Normal
+# builds only serialize the committed snapshot; no GEOSmie or network required.
+set(MODAL_MIE_HEADER
+    ${CMAKE_CURRENT_SOURCE_DIR}/data/generated/ModalOpticsData.hpp)
+add_custom_command(
+  OUTPUT ${MODAL_MIE_HEADER}
+  COMMAND
+    Python3::Interpreter ${EXAERO_REPO_ROOT}/tools/generate_modal_optics.py
+    --snapshot ${EXAERO_REPO_ROOT}/tools/modal_optics/modal_mie_v1.nc --header
+    ${MODAL_MIE_HEADER}
+  DEPENDS ${EXAERO_REPO_ROOT}/tools/generate_modal_optics.py
+          ${EXAERO_REPO_ROOT}/tools/modal_optics/modal_mie_v1.nc
+  COMMENT "Baking committed GEOSmie modal optical curves"
+  VERBATIM)
+add_custom_target(exaero_modal_mie_data DEPENDS ${MODAL_MIE_HEADER})
+
 # Private Header Target for mdspan backport
 add_library(exaero_mdspan INTERFACE)
 target_include_directories(
@@ -48,7 +64,7 @@ target_include_directories(
 target_compile_definitions(exaero_mdspan INTERFACE MDSPAN_USE_PAREN_OPERATOR=1)
 
 # 1. The GPU Solver (Kokkos only, NO private mdspan headers)
-add_library(exaero_solver STATIC gocart/GocartSolver.cpp)
+add_library(exaero_solver STATIC gocart/GocartSolver.cpp modal/ModalSolver.cpp)
 target_include_directories(exaero_solver PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}
                                                  ${CMAKE_CURRENT_SOURCE_DIR}/..)
 target_link_libraries(exaero_solver PUBLIC Kokkos::kokkos)
@@ -57,6 +73,8 @@ target_link_libraries(exaero_solver PUBLIC Kokkos::kokkos)
 add_library(
   exaero_impl OBJECT
   PackageFactory.cpp
+  modal/ModalPackage.cpp
+  modal/ModalCoupling_C.cpp
   gocart/GocartPackage.cpp
   utils/LutGenerator.cpp
   utils/DubovikSpheroidDatabase.cpp
@@ -64,6 +82,7 @@ add_library(
   loader/MieFileLoader.cpp
   loader/Provenance.cpp)
 add_dependencies(exaero_impl exaero_mie_data)
+add_dependencies(exaero_impl exaero_modal_mie_data)
 target_include_directories(exaero_impl PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}
                                                ${CMAKE_CURRENT_SOURCE_DIR}/..)
 target_link_libraries(exaero_impl PUBLIC exaero_mdspan yaml-cpp::yaml-cpp)

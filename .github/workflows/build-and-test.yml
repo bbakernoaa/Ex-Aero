@@ -28,9 +28,16 @@ jobs:
             build-essential \
             cmake \
             gfortran \
+            catch2 \
             libyaml-cpp-dev \
             python3-netcdf4 \
-            python3-numpy
+            python3-numpy \
+            python3-xarray \
+            python3-dask \
+            python3-pytest
+
+      - name: Validate committed modal optical data
+        run: python3 -m pytest tests/test_modal_optics_generator.py -q
 
       - name: Build Kokkos 5.1.1
         env:

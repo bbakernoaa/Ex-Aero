@@ -1,5 +1,10 @@
 # Bulk and modal aerosol backends
 
+The separate configurable `modal` backend is documented in the
+[generic modal guide](generic-modal.md), including its generated GEOSmie optics
+and MKPP contract. The fixed MAM4xx backend described below retains its existing
+scope and state layout.
+
 EX-aero can select `gocart` (bulk) or the optional, experimental `mam4xx`
 (modal) package at runtime. Both use the same column-major
 `(cell, level, field)` boundary. GOCART remains the default build and the

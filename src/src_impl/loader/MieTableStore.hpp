@@ -31,7 +31,7 @@ struct CurveField {
       AttributeCategory::Microphysical; ///<\< Optical, microphysical, or
                                         ///< mixing-state class (drives status
                                         ///< semantics).
-  std::string unit; ///< canonical unit string.
+  std::string unit;                     ///< canonical unit string.
   int rank =
       1; ///< 1 = (radius); 2 = (radius,rh); 3 = (radius,rh,lambda); 5 = pmom.
   DeliverySource delivery =
@@ -47,6 +47,9 @@ struct SpeciesCurve {
   std::string source_version; ///< provenance version string ; non-empty
                               ///< required.
   std::string citation;       ///< provenance citation string.
+  bool modal_particle_resolved = false; ///< Authoritative generated metadata.
+  bool physical_wavelengths = false;    ///< False for legacy RRTMG band IDs.
+  double modal_density = 0, modal_kappa = 0; ///< Valid when particle-resolved.
   std::vector<double> radius; ///< [n_radius] representative radii [m] (may be
                               ///< non-strict: modes).
   std::vector<double> rh;     ///< [n_rh] RH fractions [0,0.99].
@@ -99,6 +102,8 @@ struct CurvePoolDescriptor {
 /// @brief Host-side store of merged GEOSmie MIE curves.
 class MieTableStore {
 public:
+  /// @brief Independent store for packages needing isolated configuration.
+  MieTableStore() = default;
   /// @brief Process-wide singleton (SpheroidDatabase-style).
   static MieTableStore &instance();
 
@@ -109,6 +114,9 @@ public:
   /// (idempotent). Aborts with FATAL ERROR on any validation failure in the
   /// baked data.
   void ensure_baked_in_loaded();
+  /// @brief Load the separately generated modal curves without changing the
+  /// legacy bulk default-species set. Modal adapters use independent stores.
+  void ensure_modal_loaded();
 
   /// @brief Reset all merged curves to the baked-in baseline (called at package
   /// init).
@@ -183,8 +191,6 @@ public:
   ~MieTableStore();
 
 private:
-  MieTableStore() = default;
-
   // Build the derived microphysical + spectral fields for a curve from its raw
   // arrays.
   static void derive_fields(SpeciesCurve &curve);

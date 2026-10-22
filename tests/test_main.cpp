@@ -154,8 +154,8 @@ struct PmCutFixture {
     exaero::EnvironmentalStateView env{temperature, pressure, air_density,
                                        relative_humidity, layer_thickness};
     exaero::View3D<const double> state(state_raw, 1, 1, kSpecies);
-    exaero::View3D<double> diags(
-        diags_raw, 1, 1, exaero::diagnostic_indices::NUM_DIAGNOSTICS);
+    exaero::View3D<double> diags(diags_raw, 1, 1,
+                                 exaero::diagnostic_indices::NUM_DIAGNOSTICS);
     package.computeDerivedDiagnostics(env, state, diags);
   }
 };
@@ -291,8 +291,8 @@ void test_gocart_pm_nesting_invariant() {
     std::vector<double> state_raw(static_cast<std::size_t>(2) * num_species);
     for (double &m : state_raw)
       m = mass(rng);
-    std::vector<double> diags_raw(2 * exaero::diagnostic_indices::NUM_DIAGNOSTICS,
-                                  -777.0);
+    std::vector<double> diags_raw(
+        2 * exaero::diagnostic_indices::NUM_DIAGNOSTICS, -777.0);
 
     exaero::View2D<const double> temperature(temp, 2, 1);
     exaero::View2D<const double> pressure(pres, 2, 1);
@@ -311,7 +311,8 @@ void test_gocart_pm_nesting_invariant() {
       const double pm1 = diags_raw[cell + 0 * 2 + Slot::PM1_CONCENTRATION * 2];
       const double pm25 =
           diags_raw[cell + 0 * 2 + Slot::PM2_5_CONCENTRATION * 2];
-      const double pm10 = diags_raw[cell + 0 * 2 + Slot::PM10_CONCENTRATION * 2];
+      const double pm10 =
+          diags_raw[cell + 0 * 2 + Slot::PM10_CONCENTRATION * 2];
       assert(pm1 >= 0.0 && pm25 >= 0.0 && pm10 >= 0.0);
       assert(pm1 <= pm25 + 1e-18);
       assert(pm25 <= pm10 + 1e-18);
@@ -862,7 +863,7 @@ void test_mie_wet_sizing() {
   exaero::GocartPackage package;
   package.initialize(yaml);
 
-  constexpr double kRadiusDry = 1.0e-7; // [m]
+  constexpr double kRadiusDry = 1.0e-7;  // [m]
   constexpr double kDensityDry = 2600.0; // [kg m^-3]
   const double rh_grid[4] = {0.0, 0.3, 0.5, 0.9};
   exaero::View1D<const double> rh(rh_grid, 4);
@@ -880,7 +881,8 @@ void test_mie_wet_sizing() {
                            &s_out);
   for (int i = 0; i < 4; ++i) {
     assert(status[i] == static_cast<int>(exaero::AttributeStatus::Available) ||
-           status[i] == static_cast<int>(exaero::AttributeStatus::Interpolated));
+           status[i] ==
+               static_cast<int>(exaero::AttributeStatus::Interpolated));
     assert(radius_wet[i] == kRadiusDry);
     assert(density_wet[i] == kDensityDry);
   }
@@ -891,8 +893,8 @@ void test_mie_wet_sizing() {
   // (independent of the algebraic mixing rearrangement).
   double gf_ss = 0.0;
   assert(package.queryAttribute(1, exaero::AttributeCategory::Microphysical,
-                                 GROWTH_FACTOR, 0.5, 0.0, &gf_ss, nullptr) ==
-         exaero::AttributeStatus::Available);
+                                GROWTH_FACTOR, 0.5, 0.0, &gf_ss,
+                                nullptr) == exaero::AttributeStatus::Available);
   check_close(gf_ss, mie_micro::GOLDEN[1].growth_rh50, "SS gf");
   assert(gf_ss > 1.0);
   package.computeWetSizing(rh, 1, kRadiusDry, kDensityDry, r_out, d_out,
@@ -902,10 +904,10 @@ void test_mie_wet_sizing() {
     assert(status[i] == static_cast<int>(exaero::AttributeStatus::Available));
     check_close(radius_wet[i], gf_ss * kRadiusDry, "SS wet radius");
     const double kWater = 1000.0;
-    const double dry_vol = (4.0 / 3.0) * M_PI * kRadiusDry * kRadiusDry *
-                           kRadiusDry;
-    const double wet_vol = (4.0 / 3.0) * M_PI * radius_wet[i] *
-                           radius_wet[i] * radius_wet[i];
+    const double dry_vol =
+        (4.0 / 3.0) * M_PI * kRadiusDry * kRadiusDry * kRadiusDry;
+    const double wet_vol =
+        (4.0 / 3.0) * M_PI * radius_wet[i] * radius_wet[i] * radius_wet[i];
     // Mass conservation: rho_wet * V_wet == rho_dry * V_dry + water * dV.
     check_close(density_wet[i] * wet_vol,
                 kDensityDry * dry_vol + kWater * (wet_vol - dry_vol),
@@ -934,9 +936,9 @@ void test_mie_wet_sizing() {
   }
 
   // (4) Null status pointer is legal; outputs still defined on ok.
-  package.computeWetSizing(rh, 0, kRadiusDry, kDensityDry, r_out, d_out,
+  package.computeWetSizing(rh, 0, kRadiusDry, kDensityDry, r2_out, d2_out,
                            nullptr);
-  assert(radius_wet[1] == kRadiusDry);
+  assert(r2[1] == kRadiusDry);
 
   // (5) Fail-fast inputs: out-of-range species and non-positive dry sizing
   // throw (never silent).

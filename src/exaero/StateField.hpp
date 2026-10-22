@@ -13,8 +13,8 @@ enum class StateQuantity { Mass = 0, Number = 1 };
 struct StateField {
   std::string name;                             ///< Unique lookup key.
   StateQuantity quantity = StateQuantity::Mass; ///< kg/m3 or particles/m3.
-  int mode = -1; ///< -1 for bulk; MAM4 order: accumulation, Aitken, coarse,
-                 ///< primary carbon.
+  int mode = -1; ///< -1 for bulk; configuration order for generic modal;
+                 ///< MAM4: accumulation, Aitken, coarse, primary carbon.
   bool cloudborne = false; ///< Cloudborne rather than interstitial population.
 };
 /// @brief Supported operations, queryable before calling an optional surface.
