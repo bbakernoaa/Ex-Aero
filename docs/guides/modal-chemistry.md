@@ -5,7 +5,190 @@ integration. Equivalent C entry points are in `ModalChemistry_C.h` and the
 Fortran `exaero_interface` module. These functions do not run a chemical solver,
 choose thermodynamics, or modify an external MKPP repository/generated mechanism.
 The optional chemistry driver in this repository still requires external registry
-inputs. A mechanism's RHS/Jacobian callback must explicitly call these interfaces.
+inputs. A mechanism using these interfaces must explicitly call them in its
+RHS/Jacobian callback. The symbolic YAML example below evaluates its own
+illustrative closures instead and must not add duplicate callback contributions.
+
+## MKPP reaction YAML examples
+
+[modal_processes.mkpp.yaml](../../examples/modal_processes.mkpp.yaml) is a complete
+OpenAtmos mechanism illustrating exchange, nucleation, and aging. It is separate
+from [modal_chemistry.yaml](../../examples/modal_chemistry.yaml), which configures
+EX-aero. The mechanism uses **frozen, illustrative coefficients**, not atmospheric
+calibrations. It declares only the fields needed for these examples; a complete
+four-mode host callback mechanism must bind every configured aerosol field, including unused
+fields, through `modalChemicalMechanismMap`.
+
+The example was checked against
+[MKPP fb2a87b5e6ad](https://github.com/bbakernoaa/MKPP/tree/fb2a87b5e6adc46aa07bfb5a5130633cd3ba76c5).
+That revision reads `A` at reaction level and multiplies it by reactant
+concentrations raised to their stoichiometric coefficients. Its documentation's
+nested `parameters.rate_expression` form is not implemented by its lowering
+code. No `MODAL_AGING`, `NUCLEATION`, or EX-aero callback reaction type is wired
+into that compiler. These examples therefore use supported `ARRHENIUS` entries
+with B=C=0. Do not replace a numeric `A` with a callback name and assume the
+generated solver will invoke EX-aero.
+
+### State-dependent YAML with the MKPP extension
+
+[modal_processes_dynamic.mkpp.yaml](../../examples/modal_processes_dynamic.mkpp.yaml)
+uses the [companion MKPP extension](https://github.com/bbakernoaa/MKPP/pull/2)
+for actual stage-dependent expressions,
+`rate_definitions`, `rate_basis: flux`, and `reaction_orders`. The corresponding
+[EX-aero material configuration](../../examples/modal_processes_dynamic.aerosol.yaml)
+uses complete H2SO4, organic material, and black carbon in three modes. It uses
+complete acid mass, **not** the MAM4 preset's SO4-equivalent material convention.
+
+For each mode `m` in `aitken`, `primary_carbon`, and `accumulation`, bind:
+
+| EX-aero field | MKPP variable | SI-to-mechanism scale |
+| --- | --- | --- |
+| `sulfuric_acid_m_i` | `ACID_m` | 6.02214076e17/0.098079 |
+| `organic_m_i` | `ORGANIC_m` | 6.02214076e17/0.15 |
+| `black_carbon_m_i` | `BC_m` | 6.02214076e17/0.012011 |
+| `num_m_i` | `N_m` | 1e-6 |
+
+Bind gases `H2SO4` to `sulfuric_acid` and `ORGANIC_VAPOR` to `organic`, with one
+vapor molecule per material unit. Read actual field names from `stateFields()`;
+`m` in this table is a mode-name placeholder, not a literal field name.
+`COAG_VOLUME_RATE` is a separate host coordinate, not a condensable binding.
+
+For example, the YAML represents empirical nucleation directly as:
+
+```yaml
+- type: CUSTOM
+  reactants: {H2SO4: 100}
+  products: {ACID_aitken: 100, N_aitken: 1}
+  parameters:
+    rate_expression: 1.0e-8
+    reaction_orders: {H2SO4: 1.5}
+  stiff: true
+```
+
+The flux is J=1e-8*C_H2SO4^1.5, independent of the seed yield of 100 acid
+molecules/particle. Concentrations use formula units/cm3 and particles/cm3.
+An EX-aero empirical SI prefactor A_SI becomes A_cm=A_SI*10^(6*(p-1)); the
+companion configuration uses p=1.5 and A_SI=1e-11. The seed radius is derived from
+100 acid molecules at the configured density, including the receiving mode's
+lognormal volume moment exp(4.5*ln(sigma)^2). No separate number source is needed.
+
+The dynamic file also contains signed exchange fluxes and shared aging-frequency
+definitions with empty-mode and positive-budget guards. Named expressions expand
+symbolically, so MKPP differentiates their geometry, thermodynamics, and coating
+dependence. The auxiliary fixed-role `COAG_VOLUME_RATE` has units m3 coating/m3
+air/s; it is **not** a chemical concentration or an aerosol field. The host
+populates it from selected gross gains/density/accepted interval and excludes it
+from chemical material/number budgets.
+
+Its illustrative exchange closure is the exact lognormal **continuum-limit**
+uptake 4*pi*D*N*E[r], with a linear organic equilibrium concentration. It does
+not reproduce the production transition-regime uptake integral returned by
+`modalPhaseExchange`. The shell-aging moment follows the closure below, with
+matching material masses and width. Use these laws as readable, compiler-checked
+examples; thermodynamic/transport and MAM4 calibration remain scientific choices.
+Do not evaluate the EX-aero exchange/aging callbacks on top of these YAML terms.
+The callbacks remain the path to the existing EX-aero production closures until
+the host or compiler explicitly connects them.
+
+### Condensation and evaporation
+
+```yaml
+reactions:
+  - type: ARRHENIUS
+    reactants: {SOA_VAP_EQ: 1.0}
+    products: {SOA_primary_carbon: 1.0}
+    A: 1.0e-3
+    stiff: true
+  - type: ARRHENIUS
+    reactants: {SOA_primary_carbon: 1.0}
+    products: {SOA_VAP_EQ: 1.0}
+    A: 2.0e-4
+    stiff: true
+```
+
+This pair gives F=1e-3*Cgas-2e-4*Cparticle in material units/cm3/s, equivalent to
+frozen uptake=1e-3/s and illustrative Ceq=0.2*Cparticle. Number is unchanged.
+For the production closure, **replace both contributions** with
+`modalPhaseExchange` RHS/Jacobian contributions at each stage. Supply current
+geometry, equilibrium concentrations, and their derivatives. Do not add the
+callback to these demonstration reactions or exchange will be counted twice.
+
+### Empirical nucleation and number yield
+
+```yaml
+reactions:
+  - type: ARRHENIUS
+    reactants: {H2SO4_EQ: 1.0}
+    products: {SO4_aitken: 1.0}
+    A: 1.0e-3
+    stiff: true
+  - type: ARRHENIUS
+    reactants: {H2SO4_EQ: 1.0}
+    products: {H2SO4_EQ: 1.0, N_aitken: 0.01}
+    A: 1.0e-3
+    stiff: true
+```
+
+With gas/material in equivalent formula units/cm3 and number in particles/cm3,
+these rows give J=1e-5*Cgas, material production=100*J and gas loss=100*J.
+The second reaction is number bookkeeping: its gas reactant/product cancel.
+The chosen seed has 100 material units/particle solely for illustration. For a
+configured seed radius/composition, compute its material-unit yield from seed
+mass and molecular weight; do not retain 100 independently of those parameters.
+Putting 100 on the gas reactant would incorrectly create a 100th-order rate law.
+`IModalCoupling::nucleationTerms` supplies configured source terms without
+advancing state; use those contributions instead of these two rows for
+the general empirical exponent/seed mixture. Host code must apply the matching
+precursor sink and availability/positivity constraints once.
+
+`H2SO4_EQ` counts SO4-equivalent units; it is not kg of physical H2SO4.
+The gas mapping uses target SO4 molecular weight, while gas transport uses
+physical H2SO4 molecular weight. Hydrogen/water and any neutralization partners
+must be accounted for by the host mechanism. These rows demonstrate equivalent
+sulfate and particle-number bookkeeping, not complete elemental chemistry.
+
+### Aging transfers every material and number
+
+```yaml
+reactions:
+  - type: ARRHENIUS
+    reactants: {BC_primary_carbon: 1.0}
+    products: {BC_accumulation: 1.0}
+    A: 2.0e-5
+    stiff: true
+  - type: ARRHENIUS
+    reactants: {N_primary_carbon: 1.0}
+    products: {N_accumulation: 1.0}
+    A: 2.0e-5
+    stiff: true
+```
+
+The complete file repeats the same frequency for **all seven** configured
+materials and number. Each row transfers a single quantity conservatively;
+aging does not consume the coating material again. The constant frequency only
+demonstrates stoichiometry. In the coupled model, replace all these rows with
+`modalAgingTerms`, using the condensation RHS/Jacobian from `modalPhaseExchange`
+and the gross incoming coagulation coating budget. Recompute the common
+frequency and its derivatives at every chemical stage. Freezing a frequency in
+YAML omits its geometry, coating, and thermodynamic Jacobian terms.
+
+### Host callback schedule and processes outside the reaction list
+
+At each stage, gather and convert the mechanism state to EX-aero SI units;
+evaluate exchange, configured nucleation, and aging; then scatter their rates
+and Jacobians with the unit factors described below. Add them to the ordinary
+chemical reactions. The current MKPP generated solver needs host integration
+work to call this combined RHS/Jacobian; the YAML alone does not install it.
+
+Keep coagulation in EX-aero, passing its accepted gross gains to aging. Keep
+`renameModalModes` after chemical acceptance with `transfer_owner: host`.
+Neither operation belongs in the reaction list for this split schedule. Water
+uptake/optical diagnostics also remain EX-aero diagnostics. Gas oxidation and
+aqueous chemistry use ordinary balanced MKPP reactions as appropriate.
+For nitrate, choose explicitly between ionic NO3 mass and complete NH4NO3 salt
+mass and include NH3/HNO3 partners consistently; one bound vapor is not a
+two-precursor ammonium-nitrate equilibrium model. Dust is carried by the same
+aging transfer rules when configured, without an invented dust chemistry reaction.
 
 ## Phase exchange and mass basis
 

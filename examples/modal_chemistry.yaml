@@ -1,4 +1,6 @@
 # Generic demonstration; thickness and growth threshold require host calibration.
+# MKPP reaction examples: modal_processes.mkpp.yaml (frozen coefficients) and
+# modal_processes_dynamic.mkpp.yaml (requires companion MKPP expression extension).
 backend: modal
 preset: mam4
 transfer_owner: host

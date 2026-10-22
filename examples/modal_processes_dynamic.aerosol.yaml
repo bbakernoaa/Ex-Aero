@@ -1,0 +1,40 @@
+# Matches the materials/width/seed in modal_processes_dynamic.mkpp.yaml.
+# That mechanism illustrates continuum uptake; EX-aero uses Fuchs-Sutugin uptake.
+backend: modal
+species:
+  - name: sulfuric_acid
+    density: 1700
+    molecular_weight: 0.098079
+    hygroscopicity: 0.507
+    optics: {source: MODAL_SU}
+  - name: organic
+    density: 1800
+    molecular_weight: 0.15
+    hygroscopicity: 0.14
+    optics: {source: MODAL_OC}
+  - name: black_carbon
+    density: 1000
+    molecular_weight: 0.012011
+    hygroscopicity: 0
+    optics: {source: MODAL_BC}
+modes:
+  - {name: aitken, geometric_radius: 1.3e-8, geometric_std_dev: 1.6}
+  - {name: primary_carbon, geometric_radius: 2.5e-8, geometric_std_dev: 1.6}
+  - {name: accumulation, geometric_radius: 5.5e-8, geometric_std_dev: 1.8}
+transfer_owner: host
+coagulation_routes:
+  - {first: aitken, second: primary_carbon, destination: primary_carbon}
+  - {first: aitken, second: accumulation, destination: accumulation}
+  - {first: primary_carbon, second: accumulation, destination: accumulation}
+aging_routes:
+  - source: primary_carbon
+    destination: accumulation
+    coating_species: [sulfuric_acid, organic]
+    coating_thickness: 1.0e-9
+nucleation:
+  destination: aitken
+  prefactor: 1.0e-11
+  exponent: 1.5
+  # Geometric radius includes the receiving mode's exp(4.5*ln(sigma)^2) moment.
+  seed_radius: 9.459252818655083e-10
+  mass_fractions: [1, 0, 0]
