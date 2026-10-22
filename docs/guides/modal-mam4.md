@@ -145,8 +145,9 @@ This is a component-table optical approximation, not native internally mixed
 MAM4 optics. Native property Jacobian limitations do not affect optics queries.
 
 MKPP continues to own gas chemistry and condensation/nucleation integration.
-Aging, native growth renaming, cloud activation tendencies, scavenging, and
-deposition remain unconnected. The next scientific work is to connect these
+Native MAM4 aging, native growth renaming, cloud activation tendencies, scavenging,
+and deposition remain unconnected. Configurable shell-coating aging and host-owned
+growth-tail renaming are available through the [chemical coupling interfaces](modal-chemistry.md). The next scientific work is to connect these
 processes with explicit host gas/cloud inputs and independent reference cases;
 none are silently approximated by enabling a preset. Existing generic growth
 transfer, CCN diagnostics, emissions and coupling interfaces remain available.

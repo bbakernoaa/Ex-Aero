@@ -64,6 +64,8 @@ organic material, sea salt, spherical dust, and ammonium nitrate. See the
 selectable optical mixing treatments, scientific assumptions, and interfaces.
 Editable MAM4 presets and optional native coagulation/water processes are described
 in the [MAM4 profile guide](docs/guides/modal-mam4.md).
+[Chemical coupling](docs/guides/modal-chemistry.md) supplies balanced phase exchange,
+coating aging rates/Jacobians, gross coagulation gains, and host-owned renaming.
 
 The GOCART proof of concept implements advanced exascale aerosol solvers executing performance-portably on GPUs:
 

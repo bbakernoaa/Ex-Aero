@@ -45,7 +45,8 @@ class Solver;
 std::shared_ptr<Solver> create(const Parameters &, const std::vector<Table> &);
 /// @brief Advance coagulation and directed growth transfer atomically.
 void advance(const Solver &, std::size_t, std::size_t, const Environment &,
-             double *, double);
+             double *, double, double *coagulation_gain = nullptr,
+             bool do_coagulation = true, bool do_transfer = true);
 /// @brief Modal properties and optional analytic derivatives on host arrays.
 void properties(const Solver &, std::size_t, std::size_t, const Environment &,
                 const double *, double *, double *);

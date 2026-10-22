@@ -170,9 +170,10 @@ void addOptics(const ModalOpticalResult &a, View4D<double> &out, std::size_t c,
 void ModalPackage::initialize(const std::string &yaml) {
   try {
     const auto root = YAML::Load(yaml);
-    keys(root, {"backend", "preset", "processes", "constants", "species",
-                "modes", "mode_overrides", "coagulation", "coagulation_routes",
-                "transfer_routes", "nucleation"});
+    keys(root,
+         {"backend", "preset", "processes", "constants", "species", "modes",
+          "mode_overrides", "aging_routes", "transfer_owner", "coagulation",
+          "coagulation_routes", "transfer_routes", "nucleation"});
     require(!root["backend"] || root["backend"].as<std::string>() == "modal",
             "backend must be modal");
     ModalConfig config;
@@ -348,6 +349,29 @@ void ModalPackage::initialize(const std::string &yaml) {
             {n["first"].as<std::string>(), n["second"].as<std::string>(),
              n["destination"].as<std::string>()});
       }
+    if (root["transfer_owner"]) {
+      const auto owner = root["transfer_owner"].as<std::string>();
+      require(owner == "host" || owner == "microphysics",
+              "unknown transfer owner");
+      config.transfer_owner = owner == "host"
+                                  ? ModalTransferOwner::Host
+                                  : ModalTransferOwner::Microphysics;
+    }
+    if (root["aging_routes"]) {
+      require(root["aging_routes"].IsSequence(),
+              "aging_routes must be a sequence");
+      config.aging_routes.clear();
+      for (const auto &n : root["aging_routes"]) {
+        keys(n,
+             {"source", "destination", "coating_species", "coating_thickness"});
+        config.aging_routes.push_back(
+            {n["source"].as<std::string>(), n["destination"].as<std::string>(),
+             n["coating_species"].as<std::vector<std::string>>(),
+             n["coating_thickness"].as<double>()});
+      }
+    }
+    if (root["transfer_routes"])
+      config.transfer_routes.clear();
     if (root["transfer_routes"])
       for (const auto &n : root["transfer_routes"]) {
         keys(n, {"source", "destination", "radius_threshold"});
@@ -500,6 +524,31 @@ void ModalPackage::initializeModal(const ModalConfig &config) {
       require(!p.allowed[from * ns + s] || p.allowed[to * ns + s],
               "destination cannot contain a source material");
   };
+  require(config.transfer_owner == ModalTransferOwner::Microphysics ||
+              config.transfer_owner == ModalTransferOwner::Host,
+          "unknown transfer owner");
+  std::set<int> aging_sources;
+  std::vector<int> aging_next(nm, -1);
+  for (const auto &route : config.aging_routes) {
+    const int a = mode(route.source), b = mode(route.destination);
+    require(a != b && aging_sources.insert(a).second &&
+                positive(route.coating_thickness) &&
+                positive(std::pow(route.coating_thickness, 3)) &&
+                !route.coating_species.empty(),
+            "invalid or duplicate aging route");
+    compatible(a, b);
+    aging_next[a] = b;
+    std::set<std::string> coatings;
+    for (const auto &name : route.coating_species)
+      require(species.count(name) && p.allowed[a * ns + species.at(name)] &&
+                  coatings.insert(name).second,
+              "unknown, disallowed or duplicate coating material");
+  }
+  for (std::size_t m = 0; m < nm; ++m) {
+    std::set<int> path;
+    for (int next = m; next >= 0; next = aging_next[next])
+      require(path.insert(next).second, "aging routes contain a cycle");
+  }
   p.destinations.assign(nm * nm, -1);
   for (std::size_t m = 0; m < nm; ++m)
     p.destinations[m * nm + m] = m;
@@ -701,34 +750,68 @@ void ModalPackage::validate(const EnvironmentalStateView &env,
 
 void ModalPackage::executeMicrophysics(const EnvironmentalStateView &e,
                                        View3D<double> &state, double dt) {
+  advanceWithCoating(e, state, dt, nullptr);
+}
+void ModalPackage::advanceWithCoating(const EnvironmentalStateView &e,
+                                      View3D<double> &state, double dt,
+                                      View3D<double> *gain) {
   const View3D<const double> input(state.data_handle(), state.extent(0),
                                    state.extent(1), state.extent(2));
   validate(e, input);
   require(std::isfinite(dt) && dt >= 0, "invalid timestep");
-  if (dt == 0)
-    return;
-  // Preserve atomicity even if the kernel's result violates paired-state rules.
+  if (gain)
+    require(gain->data_handle() && gain->extents() == state.extents(),
+            "coating gain shape mismatch");
+  std::vector<double> tmp(state.data_handle(),
+                          state.data_handle() + state.size()),
+      gained(gain ? state.size() : 0, 0);
+  if (dt > 0) {
+    if (config_.coagulation &&
+        config_.coagulation_model == ModalCoagulationModel::Mam4xx) {
+#ifdef EXAERO_ENABLE_MAM4XX
+      std::vector<double> native(tmp.size() * 2, 0),
+          native_gain(gain ? native.size() : 0);
+      std::copy(tmp.begin(), tmp.end(), native.begin());
+      const Mam4xxEnvironment env{
+          e.temperature.data_handle(), e.pressure.data_handle(),
+          e.air_density.data_handle(), e.relative_humidity.data_handle(),
+          e.layer_thickness.data_handle()};
+      mam4xxMicrophysics(state.extent(0), state.extent(1), env, native.data(),
+                         dt, gain ? native_gain.data() : nullptr);
+      std::copy_n(native.begin(), tmp.size(), tmp.begin());
+      if (gain)
+        std::copy_n(native_gain.begin(), gained.size(), gained.begin());
+#endif
+    }
+    const bool transfer =
+        config_.transfer_owner == ModalTransferOwner::Microphysics;
+    if (parameters_.coagulation ||
+        (transfer && !parameters_.transfer_radius.empty()))
+      modal::advance(solver(), state.extent(0), state.extent(1), raw(e),
+                     tmp.data(), dt,
+                     gain && parameters_.coagulation ? gained.data() : nullptr,
+                     true, transfer);
+    validate(e, View3D<const double>(tmp.data(), state.extent(0),
+                                     state.extent(1), state.extent(2)));
+  }
+  for (double value : gained)
+    require(std::isfinite(value) && value >= 0, "invalid coagulation gain");
+  std::copy(tmp.begin(), tmp.end(), state.data_handle());
+  if (gain)
+    std::copy(gained.begin(), gained.end(), gain->data_handle());
+}
+void ModalPackage::renameModes(const EnvironmentalStateView &e,
+                               View3D<double> &state) {
+  require(config_.transfer_owner == ModalTransferOwner::Host,
+          "renaming requires transfer_owner: host");
+  const View3D<const double> input(state.data_handle(), state.extent(0),
+                                   state.extent(1), state.extent(2));
+  validate(e, input);
   std::vector<double> tmp(state.data_handle(),
                           state.data_handle() + state.size());
-  if (config_.coagulation &&
-      config_.coagulation_model == ModalCoagulationModel::Mam4xx) {
-#ifdef EXAERO_ENABLE_MAM4XX
-    // First 32 LayoutLeft field slabs are identical to native interstitial
-    // storage. Pad the carried cloudborne phase with zeros for this bridge.
-    std::vector<double> native(tmp.size() * 2, 0);
-    std::copy(tmp.begin(), tmp.end(), native.begin());
-    const Mam4xxEnvironment env{
-        e.temperature.data_handle(), e.pressure.data_handle(),
-        e.air_density.data_handle(), e.relative_humidity.data_handle(),
-        e.layer_thickness.data_handle()};
-    mam4xxMicrophysics(state.extent(0), state.extent(1), env, native.data(),
-                       dt);
-    std::copy_n(native.begin(), tmp.size(), tmp.begin());
-#endif
-  }
-  if (parameters_.coagulation || !parameters_.transfer_radius.empty())
+  if (!parameters_.transfer_radius.empty())
     modal::advance(solver(), state.extent(0), state.extent(1), raw(e),
-                   tmp.data(), dt);
+                   tmp.data(), 0, nullptr, false, true);
   validate(e, View3D<const double>(tmp.data(), state.extent(0), state.extent(1),
                                    state.extent(2)));
   std::copy(tmp.begin(), tmp.end(), state.data_handle());

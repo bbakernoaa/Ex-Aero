@@ -358,19 +358,26 @@ void properties(const Solver &p, std::size_t nc, std::size_t nl,
 }
 
 void advance(const Solver &p, std::size_t nc, std::size_t nl,
-             const Environment &env, double *state, double dt) {
+             const Environment &env, double *state, double dt,
+             double *coagulation_gain, bool do_coagulation, bool do_transfer) {
   ready();
   const Snapshot d(nc, nl, p.nf, env, state);
   D3 rates("modal_rates", nc, nl, p.nf);
+  D3 incoming("modal_incoming_rates", nc, nl, coagulation_gain ? p.nf : 0);
+  D3 gains("modal_accepted_gains", nc, nl, coagulation_gain ? p.nf : 0);
   I1 failed("modal_integration_failed", nc * nl);
   Kokkos::parallel_for(
       "modal_microphysics", nc * nl, KOKKOS_LAMBDA(int point) {
         const int c = point % nc, k = point / nc;
         double remaining = dt;
         int steps = 0;
-        while (p.coagulation && remaining > 0 && steps++ < 100000) {
-          for (int f = 0; f < p.nf; ++f)
+        while (p.coagulation && do_coagulation && remaining > 0 &&
+               steps++ < 100000) {
+          for (int f = 0; f < p.nf; ++f) {
             rates(c, k, f) = 0;
+            if (coagulation_gain)
+              incoming(c, k, f) = 0;
+          }
           for (int i = 0; i < p.nm; ++i) {
             const auto a = moments(p, d, c, k, i);
             if (a.n == 0)
@@ -399,6 +406,9 @@ void advance(const Solver &p, std::size_t nc, std::size_t nl,
                 rates(c, k, bi + s) -= mi;
                 rates(c, k, bj + s) -= mj;
                 rates(c, k, dest + s) += mi + mj;
+                if (coagulation_gain)
+                  incoming(c, k, dest + s) +=
+                      (dest != bi ? mi : 0) + (dest != bj ? mj : 0);
               }
             }
           }
@@ -411,8 +421,11 @@ void advance(const Solver &p, std::size_t nc, std::size_t nl,
             failed(point) = 1;
             break;
           }
-          for (int f = 0; f < p.nf; ++f)
+          for (int f = 0; f < p.nf; ++f) {
             d.state(c, k, f) += step * rates(c, k, f);
+            if (coagulation_gain)
+              gains(c, k, f) += step * incoming(c, k, f);
+          }
           const double next = remaining - step;
           if (next == remaining) {
             failed(point) = 1;
@@ -420,10 +433,12 @@ void advance(const Solver &p, std::size_t nc, std::size_t nl,
           }
           remaining = next;
         }
-        if (p.coagulation && remaining > 0)
+        if (p.coagulation && do_coagulation && remaining > 0)
           failed(point) = 1;
         for (int route = 0;
-             route < static_cast<int>(p.transfer_radius.extent(0)); ++route) {
+             do_transfer &&
+             route < static_cast<int>(p.transfer_radius.extent(0));
+             ++route) {
           const int i = p.transfer_source(route),
                     j = p.transfer_destination(route);
           const auto a = moments(p, d, c, k, i);
@@ -452,7 +467,13 @@ void advance(const Solver &p, std::size_t nc, std::size_t nl,
     if (hf(i))
       throw std::runtime_error(
           "FATAL ERROR: modal coagulation substep limit or underflow");
-  commit(d.state, state);
+  std::vector<double> state_out(d.state.size()), gain_out(gains.size());
+  commit(d.state, state_out.data());
+  if (coagulation_gain)
+    commit(gains, gain_out.data());
+  std::copy(state_out.begin(), state_out.end(), state);
+  if (coagulation_gain)
+    std::copy(gain_out.begin(), gain_out.end(), coagulation_gain);
 }
 
 void diagnostics(const Solver &p, std::size_t nc, std::size_t nl,

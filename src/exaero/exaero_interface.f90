@@ -124,6 +124,66 @@ module exaero_interface
   !> header for the full per-argument unit/index contract.
   ! Public C-bindings interfaces (CCPP-standard error signatures)
   interface
+    !> @brief Balanced exchange RHS; gas/eq use target-material-equivalent kg/m3.
+    !> @details jac(nc,nl,nf+nv,ni) and eq_jac(nc,nl,nm*nv,ni) are optional c_ptr.
+    !> Species indices are zero-based; all arrays are host column-major.
+    subroutine exaero_modal_phase_exchange(pkg,nc,nl,nf,nm,nv,ni,species,diff,mw,alpha,temp,rh, &
+        state,gas,eq,ar,gr,jac,eq_jac,errmsg,errflg) bind(c,name="exaero_modal_phase_exchange")
+      import :: c_int,c_double,c_char,c_ptr,exaero_package_t
+      implicit none
+      type(exaero_package_t),value,intent(in) :: pkg
+      integer(c_int),value,intent(in) :: nc,nl,nf,nm,nv,ni
+      integer(c_int),intent(in) :: species(*)
+      real(c_double),intent(in) :: diff(*),mw(*),alpha(*),temp(*),rh(*),state(*),gas(*),eq(*)
+      real(c_double),intent(inout) :: ar(*),gr(*)
+      type(c_ptr),value,intent(in) :: jac,eq_jac
+      character(kind=c_char),intent(out) :: errmsg(*)
+      integer(c_int),intent(out) :: errflg
+    end subroutine exaero_modal_phase_exchange
+
+    !> @brief Conservative aging rates from signed condensation/gross coagulation coating rates.
+    !> @details Optional dense jac(nc,nl,nf,ni); input budget derivatives have nf..ni rows.
+    subroutine exaero_modal_aging_terms(pkg,nc,nl,nf,ni,temp,rh,state,cond,coag,rates,jac, &
+        cond_jac,cond_rows,coag_jac,coag_rows,errmsg,errflg) bind(c,name="exaero_modal_aging_terms")
+      import :: c_int,c_double,c_char,c_ptr,exaero_package_t
+      implicit none
+      type(exaero_package_t),value,intent(in) :: pkg
+      integer(c_int),value,intent(in) :: nc,nl,nf,ni,cond_rows,coag_rows
+      real(c_double),intent(in) :: temp(*),rh(*),state(*),cond(*),coag(*)
+      real(c_double),intent(inout) :: rates(*)
+      type(c_ptr),value,intent(in) :: jac,cond_jac,coag_jac
+      character(kind=c_char),intent(out) :: errmsg(*)
+      integer(c_int),intent(out) :: errflg
+    end subroutine exaero_modal_aging_terms
+
+    !> @brief Advance microphysics with accepted gross coating gains, kg/m3 over dt.
+    !> @details State/gain(nc,nl,nf) update atomically; number gains are zero.
+    subroutine exaero_modal_microphysics_with_coating(pkg,nc,nl,nf,temp,press,rho,rh,dz, &
+        state,dt,gain,errmsg,errflg) bind(c,name="exaero_modal_microphysics_with_coating")
+      import :: c_int,c_double,c_char,exaero_package_t
+      implicit none
+      type(exaero_package_t),value,intent(in) :: pkg
+      integer(c_int),value,intent(in) :: nc,nl,nf
+      real(c_double),value,intent(in) :: dt
+      real(c_double),intent(in) :: temp(*),press(*),rho(*),rh(*),dz(*)
+      real(c_double),intent(inout) :: state(*),gain(*)
+      character(kind=c_char),intent(out) :: errmsg(*)
+      integer(c_int),intent(out) :: errflg
+    end subroutine exaero_modal_microphysics_with_coating
+
+    !> @brief Host-owned conservative renaming after an accepted chemical interval.
+    subroutine exaero_modal_rename_modes(pkg,nc,nl,nf,temp,press,rho,rh,dz,state,errmsg,errflg) &
+        bind(c,name="exaero_modal_rename_modes")
+      import :: c_int,c_double,c_char,exaero_package_t
+      implicit none
+      type(exaero_package_t),value,intent(in) :: pkg
+      integer(c_int),value,intent(in) :: nc,nl,nf
+      real(c_double),intent(in) :: temp(*),press(*),rho(*),rh(*),dz(*)
+      real(c_double),intent(inout) :: state(*)
+      character(kind=c_char),intent(out) :: errmsg(*)
+      integer(c_int),intent(out) :: errflg
+    end subroutine exaero_modal_rename_modes
+
     !> @brief Number of generic modes; -1 for unsupported/uninitialized packages.
     function exaero_get_modal_mode_count(pkg) result(count) bind(c, name="exaero_get_modal_mode_count")
       import :: c_int, exaero_package_t

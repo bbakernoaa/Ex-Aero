@@ -38,6 +38,16 @@ public:
   std::vector<ModalOpticalTableInfo> opticalTables() const override;
   void executeMicrophysics(const EnvironmentalStateView &, View3D<double> &,
                            double) override;
+  /// @brief Validate a read-only host chemistry stage with temperature/RH.
+  void validateChemistry(const EnvironmentalStateView &e,
+                         const View3D<const double> &s) const {
+    validate(e, s, false);
+  }
+  /// @brief Atomic microphysics and optional accepted coagulation gains.
+  void advanceWithCoating(const EnvironmentalStateView &, View3D<double> &,
+                          double, View3D<double> *);
+  /// @brief Host-owned post-chemistry growth-tail renaming only.
+  void renameModes(const EnvironmentalStateView &, View3D<double> &);
   void computeDerivedDiagnostics(const EnvironmentalStateView &,
                                  const View3D<const double> &,
                                  View3D<double> &) override;

@@ -59,4 +59,77 @@ modalMechanismMap(IAerosolPackage &package,
   }
   return result;
 }
+/// @brief Vapor binding in the equivalent-material basis used by phase
+/// exchange.
+struct ModalVaporMechanismBinding {
+  std::string aerosol_species, mechanism_variable;
+  double vapor_molecules_per_material_unit =
+      1; ///< Stoichiometric molecule/formula-unit ratio.
+};
+/// @brief One combined local aerosol-then-vapor to mechanism unit/index
+/// mapping.
+struct ModalChemicalMechanismSlot {
+  int local_index = -1, mechanism_index = -1;
+  StateQuantity quantity = StateQuantity::Mass;
+  double to_mechanism = 0;
+};
+/// @brief Extend the existing aerosol mapping with explicitly ordered vapors.
+/// Concentrations use molecules/cm3 (number fields particles/cm3). Gas
+/// conversion uses target-material molecular weight and explicit stoichiometry,
+/// not the physical vapor molecular weight used by the transport kernel. Other
+/// reaction partners/coproducts belong to the host mechanism.
+inline std::vector<ModalChemicalMechanismSlot> modalChemicalMechanismMap(
+    IAerosolPackage &package, std::span<const std::string> mechanism_names,
+    std::span<const ModalMechanismBinding> aerosol_bindings,
+    std::span<const ModalVaporMechanismBinding> vapor_bindings) {
+  const auto aerosol =
+      modalMechanismMap(package, mechanism_names, aerosol_bindings);
+  const auto &config = modalCoupling(package).modalConfig();
+  std::vector<ModalChemicalMechanismSlot> result;
+  std::set<int> seen_variables, seen_species;
+  for (const auto &slot : aerosol) {
+    result.push_back({slot.aerosol_index, slot.mechanism_index, slot.quantity,
+                      slot.to_mechanism});
+    seen_variables.insert(slot.mechanism_index);
+  }
+  for (std::size_t v = 0; v < vapor_bindings.size(); ++v) {
+    const auto &binding = vapor_bindings[v];
+    const auto material = std::find_if(
+        config.species.begin(), config.species.end(),
+        [&](const auto &s) { return s.name == binding.aerosol_species; });
+    const auto variable =
+        std::find(mechanism_names.begin(), mechanism_names.end(),
+                  binding.mechanism_variable);
+    if (material == config.species.end() || variable == mechanism_names.end() ||
+        !seen_species.insert(material - config.species.begin()).second ||
+        !seen_variables.insert(variable - mechanism_names.begin()).second ||
+        !std::isfinite(binding.vapor_molecules_per_material_unit) ||
+        binding.vapor_molecules_per_material_unit <= 0)
+      throw std::invalid_argument(
+          "FATAL ERROR: invalid or duplicate vapor mechanism binding");
+    const double scale = 6.02214076e17 / material->molecular_weight *
+                         binding.vapor_molecules_per_material_unit;
+    if (!std::isfinite(scale) || scale <= 0)
+      throw std::invalid_argument(
+          "FATAL ERROR: vapor mechanism scale overflows");
+    result.push_back({static_cast<int>(aerosol.size() + v),
+                      static_cast<int>(variable - mechanism_names.begin()),
+                      StateQuantity::Mass, scale});
+  }
+  return result;
+}
+/// @brief Chain-rule multiplier for J_mechanism(i,j)=scale_i/scale_j*J_SI(i,j).
+inline double
+modalChemicalJacobianScale(const ModalChemicalMechanismSlot &row,
+                           const ModalChemicalMechanismSlot &column) {
+  if (!std::isfinite(row.to_mechanism) || row.to_mechanism <= 0 ||
+      !std::isfinite(column.to_mechanism) || column.to_mechanism <= 0)
+    throw std::invalid_argument(
+        "FATAL ERROR: invalid chemical Jacobian unit scale");
+  const double ratio = row.to_mechanism / column.to_mechanism;
+  if (!std::isfinite(ratio) || ratio <= 0)
+    throw std::invalid_argument(
+        "FATAL ERROR: invalid chemical Jacobian unit scale");
+  return ratio;
+}
 } // namespace exaero

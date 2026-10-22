@@ -76,6 +76,16 @@ struct ModalNucleationConfig {
   std::vector<double> mass_fractions; ///< Species order; sum must equal one.
   double precursor_molecular_weight = 0.098079; ///< H2SO4 kg/mol.
 };
+/// @brief Owner of growth-tail renaming; host ownership permits post-MKPP
+/// calls.
+enum class ModalTransferOwner { Microphysics, Host };
+/// @brief Coating-volume aging closure; rates are integrated by the host/MKPP.
+struct ModalAgingRoute {
+  std::string source, destination;
+  std::vector<std::string> coating_species;
+  double coating_thickness =
+      0; ///< Dry shell thickness [m], explicitly calibrated by host.
+};
 /// @brief Diagnostic/transport constants; defaults retain the generic model.
 struct ModalPhysicalConstants {
   double gravity = 9.80665;                  ///< Settling acceleration [m/s2].
@@ -94,5 +104,7 @@ struct ModalConfig {
   ModalCoagulationModel coagulation_model = ModalCoagulationModel::Brownian;
   ModalWaterUptakeModel water_uptake = ModalWaterUptakeModel::KappaEquilibrium;
   ModalPhysicalConstants constants;
+  std::vector<ModalAgingRoute> aging_routes;
+  ModalTransferOwner transfer_owner = ModalTransferOwner::Microphysics;
 };
 } // namespace exaero

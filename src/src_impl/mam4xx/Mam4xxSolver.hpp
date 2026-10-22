@@ -26,7 +26,8 @@ struct Mam4xxEnvironment {
 /// state. Stages to the default device, fences, and copies back before
 /// returning.
 void mam4xxMicrophysics(std::size_t cells, std::size_t levels,
-                        const Mam4xxEnvironment &env, double *state, double dt);
+                        const Mam4xxEnvironment &env, double *state, double dt,
+                        double *coagulation_gain = nullptr);
 /// @brief Compute modal integral diagnostics into a host layout_left slab.
 void mam4xxDiagnostics(std::size_t cells, std::size_t levels,
                        const Mam4xxEnvironment &env, const double *state,

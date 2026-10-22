@@ -11,6 +11,7 @@
 #include <mam4xx/water_uptake.hpp>
 #include <stdexcept>
 #include <type_traits>
+#include <vector>
 
 namespace exaero {
 Mam4xxOpticalParameters mam4xxOpticalParameters() {
@@ -148,8 +149,8 @@ KOKKOS_INLINE_FUNCTION double massFraction(double diameter, double sigma,
 } // namespace
 
 void mam4xxMicrophysics(std::size_t cells, std::size_t levels,
-                        const Mam4xxEnvironment &env, double *state,
-                        double dt) {
+                        const Mam4xxEnvironment &env, double *state, double dt,
+                        double *coagulation_gain) {
   if (!Kokkos::is_initialized())
     throw std::logic_error("FATAL ERROR: initialize the EX-aero environment "
                            "before MAM4xx compute");
@@ -157,6 +158,8 @@ void mam4xxMicrophysics(std::size_t cells, std::size_t levels,
   // Read-only input and separate result avoid races in modal property queries.
   Device3 result("mam4xx_advanced_state", cells, levels, mam4xx_layout::fields);
   Kokkos::deep_copy(result, data.state);
+  Device3 gains("mam4xx_coagulation_gain", cells, levels,
+                coagulation_gain ? mam4xx_layout::fields : 0);
   Kokkos::parallel_for(
       "mam4xx_coagulation", Kokkos::RangePolicy<>(0, cells * levels),
       KOKKOS_LAMBDA(int point) {
@@ -178,13 +181,29 @@ void mam4xxMicrophysics(std::size_t cells, std::size_t levels,
         mam4::coagulation::mam_coag_1subarea(
             dt, data.temperature(c, k), data.pressure(c, k), air_moles,
             p.wet_diameter, p.wet_density, number, mass, transfer);
+        if (coagulation_gain)
+          for (int s = 0; s < 7; ++s) {
+            const int acc = static_cast<int>(mam4::ModeIndex::Accumulation);
+            const int pca = static_cast<int>(mam4::ModeIndex::PrimaryCarbon);
+            gains(c, k, mam4xx_layout::mass(acc, s)) = Kokkos::max(
+                0.,
+                mass[s][acc] - data.state(c, k, mam4xx_layout::mass(acc, s)));
+            gains(c, k, mam4xx_layout::mass(pca, s)) =
+                transfer[s][mam4::Coagulation::i_agepair_pca];
+          }
         for (int m = 0; m < 4; ++m) {
           result(c, k, mam4xx_layout::number(m)) = number[m] * air_moles;
           for (int s = 0; s < 7; ++s)
             result(c, k, mam4xx_layout::mass(m, s)) = mass[s][m];
         }
       });
-  copyBack(result, state);
+  std::vector<double> state_out(result.size()), gain_out(gains.size());
+  copyBack(result, state_out.data());
+  if (coagulation_gain)
+    copyBack(gains, gain_out.data());
+  std::copy(state_out.begin(), state_out.end(), state);
+  if (coagulation_gain)
+    std::copy(gain_out.begin(), gain_out.end(), coagulation_gain);
 }
 
 void mam4xxDiagnostics(std::size_t cells, std::size_t levels,

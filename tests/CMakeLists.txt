@@ -1,7 +1,7 @@
 # GOCART Diagnostics and YAML Parsing Test Runner
 find_package(Catch2 2 CONFIG REQUIRED)
 add_executable(exaero_modal_test test_modal.cpp test_modal_mam4.cpp
-                                 test_modal_main.cpp)
+                                 test_modal_chemistry.cpp test_modal_main.cpp)
 target_link_libraries(exaero_modal_test PRIVATE exaero Catch2::Catch2)
 target_compile_definitions(
   exaero_modal_test

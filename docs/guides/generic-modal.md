@@ -138,6 +138,11 @@ Duplicate size coordinates representing different populations cannot be treated
 as a continuous size curve. Humidification is applied once in the optical recipe;
 EX-aero does not multiply the coefficients by an additional growth factor.
 
+Balanced condensation/evaporation RHS terms, analytic coupled Jacobians,
+coating-driven aging and post-acceptance renaming are documented in the
+[chemical coupling guide](modal-chemistry.md). These are additive C++/C/Fortran
+interfaces; MKPP remains the chemical integrator.
+
 ## MKPP contract and validation
 
 Include `ModalCoupling.hpp` and obtain the separate `IModalCoupling` interface

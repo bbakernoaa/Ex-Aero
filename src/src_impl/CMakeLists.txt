@@ -78,7 +78,8 @@ target_include_directories(
 target_compile_definitions(exaero_mdspan INTERFACE MDSPAN_USE_PAREN_OPERATOR=1)
 
 # 1. The GPU Solver (Kokkos only, NO private mdspan headers)
-add_library(exaero_solver STATIC gocart/GocartSolver.cpp modal/ModalSolver.cpp)
+add_library(exaero_solver STATIC gocart/GocartSolver.cpp modal/ModalSolver.cpp
+                                 modal/ModalChemistrySolver.cpp)
 target_include_directories(exaero_solver PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}
                                                  ${CMAKE_CURRENT_SOURCE_DIR}/..)
 target_link_libraries(exaero_solver PUBLIC Kokkos::kokkos)
@@ -88,6 +89,8 @@ add_library(
   exaero_impl OBJECT
   PackageFactory.cpp
   modal/ModalPackage.cpp
+  modal/ModalChemistry.cpp
+  modal/ModalChemistry_C.cpp
   modal/ModalPresets.cpp
   modal/ModalCoupling_C.cpp
   gocart/GocartPackage.cpp
