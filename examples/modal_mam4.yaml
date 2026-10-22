@@ -1,0 +1,7 @@
+# Editable MAM4 mode/material layout with general Brownian/kappa processes.
+# Available without MAM4xx. This is not a complete MAM4 physics scheme.
+backend: modal
+preset: mam4
+processes:
+  coagulation: brownian
+  water_uptake: kappa_equilibrium

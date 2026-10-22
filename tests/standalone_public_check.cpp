@@ -17,6 +17,9 @@
 // SpeciesCurveConfig, *_indices namespaces (new surface)
 #include <exaero/Environment.hpp> // initialize/finalize_environment declarations
 #include <exaero/IAerosolPackage_C.h> // C entry points incl. exaero_get_moment_counts
+#include <exaero/ModalCoupling.hpp>
+#include <exaero/ModalCoupling_C.h>
+#include <exaero/ModalMechanismMap.hpp>
 
 #include <type_traits>
 

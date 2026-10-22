@@ -1,0 +1,14 @@
+# Native MAM4xx physics with an explicit component-table optical approximation.
+# SOA, POM and MOM use labeled OPAC organic surrogates; see the recipe.
+backend: mam4xx
+optics:
+  treatment: component_tables
+  include_cloudborne: false
+  sources:
+    SOA: MAM4_SOA
+    SO4: MAM4_SO4
+    POM: MAM4_POM
+    BC: MAM4_BC
+    NaCl: MAM4_NACL
+    DST: MAM4_DST
+    MOM: MAM4_MOM

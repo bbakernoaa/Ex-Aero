@@ -1,0 +1,107 @@
+# Requires MKPP's state-dependent CUSTOM expressions, rate_definitions,
+# rate_basis, and reaction_orders extension. See modal-chemistry.md.
+# Educational continuum-limit uptake + exact lognormal shell aging;
+# not the EX-aero transition-regime uptake integral or a MAM4 calibration.
+# Material units/cm3; particles/cm3; COAG_VOLUME_RATE is m3 dry/m3 air/s.
+name: modal_processes_dynamic
+description: State-dependent modal process laws with symbolic Jacobians
+species:
+  - {name: H2SO4, phase: gas}
+  - {name: ORGANIC_VAPOR, phase: gas}
+  - {name: ACID_aitken, phase: aerosol}
+  - {name: ORGANIC_aitken, phase: aerosol}
+  - {name: BC_aitken, phase: aerosol}
+  - {name: N_aitken, phase: aerosol}
+  - {name: ACID_primary_carbon, phase: aerosol}
+  - {name: ORGANIC_primary_carbon, phase: aerosol}
+  - {name: BC_primary_carbon, phase: aerosol}
+  - {name: N_primary_carbon, phase: aerosol}
+  - {name: ACID_accumulation, phase: aerosol}
+  - {name: ORGANIC_accumulation, phase: aerosol}
+  - {name: BC_accumulation, phase: aerosol}
+  - {name: N_accumulation, phase: aerosol}
+  # Host overwrites this accepted split-interval rate; MKPP never advances it.
+  - {name: COAG_VOLUME_RATE, role: fixed, phase: aerosol}
+rate_definitions:
+  # Definitions expand symbolically in order; they are not frozen parameters.
+  pi: 3.141592653589793
+  avogadro: 6.02214076e23
+  width: 1.6
+  shell_thickness: 1.0e-9
+  mw_acid: 0.098079
+  mw_organic: 0.15
+  mw_bc: 0.012011
+  rho_acid: 1700
+  rho_organic: 1800
+  rho_bc: 1000
+  n_pc: 1.0e6*C_N_primary_carbon
+  v_pc: >-
+    1.0e6/avogadro*(C_ACID_primary_carbon*mw_acid/rho_acid
+    + C_ORGANIC_primary_carbon*mw_organic/rho_organic
+    + C_BC_primary_carbon*mw_bc/rho_bc)
+  r_pc: >-
+    Piecewise(((v_pc/(4*pi/3*n_pc*exp(4.5*log(width)**2)))**(1/3),
+    (n_pc > 0) and (v_pc > 0)), (0, True))
+  # Exact continuum-limit lognormal integral: 4*pi*D*N*E[r]. D=8e-6 m2/s.
+  uptake_pc: 4*pi*8.0e-6*n_pc*r_pc*exp(0.5*log(width)**2)
+  flux_acid_pc: uptake_pc*C_H2SO4
+  ceq_organic: 0.2*C_ORGANIC_primary_carbon
+  flux_organic_pc: >-
+    Piecewise((uptake_pc*(C_ORGANIC_VAPOR-ceq_organic),
+    (C_ORGANIC_primary_carbon > 0) or (C_ORGANIC_VAPOR >= ceq_organic)), (0, True))
+  shell_volume: >-
+    4*pi*n_pc*(r_pc**2*exp(2*log(width)**2)*shell_thickness
+    + r_pc*exp(0.5*log(width)**2)*shell_thickness**2 + shell_thickness**3/3)
+  coating_volume_rate: >-
+    1.0e6/avogadro*(flux_acid_pc*mw_acid/rho_acid
+    + flux_organic_pc*mw_organic/rho_organic) + C_COAG_VOLUME_RATE
+  aging_frequency: >-
+    Piecewise((coating_volume_rate/shell_volume,
+    (shell_volume > 0) and (v_pc > 0) and (coating_volume_rate > 0)), (0, True))
+reactions:
+  # Full signed flux: no extra reactant multiplication. Positive=condensation.
+  - type: CUSTOM
+    reactants: {H2SO4: 1}
+    products: {ACID_primary_carbon: 1}
+    parameters:
+      rate_basis: flux
+      rate_expression: flux_acid_pc
+    stiff: true
+  - type: CUSTOM
+    reactants: {ORGANIC_VAPOR: 1}
+    products: {ORGANIC_primary_carbon: 1}
+    parameters:
+      rate_basis: flux
+      rate_expression: flux_organic_pc
+    stiff: true
+  # J=1e-8*CH2SO4**1.5 particles/cm3/s, seed=100 H2SO4 units/particle.
+  # Order=1.5 explicitly; stoichiometry=100 determines precursor/material yield.
+  - type: CUSTOM
+    reactants: {H2SO4: 100}
+    products: {ACID_aitken: 100, N_aitken: 1}
+    parameters:
+      rate_expression: 1.0e-8
+      reaction_orders: {H2SO4: 1.5}
+    stiff: true
+  # Shared state-dependent coefficient, multiplied by each source quantity once.
+  - type: CUSTOM
+    reactants: {ACID_primary_carbon: 1}
+    products: {ACID_accumulation: 1}
+    parameters: &aging
+      rate_expression: aging_frequency
+    stiff: true
+  - type: CUSTOM
+    reactants: {ORGANIC_primary_carbon: 1}
+    products: {ORGANIC_accumulation: 1}
+    parameters: *aging
+    stiff: true
+  - type: CUSTOM
+    reactants: {BC_primary_carbon: 1}
+    products: {BC_accumulation: 1}
+    parameters: *aging
+    stiff: true
+  - type: CUSTOM
+    reactants: {N_primary_carbon: 1}
+    products: {N_accumulation: 1}
+    parameters: *aging
+    stiff: true

@@ -30,7 +30,31 @@ jobs:
             gfortran \
             libyaml-cpp-dev \
             python3-netcdf4 \
-            python3-numpy
+            python3-numpy \
+            python3-xarray \
+            python3-dask \
+            python3-pytest
+
+      - name: Validate committed modal optical data
+        run: python3 -m pytest tests/test_modal_optics_generator.py -q
+
+      # Ubuntu 24.04 packages Catch2 v3; the test sources use the v2 API.
+      - name: Install pinned Catch2 2.13.10
+        env:
+          CATCH2_SOURCE: ${{ runner.temp }}/catch2-src
+          CATCH2_BUILD: ${{ runner.temp }}/catch2-build
+          CATCH2_INSTALL: ${{ runner.temp }}/catch2-install
+        run: |
+          git init "$CATCH2_SOURCE"
+          git -C "$CATCH2_SOURCE" remote add origin https://github.com/catchorg/Catch2.git
+          git -C "$CATCH2_SOURCE" fetch --depth 1 origin 182c910b4b63ff587a3440e08f84f70497e49a81
+          git -C "$CATCH2_SOURCE" checkout --detach FETCH_HEAD
+          cmake -S "$CATCH2_SOURCE" -B "$CATCH2_BUILD" \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_INSTALL_PREFIX="$CATCH2_INSTALL" \
+            -DCATCH_BUILD_TESTING=OFF
+          cmake --build "$CATCH2_BUILD" --parallel 2
+          cmake --install "$CATCH2_BUILD"
 
       - name: Build Kokkos 5.1.1
         env:
@@ -82,7 +106,7 @@ jobs:
           -DCMAKE_BUILD_TYPE=Release
           -DEXAERO_BUILD_CHEMISTRY=OFF
           -DEXAERO_ENABLE_MAM4XX=${{ matrix.mam4xx }}
-          -DCMAKE_PREFIX_PATH="${{ runner.temp }}/kokkos-install;${{ runner.temp }}/ekat-install"
+          -DCMAKE_PREFIX_PATH="${{ runner.temp }}/kokkos-install;${{ runner.temp }}/ekat-install;${{ runner.temp }}/catch2-install"
 
       - name: Build
         run: cmake --build build --parallel 2

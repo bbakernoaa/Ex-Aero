@@ -9,11 +9,17 @@ This tutorial guides you through configuring, compiling, and executing the **EX-
 
 Before you begin, ensure that your development environment includes the following core dependencies:
 
-*   **CMake:** Version `3.18` or newer.
-*   **A C++ Compiler:** Supporting C++20 (GCC >= 11, Clang >= 15, or Apple Clang >= 14).
-*   **Kokkos:** Built with your active execution space enabled (e.g., CUDA, HIP, or OpenMP).
+*   **CMake:** Version `3.24` or newer.
+*   **A C++ Compiler:** Supporting C++23 (CI validates GCC 13).
+*   **Kokkos:** Version 5.1.1 or newer, built with your active execution space enabled (e.g., CUDA, HIP, or OpenMP).
 *   **`yaml-cpp`:** Library for parsing configuration files.
 *   **OpenMP:** Required if compiling for multicore CPU execution spaces.
+
+CI pins Kokkos 5.1.1 at commit
+`267ebc25fc5c8b96bb321f34d78f97b1c30f8830` and tests both MAM4xx build options.
+Set `Kokkos_DIR` to the installation’s `lib/cmake/Kokkos` directory if CMake
+does not discover it through `CMAKE_PREFIX_PATH`. When enabling MAM4xx, build
+EKAT against that same Kokkos installation.
 
 ---
 
@@ -31,7 +37,7 @@ Apple Clang does not support OpenMP out of the box. You must install `libomp` vi
 2.  **Configure the build:**
     ```bash
     cmake -S . -B build \
-      -DCMAKE_CXX_STANDARD=20 \
+      -DCMAKE_CXX_STANDARD=23 \
       -DOpenMP_CXX_FLAGS="-Xpreprocessor -fopenmp -I/opt/homebrew/opt/libomp/include" \
       -DOpenMP_CXX_LIB_NAMES="omp" \
       -DOpenMP_omp_LIBRARY=/opt/homebrew/opt/libomp/lib/libomp.dylib
@@ -51,7 +57,7 @@ Linux systems typically support native GCC OpenMP without explicit flags:
     ```
 2.  **Configure the build:**
     ```bash
-    cmake -S . -B build -DCMAKE_CXX_STANDARD=20
+    cmake -S . -B build -DCMAKE_CXX_STANDARD=23
     ```
 3.  **Compile the targets:**
     ```bash

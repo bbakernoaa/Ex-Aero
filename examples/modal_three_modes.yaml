@@ -1,0 +1,53 @@
+# Generic lognormal configuration; not an exact MAM4/MADE implementation.
+backend: modal
+species:
+  - name: sulfuric_acid
+    density: 1700
+    molecular_weight: 0.098079
+    hygroscopicity: 0.507
+    optics: {source: MODAL_SU}
+  - name: black_carbon
+    density: 1000
+    molecular_weight: 0.012011
+    hygroscopicity: 0
+    optics: {source: MODAL_BC}
+  - name: organic
+    density: 1800
+    molecular_weight: 0.15 # Host-defined lumped organic molecular weight [kg/mol].
+    hygroscopicity: 0.14
+    optics: {source: MODAL_OC}
+  - name: sea_salt
+    density: 2200
+    molecular_weight: 0.05844
+    hygroscopicity: 1.16
+    optics: {source: MODAL_SS}
+  - name: dust
+    density: 2650
+    molecular_weight: 0.1 # Inert surrogate; host chemistry must define its basis.
+    hygroscopicity: 0
+    optics: {source: MODAL_DU}
+  - name: ammonium_nitrate
+    density: 1725
+    molecular_weight: 0.080043
+    hygroscopicity: 0.67
+    optics: {source: MODAL_NI}
+modes:
+  - {name: nucleation, geometric_radius: 5e-9, geometric_std_dev: 1.6}
+  - {name: accumulation, geometric_radius: 8e-8, geometric_std_dev: 1.6}
+  - {name: coarse, geometric_radius: 5e-7, geometric_std_dev: 1.6}
+coagulation: true
+coagulation_routes:
+  - {first: nucleation, second: accumulation, destination: accumulation}
+  - {first: nucleation, second: coarse, destination: coarse}
+  - {first: accumulation, second: coarse, destination: coarse}
+transfer_routes:
+  - {source: nucleation, destination: accumulation, radius_threshold: 8e-9}
+  - {source: accumulation, destination: coarse, radius_threshold: 2e-7}
+# Empirical illustration, not a recommended atmospheric calibration.
+# MKPP owns integration and precursor availability; EX-aero returns rates only.
+nucleation:
+  destination: nucleation
+  prefactor: 1e-12 # (particles/m3/s)/(H2SO4 molecules/m3); exponent=1.
+  exponent: 1
+  seed_radius: 1e-9
+  mass_fractions: [1, 0, 0, 0, 0, 0]

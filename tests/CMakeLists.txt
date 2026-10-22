@@ -1,4 +1,35 @@
 # GOCART Diagnostics and YAML Parsing Test Runner
+find_package(Catch2 2 CONFIG REQUIRED)
+add_executable(exaero_modal_test test_modal.cpp test_modal_mam4.cpp
+                                 test_modal_chemistry.cpp test_modal_main.cpp)
+target_link_libraries(exaero_modal_test PRIVATE exaero Catch2::Catch2)
+target_compile_definitions(
+  exaero_modal_test
+  PRIVATE EXAERO_TEST_DATA_DIR="${CMAKE_CURRENT_SOURCE_DIR}/data"
+          EXAERO_TEST_SOURCE_DIR="${EXAERO_REPO_ROOT}")
+add_test(NAME ExaeroModal COMMAND exaero_modal_test)
+set_tests_properties(
+  ExaeroModal PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2;OMP_PROC_BIND=false")
+add_test(
+  NAME ExaeroModalMieDeterminism
+  COMMAND
+    ${Python3_EXECUTABLE} ${EXAERO_REPO_ROOT}/tools/generate_modal_optics.py
+    --snapshot ${EXAERO_REPO_ROOT}/tools/modal_optics/modal_mie_v1.nc --header
+    ${EXAERO_REPO_ROOT}/src/src_impl/data/generated/ModalOpticsData.hpp --check)
+add_test(
+  NAME ExaeroMam4xxMieDeterminism
+  COMMAND
+    ${Python3_EXECUTABLE} ${EXAERO_REPO_ROOT}/tools/generate_modal_optics.py
+    --snapshot ${EXAERO_REPO_ROOT}/tools/modal_optics/mam4xx_mie_v1.nc --header
+    ${EXAERO_REPO_ROOT}/src/src_impl/data/generated/Mam4xxOpticsData.hpp
+    --namespace mie_mam4xx --check)
+add_executable(exaero_modal_fortran_test test_modal_fortran.f90)
+target_link_libraries(exaero_modal_fortran_test PRIVATE exaero)
+add_test(NAME ExaeroModalFortran COMMAND exaero_modal_fortran_test)
+set_tests_properties(
+  ExaeroModalFortran PROPERTIES ENVIRONMENT
+                                "OMP_NUM_THREADS=2;OMP_PROC_BIND=false")
+
 add_executable(exaero_package_selection_test test_package_selection.cpp)
 target_link_libraries(exaero_package_selection_test PRIVATE exaero)
 add_test(NAME ExaeroPackageSelection COMMAND exaero_package_selection_test)
@@ -14,6 +45,48 @@ if(EXAERO_ENABLE_MAM4XX)
   add_test(NAME ExaeroMam4xx COMMAND exaero_mam4xx_test)
   set_tests_properties(
     ExaeroMam4xx PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2;OMP_PROC_BIND=false")
+
+  add_executable(exaero_modal_mam4_comparison modal_mam4_comparison.cpp
+                                              modal_mam4_reference.cpp)
+  target_link_libraries(exaero_modal_mam4_comparison
+                        PRIVATE exaero exaero_mam4xx_dependency)
+  target_compile_features(exaero_modal_mam4_comparison PRIVATE cxx_std_23)
+  add_test(NAME ExaeroModalMam4Comparison COMMAND exaero_modal_mam4_comparison
+                                                  --check)
+  set_tests_properties(
+    ExaeroModalMam4Comparison
+    PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2;OMP_PROC_BIND=false" TIMEOUT 60)
+
+  option(EXAERO_COMPARISON_MKPP
+         "Compile and execute the comparison YAML with the installed MKPP" OFF)
+  if(EXAERO_COMPARISON_MKPP)
+    set(comparison_generated "${CMAKE_CURRENT_BINARY_DIR}/comparison_generated")
+    set(comparison_rates
+        "${comparison_generated}/modal_mam4_comparison/rates.cpp")
+    file(MAKE_DIRECTORY "${comparison_generated}")
+    configure_file(${EXAERO_REPO_ROOT}/tools/modal_comparison/reactions.yaml
+                   "${comparison_generated}/reactions.yaml" COPYONLY)
+    configure_file(${EXAERO_REPO_ROOT}/tools/modal_comparison/environment.yaml
+                   "${comparison_generated}/environment.yaml" COPYONLY)
+    add_custom_command(
+      OUTPUT
+        "${comparison_rates}"
+        "${comparison_generated}/modal_mam4_comparison/host_declarations.hpp"
+      COMMAND ${Python3_EXECUTABLE} -m mkpp.cli compile reactions.yaml --out .
+              --test-env environment.yaml
+      DEPENDS ${EXAERO_REPO_ROOT}/tools/modal_comparison/reactions.yaml
+              ${EXAERO_REPO_ROOT}/tools/modal_comparison/environment.yaml
+      COMMENT "Compile modal MAM4 comparison reaction YAML with MKPP"
+      WORKING_DIRECTORY "${comparison_generated}"
+      VERBATIM)
+    target_sources(exaero_modal_mam4_comparison PRIVATE "${comparison_rates}")
+    target_include_directories(exaero_modal_mam4_comparison
+                               PRIVATE "${comparison_generated}")
+    target_compile_definitions(
+      exaero_modal_mam4_comparison
+      PRIVATE EXAERO_COMPARISON_MKPP=1
+              MKPP_SEPARATE_HOST_KERNELS_MODAL_MAM4_COMPARISON=1)
+  endif()
 endif()
 
 add_executable(exaero_test_runner test_main.cpp)

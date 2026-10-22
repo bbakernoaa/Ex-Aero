@@ -1,0 +1,21 @@
+{
+  "format": "exaero_modal_mie_v1",
+  "geosmie_repository": "https://github.com/bbakernoaa/GEOSmie",
+  "geosmie_commit": "c535388356c7e8982ead98deeebff33985254f9c",
+  "radius": {"minimum": 1e-10, "maximum": 5e-5, "count": 256},
+  "rh": [0.0, 0.5, 0.8, 0.9, 0.95, 0.98],
+  "wavelength": [3.55e-7, 5.5e-7, 8.7e-7, 1.064e-6, 1.64e-6],
+  "growth": "kappa_equilibrium_no_kelvin",
+  "mixing": "homogeneous_volume_weighted_dry_material_and_water",
+  "normalization": "per_kg_dry_material",
+  "materials": [
+    {"label": "MODAL_SU", "refractive_index": "suso00", "density": 1700.0, "kappa": 0.507},
+    {"label": "MODAL_BC", "refractive_index": "soot00", "density": 1000.0, "kappa": 0.0},
+    {"label": "MODAL_OC", "refractive_index": "waso00", "density": 1800.0, "kappa": 0.14},
+    {"label": "MODAL_SS", "refractive_index": "sscm00", "density": 2200.0, "kappa": 1.16},
+    {"label": "MODAL_DU", "refractive_index": "ri-dust.wsv", "format": "wsv", "density": 2650.0, "kappa": 0.0,
+     "description": "Dry spherical mineral dust; not a nonspherical spheroid model"},
+    {"label": "MODAL_NI", "refractive_index": "ri-nitrate.wsv", "format": "wsv", "density": 1725.0, "kappa": 0.67,
+     "description": "Ammonium-nitrate-equivalent dry material; mass includes the complete salt"}
+  ]
+}

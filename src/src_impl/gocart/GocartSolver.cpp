@@ -38,6 +38,10 @@
 
 #include <memory>
 
+// Also validate parent-provided targets whose CMake version is unavailable.
+static_assert(KOKKOS_VERSION >= 50101,
+              "FATAL ERROR: EX-aero requires Kokkos 5.1.1 or newer");
+
 namespace exaero {
 
 namespace {
@@ -218,11 +222,11 @@ species_moment_table(const GocartSpeciesParams &params, const double *pool,
 // runtime; a host application that initialised Kokkos itself keeps ownership
 // and is untouched.
 namespace {
-std::unique_ptr<Kokkos::ScopeGuard>& runtime_guard() {
+std::unique_ptr<Kokkos::ScopeGuard> &runtime_guard() {
   static std::unique_ptr<Kokkos::ScopeGuard> guard;
   return guard;
 }
-}  // namespace
+} // namespace
 
 // @copydoc exaero::initialize_environment
 void initialize_environment() {
@@ -368,7 +372,8 @@ void run_gocart_diagnostics(GocartSolverState *state, int num_cells,
   // group) with a modest level block.
   Kokkos::parallel_for(
       "GocartDiagnosticsKernel",
-      Kokkos::MDRangePolicy<Kokkos::Rank<2, Kokkos::Iterate::Left, Kokkos::Iterate::Left>>(
+      Kokkos::MDRangePolicy<
+          Kokkos::Rank<2, Kokkos::Iterate::Left, Kokkos::Iterate::Left>>(
           {0, 0}, {num_cells, num_levels}, {32, 8}),
       KOKKOS_LAMBDA(int i_cell, int i_level) {
         double total_pm1_3d = 0.0;
@@ -622,7 +627,8 @@ void run_gocart_optics(GocartSolverState *state, int num_cells, int num_levels,
   // stores stay coalesced.
   Kokkos::parallel_for(
       "GocartOptics3D_Kernel",
-      Kokkos::MDRangePolicy<Kokkos::Rank<3, Kokkos::Iterate::Left, Kokkos::Iterate::Left>>(
+      Kokkos::MDRangePolicy<
+          Kokkos::Rank<3, Kokkos::Iterate::Left, Kokkos::Iterate::Left>>(
           {0, 0, 0}, {num_cells, num_levels, num_bands}, {32, 2, 2}),
       KOKKOS_LAMBDA(int i_cell, int i_level, int i_band) {
         double total_ext_coeff = 0.0;
@@ -774,7 +780,8 @@ void run_gocart_optics(GocartSolverState *state, int num_cells, int num_levels,
   // wavelength broadcast inside one tile.
   Kokkos::parallel_for(
       "GocartOpticsAOT_Kernel",
-      Kokkos::MDRangePolicy<Kokkos::Rank<2, Kokkos::Iterate::Left, Kokkos::Iterate::Left>>(
+      Kokkos::MDRangePolicy<
+          Kokkos::Rank<2, Kokkos::Iterate::Left, Kokkos::Iterate::Left>>(
           {0, 0}, {num_cells, num_bands}, {32, 4}),
       KOKKOS_LAMBDA(int i_cell, int i_band) {
         double total_ext_aot = 0.0;
@@ -946,7 +953,8 @@ void run_gocart_ccn(GocartSolverState *state, int num_cells, int num_levels,
   // to match the LayoutLeft (cell-unit-stride) input and output buffers.
   Kokkos::parallel_for(
       "GocartCcnSpectrumKernel",
-      Kokkos::MDRangePolicy<Kokkos::Rank<3, Kokkos::Iterate::Left, Kokkos::Iterate::Left>>(
+      Kokkos::MDRangePolicy<
+          Kokkos::Rank<3, Kokkos::Iterate::Left, Kokkos::Iterate::Left>>(
           {0, 0, 0}, {num_cells, num_levels, num_ss}, {32, 2, 2}),
       KOKKOS_LAMBDA(int i_cell, int i_level, int i_ss) {
         double total_activated_ccn = 0.0;
@@ -1037,7 +1045,8 @@ void run_gocart_emissions(GocartSolverState *state, int num_cells,
   // per-cell reads and the d_out store coalesce.
   Kokkos::parallel_for(
       "GocartEmissions_Kernel",
-      Kokkos::MDRangePolicy<Kokkos::Rank<3, Kokkos::Iterate::Left, Kokkos::Iterate::Left>>(
+      Kokkos::MDRangePolicy<
+          Kokkos::Rank<3, Kokkos::Iterate::Left, Kokkos::Iterate::Left>>(
           {0, 0, 0}, {num_cells, num_levels, num_target_species}, {32, 2, 2}),
       KOKKOS_LAMBDA(int i_cell, int i_level, int i_spec) {
         const auto &params = d_species_params(i_spec);

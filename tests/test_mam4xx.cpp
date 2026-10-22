@@ -277,3 +277,125 @@ int main(int argc, char **argv) {
   const Kokkos::ScopeGuard guard(argc, argv);
   return Catch::Session().run(argc, argv);
 }
+
+TEST_CASE("MAM4xx component optics use native mass, number and phase layout") {
+  Fixture f;
+  const auto configure = [&](const char *yaml) {
+    exaero_initialize_package(f.pkg.get(), yaml, f.error.data(), &f.status);
+    INFO(f.error.data());
+    REQUIRE(f.status == 0);
+  };
+  const auto compute = [&](double wavelength = 550e-9, bool success = true) {
+    std::vector<double> out(points * exaero::optical_indices::NUM_OPTICS, -1);
+    exaero_compute_optics(f.pkg.get(), nc, nl, 1, layout::fields, &wavelength,
+                          f.t.data(), f.p.data(), f.rho.data(), f.rh.data(),
+                          f.dz.data(), f.state.data(), out.data(),
+                          f.error.data(), &f.status);
+    INFO(f.error.data());
+    REQUIRE(f.status == (success ? 0 : 1));
+    if (!success)
+      REQUIRE(std::all_of(out.begin(), out.end(),
+                          [](double x) { return x == -1; }));
+    return out;
+  };
+  configure("backend: mam4xx\noptics: {treatment: component_tables}");
+  REQUIRE((exaero_get_capabilities(f.pkg.get()) & 4) != 0);
+  const auto original = f.state;
+  const auto baseline = compute();
+  // Independent Simpson integration of the committed GEOSmie sulfate curves:
+  // 200001 log-radius samples, native widths, geometric radii and fixture N.
+  // This checks native species ordering, density, radius/diameter and units.
+  REQUIRE(baseline[exaero::optical_indices::EXTINCTION_COEFF * points] ==
+          Approx(0.004020626577863798).epsilon(1e-7));
+  REQUIRE(baseline[exaero::optical_indices::SCATTERING_COEFF * points] ==
+          Approx(0.004020626577845975).epsilon(1e-7));
+  REQUIRE(baseline[exaero::optical_indices::LIDAR_BACKSCATTER * points] ==
+          Approx(0.00011513250778826159).epsilon(1e-7));
+  REQUIRE(baseline[exaero::optical_indices::ASYMMETRY_FACTOR * points] ==
+          Approx(0.5430516938975144).epsilon(1e-7));
+  for (int c = 0; c < nc; ++c) {
+    double column = 0;
+    for (int k = 0; k < nl; ++k)
+      column += baseline[c + nc * k] * f.dz[c + nc * k];
+    REQUIRE(baseline[c + points * exaero::optical_indices::EXTINCTION_AOT] ==
+            Approx(column).epsilon(1e-11));
+  }
+  REQUIRE(f.state == original);
+  for (double value : baseline)
+    REQUIRE(std::isfinite(value));
+  // Increasing both mass and number preserves size and doubles extinction.
+  for (auto &value : f.state)
+    value *= 2;
+  const auto doubled = compute();
+  for (int point = 0; point < points; ++point) {
+    REQUIRE(baseline[point] > 0);
+    REQUIRE(doubled[point] == Approx(2 * baseline[point]).epsilon(1e-11));
+  }
+  f.state = original;
+  configure("optics: {treatment: component_tables, include_cloudborne: true}");
+  const auto both = compute();
+  for (int point = 0; point < points; ++point)
+    REQUIRE(both[point] == Approx(1.1 * baseline[point]).epsilon(1e-11));
+  configure("optics: {treatment: component_tables}");
+  // A different cloudborne population is ignored by the default optical phase.
+  for (int field = layout::fields_per_phase; field < layout::fields; ++field)
+    for (int point = 0; point < points; ++point)
+      f.state[point + points * field] *= 10;
+  REQUIRE(compute() == baseline);
+  compute(100e-9, false);
+  // Invalid replacement configurations preserve the previously usable optics.
+  for (const auto *yaml :
+       {"optics: {treatment: internal_mixture}",
+        "optics: {treatment: component_tables, unknown: true}",
+        "optics: {treatment: component_tables, sources: {NO3: MODAL_NI}}",
+        "optics: {treatment: component_tables, sources: {SO4: MODAL_SU}}",
+        "optics: {treatment: component_tables, sources: {SOA: missing}}"}) {
+    exaero_initialize_package(f.pkg.get(), yaml, f.error.data(), &f.status);
+    REQUIRE(f.status == 1);
+    REQUIRE(compute() == baseline);
+  }
+  configure("backend: mam4xx");
+  REQUIRE((exaero_get_capabilities(f.pkg.get()) & 4) == 0);
+  compute(550e-9, false);
+}
+
+TEST_CASE(
+    "GEOSmie MAM4xx optics support all seven materials at dry and humid RH") {
+  Fixture f;
+  exaero_initialize_package(f.pkg.get(),
+                            "optics: {treatment: component_tables}",
+                            f.error.data(), &f.status);
+  INFO(f.error.data());
+  REQUIRE(f.status == 0);
+  const auto species = mam4::default_aero_species();
+  const double wavelength = 550e-9;
+  for (int s = 0; s < layout::species; ++s) {
+    std::fill(f.state.begin(), f.state.end(), 0);
+    for (int m = 0; m < layout::modes; ++m)
+      for (int point = 0; point < points; ++point) {
+        const auto mode = mam4::modes(m);
+        const double number = 1e8;
+        f.state[point + points * layout::number(m)] = number;
+        f.state[point + points * layout::mass(m, s)] =
+            number * species(s).density *
+            mam4::conversions::mean_particle_volume_from_diameter(
+                mode.nom_diameter, mode.mean_std_dev);
+      }
+    for (const double rh : {0.0, 0.8, 0.98}) {
+      f.rh.fill(rh);
+      std::vector<double> out(points * exaero::optical_indices::NUM_OPTICS, -1);
+      exaero_compute_optics(f.pkg.get(), nc, nl, 1, layout::fields, &wavelength,
+                            f.t.data(), f.p.data(), f.rho.data(), f.rh.data(),
+                            f.dz.data(), f.state.data(), out.data(),
+                            f.error.data(), &f.status);
+      INFO(s);
+      INFO(rh);
+      INFO(f.error.data());
+      REQUIRE(f.status == 0);
+      for (int point = 0; point < points; ++point)
+        REQUIRE(out[point] > 0);
+      for (double value : out)
+        REQUIRE(std::isfinite(value));
+    }
+  }
+}

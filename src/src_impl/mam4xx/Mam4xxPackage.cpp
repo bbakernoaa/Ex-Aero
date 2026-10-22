@@ -2,6 +2,8 @@
 /// @brief Validated host interface to the isolated MAM4xx device solver.
 #include <cmath>
 #include <exaero/Mam4xxConfig.hpp>
+#include <exaero/ModalCoupling.hpp>
+#include <exaero/PackageFactory.hpp>
 #include <limits>
 #include <mam4xx/Mam4xxPackage.hpp>
 #include <mam4xx/Mam4xxSolver.hpp>
@@ -44,14 +46,70 @@ void Mam4xxPackage::initialize(const std::string &config_yaml) {
   const auto config = YAML::Load(config_yaml);
   require(!config || config.IsNull() || config.IsMap(),
           "configuration must be a mapping");
+  std::unique_ptr<IAerosolPackage> candidate;
+  bool include_cloudborne = false;
   if (config && config.IsMap()) {
     for (const auto &entry : config) {
       const auto key = entry.first.as<std::string>();
-      require(key == "backend", "unknown configuration key");
-      require(entry.second.as<std::string>() == "mam4xx",
-              "backend must be mam4xx");
+      require(key == "backend" || key == "optics", "unknown configuration key");
+      if (key == "backend")
+        require(entry.second.as<std::string>() == "mam4xx",
+                "backend must be mam4xx");
+    }
+    if (const auto optics = config["optics"]) {
+      require(optics.IsMap(), "optics must be a mapping");
+      for (const auto &entry : optics) {
+        const auto key = entry.first.as<std::string>();
+        require(key == "treatment" || key == "include_cloudborne" ||
+                    key == "sources" || key == "data_file",
+                "unknown optics key");
+      }
+      require(optics["treatment"] &&
+                  optics["treatment"].as<std::string>() == "component_tables",
+              "optics treatment must be component_tables");
+      include_cloudborne = optics["include_cloudborne"]
+                               ? optics["include_cloudborne"].as<bool>()
+                               : false;
+      const auto sources = optics["sources"];
+      require(!sources || sources.IsMap(), "optics sources must be a mapping");
+      if (sources)
+        for (const auto &entry : sources) {
+          const auto name = entry.first.as<std::string>();
+          bool known = false;
+          for (const auto native_name : mam4xx_layout::species_names)
+            known = known || name == native_name;
+          require(known, "unknown species in optics sources");
+        }
+      const auto parameters = mam4xxOpticalParameters();
+      const char *labels[] = {"MAM4_SOA",  "MAM4_SO4", "MAM4_POM", "MAM4_BC",
+                              "MAM4_NACL", "MAM4_DST", "MAM4_MOM"};
+      ModalConfig modal;
+      modal.coagulation = false;
+      for (int s = 0; s < mam4xx_layout::species; ++s) {
+        const std::string name(mam4xx_layout::species_names[s]);
+        ModalTableBinding binding;
+        binding.curve.source_label = sources && sources[name]
+                                         ? sources[name].as<std::string>()
+                                         : labels[s];
+        if (optics["data_file"])
+          binding.data_file = optics["data_file"].as<std::string>();
+        modal.species.push_back({name, parameters.density[s],
+                                 parameters.molecular_weight[s],
+                                 parameters.kappa[s], binding});
+      }
+      for (int phase = 0; phase < (include_cloudborne ? 2 : 1); ++phase)
+        for (int m = 0; m < mam4xx_layout::modes; ++m)
+          modal.modes.push_back({std::string(mam4xx_layout::mode_names[m]) +
+                                     (phase ? "_c" : "_i"),
+                                 parameters.radius[m],
+                                 parameters.sigma[m],
+                                 {}});
+      candidate = createPackage("modal");
+      initializeModal(*candidate, modal);
     }
   }
+  optics_ = std::move(candidate);
+  include_cloudborne_ = include_cloudborne;
   initialized_ = true;
 }
 
@@ -134,12 +192,19 @@ void Mam4xxPackage::computeDerivedDiagnostics(const EnvironmentalStateView &env,
                     state.data_handle(), output.data_handle());
 }
 
-void Mam4xxPackage::computeOptics(const EnvironmentalStateView &,
-                                  const View3D<const double> &,
-                                  const View1D<const double> &,
-                                  View4D<double> &) {
-  throw std::logic_error("FATAL ERROR: MAM4xx optics requires internally mixed "
-                         "modal optical tables; unavailable in this backend");
+void Mam4xxPackage::computeOptics(const EnvironmentalStateView &env,
+                                  const View3D<const double> &state,
+                                  const View1D<const double> &wavelengths,
+                                  View4D<double> &output) {
+  validate(env, state);
+  require(bool(optics_), "enable optics with treatment: component_tables");
+  // LayoutLeft stores each complete field slab contiguously: the first 32
+  // slots are the interstitial phase, with no copy or transpose required.
+  const View3D<const double> input(
+      state.data_handle(), state.extent(0), state.extent(1),
+      include_cloudborne_ ? mam4xx_layout::fields
+                          : mam4xx_layout::fields_per_phase);
+  optics_->computeOptics(env, input, wavelengths, output);
 }
 
 void Mam4xxPackage::computeCCN(const EnvironmentalStateView &env,

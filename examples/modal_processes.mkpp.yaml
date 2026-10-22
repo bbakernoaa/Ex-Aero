@@ -1,0 +1,105 @@
+# MKPP OpenAtmos mechanism: frozen-coefficient demonstration, not a calibration.
+# Compile separately from modal_chemistry.yaml, which configures EX-aero.
+# All material variables count configured material formula units/cm3;
+# N_* variables count particles/cm3. H2SO4_EQ counts SO4-equivalent units.
+# A is intentionally at reaction level: verified against MKPP fb2a87b5e6ad.
+# These constants do not call EX-aero or update geometry/thermodynamics.
+name: modal_processes_frozen
+description: Modal exchange, linear empirical nucleation, and coating-aging bookkeeping
+species:
+  - {name: H2SO4_EQ, phase: gas}
+  - {name: SOA_VAP_EQ, phase: gas}
+  - {name: SO4_aitken, phase: aerosol}
+  - {name: N_aitken, phase: aerosol}
+  - {name: SOA_primary_carbon, phase: aerosol}
+  - {name: SO4_primary_carbon, phase: aerosol}
+  - {name: POM_primary_carbon, phase: aerosol}
+  - {name: BC_primary_carbon, phase: aerosol}
+  - {name: NaCl_primary_carbon, phase: aerosol}
+  - {name: DST_primary_carbon, phase: aerosol}
+  - {name: MOM_primary_carbon, phase: aerosol}
+  - {name: N_primary_carbon, phase: aerosol}
+  - {name: SOA_accumulation, phase: aerosol}
+  - {name: SO4_accumulation, phase: aerosol}
+  - {name: POM_accumulation, phase: aerosol}
+  - {name: BC_accumulation, phase: aerosol}
+  - {name: NaCl_accumulation, phase: aerosol}
+  - {name: DST_accumulation, phase: aerosol}
+  - {name: MOM_accumulation, phase: aerosol}
+  - {name: N_accumulation, phase: aerosol}
+phases:
+  - {name: gas, solver_mode: implicit}
+  - {name: aerosol, solver_mode: implicit}
+reactions:
+  # Condensation: F = k_up * Cgas, with k_up frozen at 1e-3 /s.
+  - type: ARRHENIUS
+    reactants: {SOA_VAP_EQ: 1.0}
+    products: {SOA_primary_carbon: 1.0}
+    A: 1.0e-3
+    stiff: true
+  # Evaporation: illustrative linear Ceq = 0.2 * Cparticle.
+  # k_up*(Cgas-Ceq) is exactly this forward/reverse pair at fixed k_up.
+  # Production thermodynamics generally is not linear in particle mass.
+  - type: ARRHENIUS
+    reactants: {SOA_primary_carbon: 1.0}
+    products: {SOA_VAP_EQ: 1.0}
+    A: 2.0e-4
+    stiff: true
+  # Empirical p=1 nucleation: J = 1e-5 * CH2SO4_EQ particles/cm3/s.
+  # Illustrative n_seed=100 acid-equivalent units/particle => gas loss=100*J.
+  # Material and number use separate reactions to avoid an artificial
+  # 100th-order rate law (MKPP takes reactant stoichiometry as reaction order).
+  - type: ARRHENIUS
+    reactants: {H2SO4_EQ: 1.0}
+    products: {SO4_aitken: 1.0}
+    A: 1.0e-3
+    stiff: true
+  # Catalytic H2SO4_EQ cancels: this bookkeeping row creates number only.
+  - type: ARRHENIUS
+    reactants: {H2SO4_EQ: 1.0}
+    products: {H2SO4_EQ: 1.0, N_aitken: 0.01}
+    A: 1.0e-3
+    stiff: true
+  # Aging: one shared lambda=2e-5 /s for EVERY material and particle number.
+  # Production lambda=max(coating_volume_rate,0)/shell_volume, evaluated
+  # at each stage from condensation + gross coagulation coating budgets.
+  - type: ARRHENIUS
+    reactants: {SOA_primary_carbon: 1.0}
+    products: {SOA_accumulation: 1.0}
+    A: 2.0e-5
+    stiff: true
+  - type: ARRHENIUS
+    reactants: {SO4_primary_carbon: 1.0}
+    products: {SO4_accumulation: 1.0}
+    A: 2.0e-5
+    stiff: true
+  - type: ARRHENIUS
+    reactants: {POM_primary_carbon: 1.0}
+    products: {POM_accumulation: 1.0}
+    A: 2.0e-5
+    stiff: true
+  - type: ARRHENIUS
+    reactants: {BC_primary_carbon: 1.0}
+    products: {BC_accumulation: 1.0}
+    A: 2.0e-5
+    stiff: true
+  - type: ARRHENIUS
+    reactants: {NaCl_primary_carbon: 1.0}
+    products: {NaCl_accumulation: 1.0}
+    A: 2.0e-5
+    stiff: true
+  - type: ARRHENIUS
+    reactants: {DST_primary_carbon: 1.0}
+    products: {DST_accumulation: 1.0}
+    A: 2.0e-5
+    stiff: true
+  - type: ARRHENIUS
+    reactants: {MOM_primary_carbon: 1.0}
+    products: {MOM_accumulation: 1.0}
+    A: 2.0e-5
+    stiff: true
+  - type: ARRHENIUS
+    reactants: {N_primary_carbon: 1.0}
+    products: {N_accumulation: 1.0}
+    A: 2.0e-5
+    stiff: true

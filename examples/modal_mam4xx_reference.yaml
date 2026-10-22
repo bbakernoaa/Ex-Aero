@@ -1,0 +1,4 @@
+# Native clear-air coagulation/water reference; requires MAM4xx build enabled.
+# Generic state contains 32 interstitial fields, without cloudborne evolution.
+backend: modal
+preset: mam4xx_reference

@@ -1,0 +1,15 @@
+# Generic demonstration; thickness and growth threshold require host calibration.
+# MKPP reaction examples: modal_processes.mkpp.yaml (frozen coefficients) and
+# modal_processes_dynamic.mkpp.yaml (requires companion MKPP expression extension).
+backend: modal
+preset: mam4
+transfer_owner: host
+aging_routes:
+  - source: primary_carbon
+    destination: accumulation
+    coating_species: [SO4, SOA]
+    coating_thickness: 1.0e-9
+transfer_routes:
+  - source: aitken
+    destination: accumulation
+    radius_threshold: 2.6e-8
