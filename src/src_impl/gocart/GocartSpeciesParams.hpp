@@ -115,6 +115,9 @@ struct GocartSpeciesParams {
 
   EmissionsMappingParams emissions_mapping; ///< Emissions routing for this
                                             ///< species (inactive by default).
+  double dry_radius_lower = 0; ///< [m] configured physical bound; 0 if absent.
+  double dry_radius_upper = 0; ///< [m] configured physical bound; 0 if absent.
+  double dry_effective_radius = 0; ///< [m] physical effective radius; 0 => derive.
 };
 
 /// @brief Named slots within a species' Mode-B curve-pool block

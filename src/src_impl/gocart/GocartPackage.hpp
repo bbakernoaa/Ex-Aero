@@ -16,6 +16,7 @@
 /// upload -> device views addressed by the offsets/extents recorded in
 /// each GocartSpeciesParams. Timestep kernels never touch host memory.
 #include <exaero/IAerosolPackage.hpp>
+#include <exaero/BulkRemoval.hpp>
 #include <gocart/GocartSpeciesParams.hpp>
 #include <string>
 #include <vector>
@@ -30,8 +31,17 @@ struct GocartSolverState;
 /// GEOSmie attribute surface (computeAttributes / queryAttribute /
 /// activation / curve config / moment counts). See IAerosolPackage.hpp
 /// for the per-routine parameter and unit contracts overridden here.
-class GocartPackage : public IAerosolPackage {
+class GocartPackage : public IAerosolPackage, public IBulkRemovalMetadata {
 public:
+  /// @brief Fixed dry size parameters for a configured bulk material.
+  BulkSpeciesSize bulkSpeciesSize(std::size_t species_index) const override {
+    if (species_index >= h_species_params_.size())
+      throw std::out_of_range("FATAL ERROR: bulk species index out of range");
+    const auto &p = h_species_params_[species_index];
+    return {p.dry_particle_diameter, p.dry_density, p.lognormal_dg,
+            p.lognormal_sigma, p.dry_radius_lower, p.dry_radius_upper,
+            p.dry_effective_radius, p.hygroscopicity};
+  }
   /// @brief Bulk mass field names and units in configured species order.
   std::vector<StateField> stateFields() const override {
     std::vector<StateField> fields;

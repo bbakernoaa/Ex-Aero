@@ -192,6 +192,19 @@ public:
     };
     p.has_optics_lookup =
         s["has_optics_lookup"] && s["has_optics_lookup"].as<bool>();
+    if (s["dry_radius_lower"])
+      p.dry_radius_lower = s["dry_radius_lower"].as<double>();
+    if (s["dry_radius_upper"])
+      p.dry_radius_upper = s["dry_radius_upper"].as<double>();
+    if (s["dry_effective_radius"])
+      p.dry_effective_radius = s["dry_effective_radius"].as<double>();
+    if ((s["dry_radius_lower"] &&
+         !(std::isfinite(p.dry_radius_lower) && p.dry_radius_lower > 0)) ||
+        (s["dry_radius_upper"] &&
+         !(std::isfinite(p.dry_radius_upper) && p.dry_radius_upper > 0)) ||
+        (s["dry_effective_radius"] && !(std::isfinite(p.dry_effective_radius) &&
+                                        p.dry_effective_radius > 0)))
+      throw std::invalid_argument("FATAL ERROR: invalid physical bulk radius");
     return p;
   }
 
@@ -389,6 +402,19 @@ public:
                           s.lognormal_sigma,       s.lognormal_dg,
                           s.refractive_index_real, s.refractive_index_imag};
     p.has_optics_lookup = s.optics_lookup.has_value();
+    if (s.dry_radius_lower)
+      p.dry_radius_lower = *s.dry_radius_lower;
+    if (s.dry_radius_upper)
+      p.dry_radius_upper = *s.dry_radius_upper;
+    if (s.dry_effective_radius)
+      p.dry_effective_radius = *s.dry_effective_radius;
+    if ((s.dry_radius_lower &&
+         !(std::isfinite(p.dry_radius_lower) && p.dry_radius_lower > 0)) ||
+        (s.dry_radius_upper &&
+         !(std::isfinite(p.dry_radius_upper) && p.dry_radius_upper > 0)) ||
+        (s.dry_effective_radius && !(std::isfinite(p.dry_effective_radius) &&
+                                     p.dry_effective_radius > 0)))
+      throw std::invalid_argument("FATAL ERROR: invalid physical bulk radius");
     return p;
   }
   bool hasOpticsLookup(int i) const override {
@@ -524,6 +550,17 @@ void GocartPackage::initializeImpl(PackageConfigReader &reader) {
     species_names_.push_back(name);
 
     GocartSpeciesParams p = reader.speciesScalars(i);
+    const bool has_lower = p.dry_radius_lower != 0;
+    const bool has_upper = p.dry_radius_upper != 0;
+    if (has_lower != has_upper ||
+        (has_lower &&
+         !(std::isfinite(p.dry_radius_lower) &&
+           std::isfinite(p.dry_radius_upper) && p.dry_radius_lower > 0 &&
+           p.dry_radius_lower < p.dry_radius_upper)) ||
+        (p.dry_effective_radius != 0 &&
+         !(std::isfinite(p.dry_effective_radius) &&
+           p.dry_effective_radius > 0)))
+      throw std::invalid_argument("FATAL ERROR: invalid physical bulk radii");
 
     if (p.has_optics_lookup) {
       // Legacy RH lookups (presence/length checks already validated by the

@@ -42,6 +42,10 @@ struct GocartSpeciesConfig {
   std::optional<GocartLegacyOpticsLookup>
       optics_lookup;                           ///< Engaged => Mode B RH lookup.
   std::optional<SpeciesCurveConfig> mie_table; ///< Engaged => curve binding.
+  std::optional<double> dry_radius_lower; ///< [m] optional physical size bound.
+  std::optional<double> dry_radius_upper; ///< [m] optional physical size bound.
+  std::optional<double>
+      dry_effective_radius; ///< [m] optional physical effective radius.
 };
 
 /// @brief Top-level attribute activation block (parity with YAML

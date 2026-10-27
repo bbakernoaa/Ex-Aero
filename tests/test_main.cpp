@@ -5,6 +5,7 @@
 #include <cstring>
 #include <exaero/Environment.hpp>
 #include <exaero/GocartConfig.hpp>
+#include <exaero/BulkRemoval.hpp>
 #include <gocart/GocartPackage.hpp>
 #include <iostream>
 #include <loader/MieTableStore.hpp>
@@ -2001,6 +2002,54 @@ void test_structured_config_species_parity() {
   std::cout << "Structured config species parity: PASS" << std::endl;
 }
 
+void test_bulk_physical_radii_independent_of_tables() {
+  auto cfg = kMieSixConfig();
+  cfg.species.resize(1);
+  cfg.species[0].dry_radius_lower = 2e-7;
+  cfg.species[0].dry_radius_upper = 8e-7;
+  cfg.species[0].dry_effective_radius = 4e-7;
+  exaero::GocartPackage structured, yaml;
+  structured.initialize(cfg);
+  yaml.initialize(R"(species:
+  - {name: DU, dry_density: 2600, molecular_weight: 100,
+     dry_particle_diameter: 2e-6, hygroscopicity: 0.1,
+     lognormal_sigma: 1.5, lognormal_dg: 1e-6,
+     refractive_index_real: 1.55, refractive_index_imag: 0.002,
+     dry_radius_lower: 2e-7, dry_radius_upper: 8e-7,
+     dry_effective_radius: 4e-7}
+)");
+  for (auto *p : {&structured, &yaml}) {
+    double values[3]{};
+    int codes[3]{};
+    exaero::View2D<double> radii(values, 1, 3);
+    exaero::View2D<int> status(codes, 1, 3);
+    exaero::bulkReferenceRadii(*p, radii, status);
+    gate(values[0] == 2e-7 && values[1] == 8e-7 && values[2] == 4e-7,
+         "physical bulk radius config parity");
+    gate(codes[0] == static_cast<int>(exaero::BulkRadiusStatus::Configured) &&
+             codes[2] == static_cast<int>(exaero::BulkRadiusStatus::Configured),
+         "physical bulk radius source");
+    const double mass[1]{1e-9};
+    double number[1]{};
+    exaero::View3D<const double> state(mass, 1, 1, 1);
+    exaero::View3D<double> result(number, 1, 1, 1);
+    exaero::bulkFixedNumber(*p, state, result);
+    const double l = std::log(1.5);
+    const double particle_mass = (std::acos(-1.0) / 6) * 2600 *
+                                 std::pow(1e-6, 3) * std::exp(4.5 * l * l);
+    gate(std::abs(number[0] / (mass[0] / particle_mass) - 1) < 1e-14,
+         "physical bulk fixed-number parity");
+  }
+  cfg.species[0].dry_radius_upper.reset();
+  bool rejected = false;
+  try {
+    structured.initialize(cfg);
+  } catch (const std::exception &) {
+    rejected = true;
+  }
+  gate(rejected, "unpaired physical bulk radii reject");
+}
+
 // --- full-feature YAML==struct equivalence
 // --------------- One scenario engages EVERY config block simultaneously — a
 // legacy optics_lookup species (Mode B), a mie_table species with an inserted
@@ -3011,6 +3060,7 @@ int main(int argc, char **argv) {
   test_mie_hot_path_overhead(bench_verbose);
   test_structured_config_unsupported_package();
   test_structured_config_species_parity();
+  test_bulk_physical_radii_independent_of_tables();
   test_structured_config_full_equivalence();
   test_structured_config_failfast();
   test_optical_precision();

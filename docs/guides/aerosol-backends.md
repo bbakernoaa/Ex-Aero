@@ -86,6 +86,9 @@ packages before finalizing it. GPU execution has not yet been validated.
 
 ## Supported physics and current limits
 
+Explicit GOCART bulk number, size, resuspension, and deposited-budget
+utilities are described in [bulk removal coupling](bulk-removal.md).
+
 | Surface | GOCART bulk | Experimental MAM4xx modal |
 | --- | --- | --- |
 | Microphysics | Existing bulk step | Upstream clear-air coagulation |

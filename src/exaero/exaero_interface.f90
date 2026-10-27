@@ -23,6 +23,11 @@ module exaero_interface
   integer(c_int), parameter :: exaero_MODAL_BOUNDS_DISABLED = 0, exaero_MODAL_BOUNDS_EMPTY = 1
   integer(c_int), parameter :: exaero_MODAL_BOUNDS_WITHIN = 2, exaero_MODAL_BOUNDS_BELOW_RADIUS = 3
   integer(c_int), parameter :: exaero_MODAL_BOUNDS_ABOVE_RADIUS = 4
+  integer(c_int), parameter :: exaero_BULK_SIZE_EMPTY = -1
+  integer(c_int), parameter :: exaero_BULK_SIZE_CONFIGURED = 0
+  integer(c_int), parameter :: exaero_BULK_RADIUS_UNAVAILABLE = 0
+  integer(c_int), parameter :: exaero_BULK_RADIUS_CONFIGURED = 1
+  integer(c_int), parameter :: exaero_BULK_RADIUS_DERIVED = 2
   integer(c_int), parameter :: exaero_CAP_MICROPHYSICS = 1, exaero_CAP_DIAGNOSTICS = 2
   integer(c_int), parameter :: exaero_CAP_OPTICS = 4, exaero_CAP_CCN = 8, exaero_CAP_EMISSIONS = 16
 
@@ -127,6 +132,63 @@ module exaero_interface
   !> header for the full per-argument unit/index contract.
   ! Public C-bindings interfaces (CCPP-standard error signatures)
   interface
+    !> @brief Diagnostic fixed particles/m3 for each bulk mass field.
+    subroutine exaero_bulk_fixed_number(pkg,nc,nl,nf,state,number,errmsg,errflg) &
+        bind(c,name="exaero_bulk_fixed_number")
+      import :: c_int,c_double,c_char,exaero_package_t
+      type(exaero_package_t),value :: pkg
+      integer(c_int),value :: nc,nl,nf
+      real(c_double),intent(in) :: state(*)
+      real(c_double),intent(inout) :: number(*)
+      character(kind=c_char),intent(out) :: errmsg(*)
+      integer(c_int),intent(out) :: errflg
+    end subroutine
+    !> @brief Dry lower/upper/effective radius and status, both (nf,3).
+    subroutine exaero_bulk_reference_radii(pkg,nf,radii,status,errmsg,errflg) &
+        bind(c,name="exaero_bulk_reference_radii")
+      import :: c_int,c_double,c_char,exaero_package_t
+      type(exaero_package_t),value :: pkg
+      integer(c_int),value :: nf
+      real(c_double),intent(inout) :: radii(*)
+      integer(c_int),intent(inout) :: status(*)
+      character(kind=c_char),intent(out) :: errmsg(*)
+      integer(c_int),intent(out) :: errflg
+    end subroutine
+    !> @brief Bulk dry/wet diameters and availability status by species.
+    subroutine exaero_bulk_scavenging_sizes(pkg,nc,nl,nf,rh,state,diameters,status, &
+        errmsg,errflg) bind(c,name="exaero_bulk_scavenging_sizes")
+      import :: c_int,c_double,c_char,exaero_package_t
+      type(exaero_package_t),value :: pkg
+      integer(c_int),value :: nc,nl,nf
+      real(c_double),intent(in) :: rh(*),state(*)
+      real(c_double),intent(inout) :: diameters(*)
+      integer(c_int),intent(inout) :: status(*)
+      character(kind=c_char),intent(out) :: errmsg(*)
+      integer(c_int),intent(out) :: errflg
+    end subroutine
+    !> @brief Route returned bulk material rates through host-supplied index pairs.
+    subroutine exaero_bulk_resuspension(pkg,nc,nl,nf,nroute,sources,destinations, &
+        rates,routed,errmsg,errflg) bind(c,name="exaero_bulk_resuspension")
+      import :: c_int,c_double,c_char,exaero_package_t
+      type(exaero_package_t),value :: pkg
+      integer(c_int),value :: nc,nl,nf,nroute
+      integer(c_int),intent(in) :: sources(*),destinations(*)
+      real(c_double),intent(in) :: rates(*)
+      real(c_double),intent(inout) :: routed(*)
+      character(kind=c_char),intent(out) :: errmsg(*)
+      integer(c_int),intent(out) :: errflg
+    end subroutine
+    !> @brief Rebin integrated bulk deposition by selected species and dry diameter.
+    subroutine exaero_bulk_rebin_deposition(pkg,nc,nl,nf,species_index,nbin,budget, &
+        edges,bins,tails,errmsg,errflg) bind(c,name="exaero_bulk_rebin_deposition")
+      import :: c_int,c_double,c_char,exaero_package_t
+      type(exaero_package_t),value :: pkg
+      integer(c_int),value :: nc,nl,nf,species_index,nbin
+      real(c_double),intent(in) :: budget(*),edges(*)
+      real(c_double),intent(inout) :: bins(*),tails(*)
+      character(kind=c_char),intent(out) :: errmsg(*)
+      integer(c_int),intent(out) :: errflg
+    end subroutine
     !> @brief Inspect dry modal bounds; report(nc,nl,nm,3), status(nc,nl,nm).
     subroutine exaero_modal_inspect_bounds(pkg,nc,nl,nf,nm,state,report,status,errmsg,errflg) &
         bind(c,name="exaero_modal_inspect_bounds")
