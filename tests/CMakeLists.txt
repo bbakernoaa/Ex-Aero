@@ -2,6 +2,14 @@
 find_package(Catch2 2 CONFIG REQUIRED)
 add_executable(exaero_modal_test test_modal.cpp test_modal_mam4.cpp
                                  test_modal_chemistry.cpp test_modal_main.cpp)
+add_executable(exaero_modal_removal_math_test test_modal_removal_math.cpp)
+add_test(NAME ExaeroModalRemovalMath COMMAND exaero_modal_removal_math_test)
+target_include_directories(exaero_modal_removal_math_test PRIVATE ${EXAERO_REPO_ROOT}/src)
+target_compile_features(exaero_modal_removal_math_test PRIVATE cxx_std_23)
+add_executable(exaero_modal_removal_test test_modal_removal.cpp)
+target_link_libraries(exaero_modal_removal_test PRIVATE exaero)
+target_compile_features(exaero_modal_removal_test PRIVATE cxx_std_23)
+add_test(NAME ExaeroModalRemoval COMMAND exaero_modal_removal_test)
 target_link_libraries(exaero_modal_test PRIVATE exaero Catch2::Catch2)
 target_compile_definitions(
   exaero_modal_test

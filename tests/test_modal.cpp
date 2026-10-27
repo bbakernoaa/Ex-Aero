@@ -151,6 +151,44 @@ TEST_CASE("generic mode count, metadata and geometry are configuration data") {
   }
 }
 
+TEST_CASE("modal removal bounds and routes validate for structured and YAML inputs") {
+  auto package = createPackage("modal");
+  auto cfg = config(2);
+  cfg.modes[0].dry_geometric_radius_min = 1e-8;
+  cfg.modes[0].dry_geometric_radius_max = 1e-7;
+  cfg.resuspension_routes = {{"acid", "mode0", "mode1"}};
+  initializeModal(*package, cfg);
+  REQUIRE(modalCoupling(*package).modalConfig().modes[0]
+              .dry_geometric_radius_min.value() == Approx(1e-8));
+
+  cfg.modes[0].dry_geometric_radius_max.reset();
+  REQUIRE_THROWS(initializeModal(*package, cfg));
+  cfg.modes[0].dry_geometric_radius_max = 1e-7;
+  cfg.resuspension_routes.push_back({"acid", "mode1", "mode0"});
+  REQUIRE_THROWS(initializeModal(*package, cfg));
+  cfg.resuspension_routes.pop_back();
+  cfg.resuspension_routes.push_back({"acid", "mode0", "mode1"});
+  REQUIRE_THROWS(initializeModal(*package, cfg));
+
+  package->initialize(R"(backend: modal
+processes: {coagulation: none}
+species:
+  - {name: acid, density: 1800, molecular_weight: 0.098079, hygroscopicity: 0.6}
+modes:
+  - {name: mode0, geometric_radius: 3e-8, geometric_std_dev: 1.5}
+  - {name: mode1, geometric_radius: 9e-8, geometric_std_dev: 1.5,
+     dry_geometric_radius_min: 4e-8, dry_geometric_radius_max: 2e-7}
+mode_overrides:
+  mode0: {dry_geometric_radius_min: 1e-8, dry_geometric_radius_max: 1e-7}
+resuspension_routes:
+  - {species: acid, source: mode0, destination: mode1}
+)");
+  const auto &parsed = modalCoupling(*package).modalConfig();
+  REQUIRE(parsed.modes[0].dry_geometric_radius_min.value() == Approx(1e-8));
+  REQUIRE(parsed.modes[1].dry_geometric_radius_max.value() == Approx(2e-7));
+  REQUIRE(parsed.resuspension_routes.size() == 1);
+}
+
 TEST_CASE(
     "YAML and structured modal initialization agree and fail transactionally") {
   Fixture f;

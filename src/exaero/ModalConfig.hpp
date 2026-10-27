@@ -53,6 +53,12 @@ struct ModalModeConfig {
       ModalOpticalTreatment::ComponentTables;
   double crystallization_rh = 0.35; ///< Native water lower transition RH.
   double deliquescence_rh = 0.8;    ///< Native water upper transition RH.
+  std::optional<double> dry_geometric_radius_min;
+  std::optional<double> dry_geometric_radius_max;
+};
+/// @brief Route returned material from one mode to another once.
+struct ModalResuspensionRoute {
+  std::string species, source, destination;
 };
 
 /// @brief Destination for an intermode Brownian collision (unordered pair).
@@ -106,5 +112,6 @@ struct ModalConfig {
   ModalPhysicalConstants constants;
   std::vector<ModalAgingRoute> aging_routes;
   ModalTransferOwner transfer_owner = ModalTransferOwner::Microphysics;
+  std::vector<ModalResuspensionRoute> resuspension_routes;
 };
 } // namespace exaero

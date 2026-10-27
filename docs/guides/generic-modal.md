@@ -1,5 +1,8 @@
 # Generic modal aerosols and MKPP coupling
 
+Explicit removal-coupling utilities and dry size/number bounds are documented
+in [modal removal and bounds](modal-removal.md).
+
 Select `createPackage("modal")` or `exaero_create_package("modal", ...)` and
 initialize with YAML or `initializeModal(package, ModalConfig)`. The backend uses
 the existing Kokkos and yaml-cpp dependencies; it does not require MAM4xx or EKAT.
@@ -75,8 +78,9 @@ illustration, not an atmospheric calibration.
   conversion from consistent species masses/rates/fluxes to particle number.
 
 Nucleation, condensation/evaporation, and chemistry are integrated by MKPP.
-Cloudborne evolution, aging, cloud activation tendencies, and deposition are
-not implemented in this backend.
+Cloudborne evolution, aging, cloud activation tendencies, and deposition process
+rates are not implemented in this backend. Explicit deposited-budget rebinning
+is available through the removal coupling utilities linked above.
 
 ## Optical tables and mixing treatments
 

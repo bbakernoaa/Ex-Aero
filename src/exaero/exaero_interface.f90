@@ -20,6 +20,9 @@ module exaero_interface
   ! Representation, quantity and capability codes mirror StateField.hpp.
   integer(c_int), parameter :: exaero_BULK = 0, exaero_MODAL = 1
   integer(c_int), parameter :: exaero_STATE_MASS = 0, exaero_STATE_NUMBER = 1
+  integer(c_int), parameter :: exaero_MODAL_BOUNDS_DISABLED = 0, exaero_MODAL_BOUNDS_EMPTY = 1
+  integer(c_int), parameter :: exaero_MODAL_BOUNDS_WITHIN = 2, exaero_MODAL_BOUNDS_BELOW_RADIUS = 3
+  integer(c_int), parameter :: exaero_MODAL_BOUNDS_ABOVE_RADIUS = 4
   integer(c_int), parameter :: exaero_CAP_MICROPHYSICS = 1, exaero_CAP_DIAGNOSTICS = 2
   integer(c_int), parameter :: exaero_CAP_OPTICS = 4, exaero_CAP_CCN = 8, exaero_CAP_EMISSIONS = 16
 
@@ -124,6 +127,63 @@ module exaero_interface
   !> header for the full per-argument unit/index contract.
   ! Public C-bindings interfaces (CCPP-standard error signatures)
   interface
+    !> @brief Inspect dry modal bounds; report(nc,nl,nm,3), status(nc,nl,nm).
+    subroutine exaero_modal_inspect_bounds(pkg,nc,nl,nf,nm,state,report,status,errmsg,errflg) &
+        bind(c,name="exaero_modal_inspect_bounds")
+      import :: c_int,c_double,c_char,exaero_package_t
+      type(exaero_package_t),value :: pkg
+      integer(c_int),value :: nc,nl,nf,nm
+      real(c_double),intent(in) :: state(*)
+      real(c_double),intent(inout) :: report(*)
+      integer(c_int),intent(inout) :: status(*)
+      character(kind=c_char),intent(out) :: errmsg(*)
+      integer(c_int),intent(out) :: errflg
+    end subroutine
+    !> @brief Preserve modal masses and correct number after an accepted step.
+    subroutine exaero_modal_enforce_bounds(pkg,nc,nl,nf,nm,state,delta,status,errmsg,errflg) &
+        bind(c,name="exaero_modal_enforce_bounds")
+      import :: c_int,c_double,c_char,exaero_package_t
+      type(exaero_package_t),value :: pkg
+      integer(c_int),value :: nc,nl,nf,nm
+      real(c_double),intent(inout) :: state(*),delta(*)
+      integer(c_int),intent(inout) :: status(*)
+      character(kind=c_char),intent(out) :: errmsg(*)
+      integer(c_int),intent(out) :: errflg
+    end subroutine
+    !> @brief Dry and wet number-median diameters for removal schemes.
+    subroutine exaero_modal_scavenging_sizes(pkg,nc,nl,nf,nm,temp,rh,state,diameters, &
+        populated,errmsg,errflg) bind(c,name="exaero_modal_scavenging_sizes")
+      import :: c_int,c_double,c_char,exaero_package_t
+      type(exaero_package_t),value :: pkg
+      integer(c_int),value :: nc,nl,nf,nm
+      real(c_double),intent(in) :: temp(*),rh(*),state(*)
+      real(c_double),intent(inout) :: diameters(*)
+      integer(c_int),intent(inout) :: populated(*)
+      character(kind=c_char),intent(out) :: errmsg(*)
+      integer(c_int),intent(out) :: errflg
+    end subroutine
+    !> @brief Route returned material mass rates; number slots remain zero.
+    subroutine exaero_modal_resuspension(pkg,nc,nl,nf,rates,routed,errmsg,errflg) &
+        bind(c,name="exaero_modal_resuspension")
+      import :: c_int,c_double,c_char,exaero_package_t
+      type(exaero_package_t),value :: pkg
+      integer(c_int),value :: nc,nl,nf
+      real(c_double),intent(in) :: rates(*)
+      real(c_double),intent(inout) :: routed(*)
+      character(kind=c_char),intent(out) :: errmsg(*)
+      integer(c_int),intent(out) :: errflg
+    end subroutine
+    !> @brief Rebin deposited budgets by dry diameter; tails are explicit.
+    subroutine exaero_modal_rebin_deposition(pkg,nc,nl,nf,species_index,nbin,budget, &
+        edges,bin_mass,tail_mass,errmsg,errflg) bind(c,name="exaero_modal_rebin_deposition")
+      import :: c_int,c_double,c_char,exaero_package_t
+      type(exaero_package_t),value :: pkg
+      integer(c_int),value :: nc,nl,nf,species_index,nbin
+      real(c_double),intent(in) :: budget(*),edges(*)
+      real(c_double),intent(inout) :: bin_mass(*),tail_mass(*)
+      character(kind=c_char),intent(out) :: errmsg(*)
+      integer(c_int),intent(out) :: errflg
+    end subroutine
     !> @brief Balanced exchange RHS; gas/eq use target-material-equivalent kg/m3.
     !> @details jac(nc,nl,nf+nv,ni) and eq_jac(nc,nl,nm*nv,ni) are optional c_ptr.
     !> Species indices are zero-based; all arrays are host column-major.

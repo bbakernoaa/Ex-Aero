@@ -173,7 +173,7 @@ void ModalPackage::initialize(const std::string &yaml) {
     keys(root,
          {"backend", "preset", "processes", "constants", "species", "modes",
           "mode_overrides", "aging_routes", "transfer_owner", "coagulation",
-          "coagulation_routes", "transfer_routes", "nucleation"});
+          "coagulation_routes", "transfer_routes", "nucleation", "resuspension_routes"});
     require(!root["backend"] || root["backend"].as<std::string>() == "modal",
             "backend must be modal");
     ModalConfig config;
@@ -197,6 +197,7 @@ void ModalPackage::initialize(const std::string &yaml) {
       // Routes name modes: a replacement mode list needs explicit routes.
       config.coagulation_routes.clear();
       config.transfer_routes.clear();
+      config.resuspension_routes.clear();
     }
     if (const auto processes = root["processes"]) {
       keys(processes, {"coagulation", "water_uptake"});
@@ -292,7 +293,8 @@ void ModalPackage::initialize(const std::string &yaml) {
     }
     for (const auto &n : root["modes"]) {
       keys(n, {"name", "geometric_radius", "geometric_std_dev", "species",
-               "optical_treatment", "crystallization_rh", "deliquescence_rh"});
+               "optical_treatment", "crystallization_rh", "deliquescence_rh",
+               "dry_geometric_radius_min", "dry_geometric_radius_max"});
       ModalModeConfig m;
       m.name = n["name"].as<std::string>();
       if (n["crystallization_rh"])
@@ -301,6 +303,10 @@ void ModalPackage::initialize(const std::string &yaml) {
         m.deliquescence_rh = n["deliquescence_rh"].as<double>();
       m.geometric_radius = n["geometric_radius"].as<double>();
       m.geometric_std_dev = n["geometric_std_dev"].as<double>();
+      if (n["dry_geometric_radius_min"])
+        m.dry_geometric_radius_min = n["dry_geometric_radius_min"].as<double>();
+      if (n["dry_geometric_radius_max"])
+        m.dry_geometric_radius_max = n["dry_geometric_radius_max"].as<double>();
       if (n["species"])
         m.species = n["species"].as<std::vector<std::string>>();
       if (n["optical_treatment"]) {
@@ -325,7 +331,8 @@ void ModalPackage::initialize(const std::string &yaml) {
                 "unknown or duplicate mode override: " + name);
         const auto &n = entry.second;
         keys(n, {"geometric_radius", "geometric_std_dev", "crystallization_rh",
-                 "deliquescence_rh"});
+                 "deliquescence_rh", "dry_geometric_radius_min",
+                 "dry_geometric_radius_max"});
         if (n["geometric_radius"])
           mode->geometric_radius = n["geometric_radius"].as<double>();
         if (n["geometric_std_dev"])
@@ -334,6 +341,10 @@ void ModalPackage::initialize(const std::string &yaml) {
           mode->crystallization_rh = n["crystallization_rh"].as<double>();
         if (n["deliquescence_rh"])
           mode->deliquescence_rh = n["deliquescence_rh"].as<double>();
+        if (n["dry_geometric_radius_min"])
+          mode->dry_geometric_radius_min = n["dry_geometric_radius_min"].as<double>();
+        if (n["dry_geometric_radius_max"])
+          mode->dry_geometric_radius_max = n["dry_geometric_radius_max"].as<double>();
       }
     }
     for (const char *key : {"coagulation_routes", "transfer_routes"})
@@ -379,6 +390,17 @@ void ModalPackage::initialize(const std::string &yaml) {
                                           n["destination"].as<std::string>(),
                                           n["radius_threshold"].as<double>()});
       }
+    if (root["resuspension_routes"]) {
+      require(root["resuspension_routes"].IsSequence(),
+              "resuspension_routes must be a sequence");
+      config.resuspension_routes.clear();
+      for (const auto &n : root["resuspension_routes"]) {
+        keys(n, {"species", "source", "destination"});
+        config.resuspension_routes.push_back(
+            {n["species"].as<std::string>(), n["source"].as<std::string>(),
+             n["destination"].as<std::string>()});
+      }
+    }
     if (const auto n = root["nucleation"]) {
       keys(n, {"destination", "prefactor", "exponent", "seed_radius",
                "mass_fractions", "precursor_molecular_weight"});
@@ -476,6 +498,14 @@ void ModalPackage::initializeModal(const ModalConfig &config) {
   std::set<std::string> field_names;
   for (std::size_t m = 0; m < nm; ++m) {
     const auto &v = config.modes[m];
+    require(v.dry_geometric_radius_min.has_value() ==
+                v.dry_geometric_radius_max.has_value(),
+            "modal dry-radius bounds must be paired");
+    if (v.dry_geometric_radius_min)
+      require(positive(*v.dry_geometric_radius_min) &&
+                  positive(*v.dry_geometric_radius_max) &&
+                  *v.dry_geometric_radius_min < *v.dry_geometric_radius_max,
+              "invalid modal dry-radius bounds");
     require(!v.name.empty() && modes.emplace(v.name, m).second,
             "mode names must be unique and nonempty");
     require(positive(v.geometric_radius) &&
@@ -524,6 +554,25 @@ void ModalPackage::initializeModal(const ModalConfig &config) {
       require(!p.allowed[from * ns + s] || p.allowed[to * ns + s],
               "destination cannot contain a source material");
   };
+  std::set<std::pair<int, int>> resuspension_sources;
+  std::vector<std::vector<int>> resuspension_next(ns,
+                                                  std::vector<int>(nm, -1));
+  for (const auto &route : config.resuspension_routes) {
+    require(species.count(route.species), "unknown resuspension species");
+    const int s = species.at(route.species), a = mode(route.source),
+              b = mode(route.destination);
+    require(a != b && resuspension_sources.insert({s, a}).second &&
+                p.allowed[a * ns + s] && p.allowed[b * ns + s],
+            "invalid, duplicate or disallowed resuspension route");
+    resuspension_next[s][a] = b;
+  }
+  for (std::size_t s = 0; s < ns; ++s)
+    for (std::size_t m = 0; m < nm; ++m) {
+      std::set<int> path;
+      for (int next = m; next >= 0; next = resuspension_next[s][next])
+        require(path.insert(next).second,
+                "resuspension routes contain a cycle");
+    }
   require(config.transfer_owner == ModalTransferOwner::Microphysics ||
               config.transfer_owner == ModalTransferOwner::Host,
           "unknown transfer owner");
