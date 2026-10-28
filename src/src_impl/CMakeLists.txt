@@ -92,6 +92,7 @@ add_library(
   modal/ModalChemistry.cpp
   modal/ModalChemistry_C.cpp
   modal/ModalRemoval.cpp
+  modal/ModalCloudIce.cpp
   modal/ModalRemoval_C.cpp
   modal/ModalPresets.cpp
   modal/ModalCoupling_C.cpp
