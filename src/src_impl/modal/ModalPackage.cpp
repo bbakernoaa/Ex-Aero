@@ -107,32 +107,58 @@ modal::Table table(const ModalTableBinding &binding,
   out.sigma = binding.geometric_std_dev;
   out.radius = curve->radius;
   out.rh = curve->rh;
-  const auto wavelengths =
-      binding.wavelength_nodes.empty() && curve->physical_wavelengths
-          ? curve->lambda
-          : binding.wavelength_nodes;
-  require(wavelengths.size() == curve->lambda.size(),
-          "physical wavelength_nodes must map every source spectral node "
-          "(RRTMG axes are band IDs)");
-  out.wavelength = wavelengths;
   axis(out.radius, true);
   require(out.kind != 1 || out.radius.size() >= 2,
           "particle-resolved curves need at least two radius nodes");
   axis(out.rh, false);
-  axis(out.wavelength, true);
   require(out.rh.back() <= 1, "table RH exceeds one");
-  const auto count = out.radius.size() * out.rh.size() * out.wavelength.size();
-  const auto field = [&](const std::string &key, const char *unit) {
+  const auto field = [&](const std::string &key, const char *unit,
+                         std::size_t count) {
     const auto it = curve->fields.find(key);
     require(it != curve->fields.end() && it->second.rank == 3 &&
                 it->second.values.size() == count && it->second.unit == unit,
             "missing or incompatible optical field: " + key);
     return it->second.values;
   };
-  out.extinction = field("bext", "m^2 (kg dry mass)^-1");
-  out.scattering = field("bsca", "m^2 (kg dry mass)^-1");
-  out.asymmetry = field("g", "1");
-  out.backscatter = field("bbck", "m^2 (kg dry mass)^-1 sr^-1");
+  if (!curve->physical_wavelengths) {
+    require(binding.wavelength_nodes.empty(),
+            "native band tables cannot declare wavelength_nodes");
+    out.band_source_ids = curve->lambda;
+    require(!out.band_source_ids.empty(), "native band axis is empty");
+    for (std::size_t i = 0; i < out.band_source_ids.size(); ++i)
+      require(out.band_source_ids[i] >= 1 && out.band_source_ids[i] <= 30 &&
+                  std::floor(out.band_source_ids[i]) == out.band_source_ids[i] &&
+                  (i == 0 || out.band_source_ids[i] > out.band_source_ids[i-1]),
+              "native band IDs must be increasing integers in [1,30]");
+    const auto count = out.radius.size() * out.rh.size() * out.band_source_ids.size();
+    out.band_extinction = field("bext", "m^2 (kg dry mass)^-1", count);
+    out.band_scattering = field("bsca", "m^2 (kg dry mass)^-1", count);
+    out.band_asymmetry = field("g", "1", count);
+    out.band_backscatter = field("bbck", "m^2 (kg dry mass)^-1 sr^-1", count);
+    for (std::size_t i = 0; i < count; ++i)
+      require(std::isfinite(out.band_extinction[i]) && out.band_extinction[i] >= 0 &&
+                  std::isfinite(out.band_scattering[i]) && out.band_scattering[i] >= 0 &&
+                  out.band_scattering[i] <= out.band_extinction[i] * (1 + 1e-6) &&
+                  std::isfinite(out.band_asymmetry[i]) &&
+                  std::abs(out.band_asymmetry[i]) <= 1 &&
+                  std::isfinite(out.band_backscatter[i]) && out.band_backscatter[i] >= 0,
+              "invalid native band optical coefficient");
+    return out;
+  }
+  const auto wavelengths =
+      binding.wavelength_nodes.empty()
+          ? curve->lambda
+          : binding.wavelength_nodes;
+  require(wavelengths.size() == curve->lambda.size(),
+          "physical wavelength_nodes must map every source spectral node "
+          "(RRTMG axes are band IDs)");
+  out.wavelength = wavelengths;
+  axis(out.wavelength, true);
+  const auto count = out.radius.size() * out.rh.size() * out.wavelength.size();
+  out.extinction = field("bext", "m^2 (kg dry mass)^-1", count);
+  out.scattering = field("bsca", "m^2 (kg dry mass)^-1", count);
+  out.asymmetry = field("g", "1", count);
+  out.backscatter = field("bbck", "m^2 (kg dry mass)^-1 sr^-1", count);
   for (std::size_t i = 0; i < count; ++i)
     require(std::isfinite(out.extinction[i]) && out.extinction[i] >= 0 &&
                 std::isfinite(out.scattering[i]) && out.scattering[i] >= 0 &&
@@ -141,6 +167,26 @@ modal::Table table(const ModalTableBinding &binding,
                 std::abs(out.asymmetry[i]) <= 1 &&
                 std::isfinite(out.backscatter[i]) && out.backscatter[i] >= 0,
             "invalid optical coefficient");
+  if (!curve->band_source_ids.empty()) {
+    out.band_source_ids=curve->band_source_ids;
+    out.band_extinction=curve->band_bext;
+    out.band_scattering=curve->band_bsca;
+    out.band_backscatter=curve->band_bbck;
+    out.band_asymmetry=curve->band_g;
+    const auto band_count=out.radius.size()*out.rh.size()*out.band_source_ids.size();
+    require(out.band_extinction.size()==band_count &&
+                out.band_scattering.size()==band_count &&
+                out.band_backscatter.size()==band_count &&
+                out.band_asymmetry.size()==band_count,
+            "modal generated band table has incompatible extents");
+    for (std::size_t i=0;i<band_count;++i)
+      require(std::isfinite(out.band_extinction[i]) && out.band_extinction[i]>=0 &&
+                  std::isfinite(out.band_scattering[i]) && out.band_scattering[i]>=0 &&
+                  out.band_scattering[i]<=out.band_extinction[i]*(1+1e-6) &&
+                  std::isfinite(out.band_backscatter[i]) && out.band_backscatter[i]>=0 &&
+                  std::isfinite(out.band_asymmetry[i]) && std::abs(out.band_asymmetry[i])<=1,
+              "invalid generated modal band coefficient");
+  }
   return out;
 }
 /// @brief Check and add one complete optical-provider result.
@@ -165,6 +211,126 @@ void addOptics(const ModalOpticalResult &a, View4D<double> &out, std::size_t c,
   out(c, k, b, ASYMMETRY_FACTOR) += a.asymmetry * a.scattering;
   out(c, k, b, BACKSCATTER_COEFF) += a.backscatter;
   out(c, k, b, LIDAR_BACKSCATTER) += a.lidar_backscatter;
+}
+bool bracket(const std::vector<double> &axis, double x, std::size_t &lo,
+             double &weight) {
+  if (axis.empty() || !std::isfinite(x) || x < axis.front() || x > axis.back())
+    return false;
+  if (axis.size() == 1) {
+    lo = 0; weight = 0; return true;
+  }
+  const auto upper = std::upper_bound(axis.begin(), axis.end(), x);
+  lo = upper == axis.end() ? axis.size() - 2
+                           : static_cast<std::size_t>(upper - axis.begin() - 1);
+  weight = (x - axis[lo]) / (axis[lo + 1] - axis[lo]);
+  return true;
+}
+double tableField(const modal::Table &table, const std::vector<double> &field,
+                  double radius, double rh, int source_id,
+                  const std::vector<double> *multiplier=nullptr) {
+  std::size_t r=0, h=0; double wr=0, wh=0;
+  if (!bracket(table.radius, radius, r, wr) ||
+      !bracket(table.rh, rh, h, wh))
+    throw std::runtime_error("FATAL ERROR: modal native-band table does not cover radius/RH");
+  const auto it=std::find(table.band_source_ids.begin(),table.band_source_ids.end(),
+                          static_cast<double>(source_id));
+  if (it==table.band_source_ids.end())
+    throw std::runtime_error("FATAL ERROR: modal native-band table lacks source band");
+  const std::size_t b=static_cast<std::size_t>(it-table.band_source_ids.begin()),
+                    nb=table.band_source_ids.size(), nh=table.rh.size();
+  auto at=[&](std::size_t ri,std::size_t hi) {
+    const auto index=(ri*nh+hi)*nb+b;
+    return field[index]*(multiplier?(*multiplier)[index]:1.);
+  };
+  const double a=at(r,h), c=table.radius.size()==1?a:at(r+1,h);
+  const double d=table.rh.size()==1?a:at(r,h+1);
+  const double e=at(table.radius.size()==1?r:r+1,
+                    table.rh.size()==1?h:h+1);
+  const double low=a+wr*(c-a), high=d+wr*(e-d);
+  return low+wh*(high-low);
+}
+double massFractionBelow(double radius, double sigma, double cutoff) {
+  const double ln=std::log(sigma);
+  return .5*std::erfc((std::log(radius/cutoff)+3*ln*ln)/(std::sqrt(2.)*ln));
+}
+void opticalWeights(double rg,double ln,double lo,double hi,double cut,
+                    double &w0,double &w1) {
+  const double end=std::min(hi,cut);
+  w0=w1=0;
+  if (end<=lo) return;
+  const double root=std::sqrt(2.)*ln;
+  const double l=std::log(lo/rg),u=std::log(end/rg);
+  const double p3=.5*(std::erfc((l-3*ln*ln)/root)-
+                      std::erfc((u-3*ln*ln)/root));
+  const double p4=rg*std::exp(3.5*ln*ln)*.5*
+      (std::erfc((l-4*ln*ln)/root)-std::erfc((u-4*ln*ln)/root));
+  w0=std::max(0.,(hi*p3-p4)/(hi-lo));
+  w1=std::max(0.,(p4-lo*p3)/(hi-lo));
+}
+ModalOpticalResult evaluateBandTable(const modal::Table &table,
+                                     const ModalModeConfig &mode,
+                                     double rh, int source_id, double mass,
+                                     double dry_radius, double aero) {
+  if (table.band_source_ids.empty())
+    throw std::runtime_error("FATAL ERROR: modal component has no native band data");
+  double ext=0,sca=0,weighted_g=0,back=0;
+  double fine_ext=0,fine_sca=0,pm25_ext=0,pm25_sca=0;
+  if (table.kind==2) {
+    const double bext=tableField(table,table.band_extinction,
+                                 dry_radius,rh,source_id);
+    const double bsca=tableField(table,table.band_scattering,
+                                 dry_radius,rh,source_id);
+    const double sg=tableField(table,table.band_scattering,
+                               dry_radius,rh,source_id,
+                               &table.band_asymmetry);
+    const double bbck=tableField(table,table.band_backscatter,
+                                 dry_radius,rh,source_id);
+    ext=mass*bext; sca=mass*bsca;
+    weighted_g=mass*sg; back=mass*bbck;
+    const double fine=massFractionBelow(dry_radius,mode.geometric_std_dev,.5e-6);
+    const double pm25=massFractionBelow(dry_radius,mode.geometric_std_dev,1.25e-6/aero);
+    fine_ext=ext*fine; fine_sca=sca*fine;
+    pm25_ext=ext*pm25; pm25_sca=sca*pm25;
+  } else if (table.kind==1) {
+    const double ln=std::log(mode.geometric_std_dev);
+    const double coverage=massFractionBelow(dry_radius,mode.geometric_std_dev,
+                                             table.radius.back())-
+                          massFractionBelow(dry_radius,mode.geometric_std_dev,
+                                             table.radius.front());
+    if (coverage < 1-1e-8)
+      throw std::runtime_error("FATAL ERROR: modal native-band radius table does not cover the dry-mass distribution");
+    for (std::size_t q=0;q+1<table.radius.size();++q) {
+      const double lo=table.radius[q],hi=table.radius[q+1];
+      const double e0=tableField(table,table.band_extinction,lo,rh,source_id);
+      const double e1=tableField(table,table.band_extinction,hi,rh,source_id);
+      const double s0=tableField(table,table.band_scattering,lo,rh,source_id);
+      const double s1=tableField(table,table.band_scattering,hi,rh,source_id);
+      const double sg0=tableField(table,table.band_scattering,lo,rh,source_id,
+                                  &table.band_asymmetry);
+      const double sg1=tableField(table,table.band_scattering,hi,rh,source_id,
+                                  &table.band_asymmetry);
+      const double b0=tableField(table,table.band_backscatter,lo,rh,source_id);
+      const double b1=tableField(table,table.band_backscatter,hi,rh,source_id);
+      double eW0,eW1,sW0,sW1,gW0,gW1,bW0,bW1;
+      opticalWeights(dry_radius,ln,lo,hi,hi,eW0,eW1);
+      sW0=eW0;sW1=eW1;gW0=eW0;gW1=eW1;bW0=eW0;bW1=eW1;
+      ext+=mass*(e0*eW0+e1*eW1);
+      sca+=mass*(s0*sW0+s1*sW1);
+      weighted_g+=mass*(sg0*gW0+sg1*gW1);
+      back+=mass*(b0*bW0+b1*bW1);
+      opticalWeights(dry_radius,ln,lo,hi,.5e-6,eW0,eW1);
+      opticalWeights(dry_radius,ln,lo,hi,.5e-6,sW0,sW1);
+      fine_ext+=mass*(e0*eW0+e1*eW1);
+      fine_sca+=mass*(s0*sW0+s1*sW1);
+      opticalWeights(dry_radius,ln,lo,hi,1.25e-6/aero,eW0,eW1);
+      opticalWeights(dry_radius,ln,lo,hi,1.25e-6/aero,sW0,sW1);
+      pm25_ext+=mass*(e0*eW0+e1*eW1);
+      pm25_sca+=mass*(s0*sW0+s1*sW1);
+    }
+  } else
+    throw std::runtime_error("FATAL ERROR: modal component has no native band semantics");
+  return {ext,sca,sca>0?weighted_g/sca:0,back,back,
+          fine_ext,fine_sca,pm25_ext,pm25_sca};
 }
 } // namespace
 
@@ -741,17 +907,155 @@ unsigned ModalPackage::capabilities() const {
   if (!initialized_)
     return result;
   const auto ns = config_.species.size();
+  bool wavelength_optics = true, band_optics = false;
   for (std::size_t m = 0; m < config_.modes.size(); ++m) {
     if (config_.modes[m].optical_treatment ==
         ModalOpticalTreatment::InternalMixture) {
       if (!optics_provider_)
-        return result;
+        wavelength_optics = false;
+      if (band_optics_provider_)
+        for (const auto &band : radiationBandInfo(RadiationBandSet::RRTMG_30))
+          band_optics = band_optics ||
+                        band_optics_provider_->supports(config_, m, band);
     } else
       for (std::size_t s = 0; s < ns; ++s)
-        if (parameters_.allowed[m * ns + s] && !tables_[m * ns + s].kind)
-          return result;
+        if (parameters_.allowed[m * ns + s]) {
+          if (!tables_[m * ns + s].kind ||
+              tables_[m * ns + s].wavelength.empty()) wavelength_optics = false;
+          const auto &ids = tables_[m * ns + s].band_source_ids;
+          band_optics = band_optics || !ids.empty();
+        }
   }
-  return result | Optics;
+  if (wavelength_optics) result |= Optics;
+  if (band_optics) result |= OpticsBands;
+  return result;
+}
+
+std::vector<RadiationBandInfo>
+ModalPackage::radiationBandInfo(RadiationBandSet set) const {
+  const auto &metadata = exaero::radiationBandInfo(set);
+  return {metadata.begin(), metadata.end()};
+}
+
+std::vector<RadiationBandComponentAvailability>
+ModalPackage::bandAvailability(RadiationBandSet set) const {
+  const auto &bands = exaero::radiationBandInfo(set);
+  std::vector<RadiationBandComponentAvailability> result;
+  const auto ns = config_.species.size();
+  result.reserve(config_.modes.size() * ns);
+  for (std::size_t m = 0; m < config_.modes.size(); ++m)
+    for (std::size_t s = 0; s < ns; ++s) {
+      RadiationBandComponentAvailability component;
+      component.component_index = m * ns + s;
+      component.component_name = config_.modes[m].name + "/" +
+                                 config_.species[s].name;
+      for (const auto &band : bands) {
+        bool supported = false;
+        if (parameters_.allowed[m * ns + s]) {
+          if (config_.modes[m].optical_treatment ==
+              ModalOpticalTreatment::InternalMixture)
+            supported = band_optics_provider_ &&
+                        band_optics_provider_->supports(config_, m, band);
+          else {
+            const auto &ids = tables_[m * ns + s].band_source_ids;
+            supported = std::find(ids.begin(), ids.end(),
+                                  static_cast<double>(band.source_id)) != ids.end();
+          }
+        }
+        component.status.push_back(supported ? RadiationBandStatus::Available
+                                             : RadiationBandStatus::NotInSource);
+      }
+      result.push_back(std::move(component));
+    }
+  return result;
+}
+
+void ModalPackage::computeBandOptics(const EnvironmentalStateView &e,
+                                    const View3D<const double> &state,
+                                    RadiationBandSet set,
+                                    std::span<const int> band_indices,
+                                    View4D<double> &out) {
+  validate(e, state);
+  const auto selected=selectRadiationBands(set,band_indices);
+  const auto nc=state.extent(0), nl=state.extent(1),
+             nm=config_.modes.size(), ns=config_.species.size(), nb=selected.size();
+  shape(out,nc,nl,nb,optical_indices::NUM_OPTICS);
+  require(nc <= static_cast<std::size_t>(std::numeric_limits<int>::max()) / nl /
+                    nm / nb / modal_properties::COUNT,
+          "modal band-optics workspace is too large");
+  std::vector<double> scratch(out.size(),0.), prop(nc*nl*nm*modal_properties::COUNT);
+  View4D<double> target(scratch.data(),nc,nl,nb,optical_indices::NUM_OPTICS),
+      properties_view(prop.data(),nc,nl,nm,modal_properties::COUNT);
+  modalProperties(e,state,properties_view,nullptr);
+  std::vector<double> masses(ns), properties(modal_properties::COUNT);
+  using namespace optical_indices;
+  for (std::size_t c=0;c<nc;++c)
+    for (std::size_t k=0;k<nl;++k)
+      for (std::size_t b=0;b<nb;++b) {
+        const auto &band=selected[b];
+        for (std::size_t m=0;m<nm;++m) {
+          bool populated=false;
+          for (std::size_t s=0;s<ns;++s) {
+            masses[s]=state(c,k,m*(ns+1)+s);
+            populated=populated || masses[s]>0;
+          }
+          if (!populated) continue;
+          for (int q=0;q<modal_properties::COUNT;++q)
+            properties[q]=properties_view(c,k,m,q);
+          ModalOpticalResult mode_result{};
+          if (config_.modes[m].optical_treatment ==
+              ModalOpticalTreatment::InternalMixture) {
+            require(bool(band_optics_provider_),
+                    "internal-mixture band optics require a band provider");
+            require(band_optics_provider_->supports(config_,m,band),
+                    "internal-mixture provider lacks requested band");
+            mode_result=band_optics_provider_->evaluateBand(
+                config_,m,band,e.temperature(c,k),e.relative_humidity(c,k),
+                masses,properties);
+          } else {
+            for (std::size_t s=0;s<ns;++s) {
+              if (masses[s]==0) continue;
+              const auto &table=tables_[m*ns+s];
+              const double aero=properties[modal_properties::WET_RADIUS]/
+                  properties[modal_properties::DRY_RADIUS]*
+                  std::sqrt(properties[modal_properties::WET_DENSITY]/1000.);
+              const auto component=evaluateBandTable(
+                  table,config_.modes[m],e.relative_humidity(c,k),
+                  band.source_id,masses[s],
+                  properties[modal_properties::DRY_RADIUS],aero);
+              mode_result.extinction+=component.extinction;
+              mode_result.scattering+=component.scattering;
+              mode_result.asymmetry+=component.asymmetry*component.scattering;
+              mode_result.backscatter+=component.backscatter;
+              mode_result.lidar_backscatter+=component.lidar_backscatter;
+              mode_result.fine_extinction+=component.fine_extinction;
+              mode_result.fine_scattering+=component.fine_scattering;
+              mode_result.pm25_extinction+=component.pm25_extinction;
+              mode_result.pm25_scattering+=component.pm25_scattering;
+            }
+            mode_result.asymmetry=mode_result.scattering>0
+                ? mode_result.asymmetry/mode_result.scattering : 0;
+          }
+          addOptics(mode_result,target,c,k,b);
+          target(c,0,b,FINE_MODE_EXTINCTION_AOT)+=
+              mode_result.fine_extinction*e.layer_thickness(c,k);
+          target(c,0,b,FINE_MODE_SCATTERING_AOT)+=
+              mode_result.fine_scattering*e.layer_thickness(c,k);
+          target(c,0,b,PM2_5_EXTINCTION_AOT)+=
+              mode_result.pm25_extinction*e.layer_thickness(c,k);
+          target(c,0,b,PM2_5_SCATTERING_AOT)+=
+              mode_result.pm25_scattering*e.layer_thickness(c,k);
+        }
+        if (target(c,k,b,SCATTERING_COEFF)>0)
+          target(c,k,b,ASYMMETRY_FACTOR)/=target(c,k,b,SCATTERING_COEFF);
+        target(c,0,b,EXTINCTION_AOT)+=
+            target(c,k,b,EXTINCTION_COEFF)*e.layer_thickness(c,k);
+        target(c,0,b,SCATTERING_AOT)+=
+            target(c,k,b,SCATTERING_COEFF)*e.layer_thickness(c,k);
+      }
+  for (double value : scratch)
+    require(std::isfinite(value),"modal native-band optics overflow");
+  std::copy(scratch.begin(),scratch.end(),out.data_handle());
 }
 
 void ModalPackage::validate(const EnvironmentalStateView &env,

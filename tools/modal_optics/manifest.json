@@ -2,20 +2,230 @@
   "format": "exaero_modal_mie_v1",
   "geosmie_repository": "https://github.com/bbakernoaa/GEOSmie",
   "geosmie_commit": "c535388356c7e8982ead98deeebff33985254f9c",
-  "radius": {"minimum": 1e-10, "maximum": 5e-5, "count": 256},
-  "rh": [0.0, 0.5, 0.8, 0.9, 0.95, 0.98],
-  "wavelength": [3.55e-7, 5.5e-7, 8.7e-7, 1.064e-6, 1.64e-6],
+  "radius": {
+    "minimum": 1e-10,
+    "maximum": 5e-05,
+    "count": 256
+  },
+  "rh": [
+    0.0,
+    0.5,
+    0.8,
+    0.9,
+    0.95,
+    0.98
+  ],
+  "wavelength": [
+    3.55e-07,
+    5.5e-07,
+    8.7e-07,
+    1.064e-06,
+    1.64e-06
+  ],
   "growth": "kappa_equilibrium_no_kelvin",
   "mixing": "homogeneous_volume_weighted_dry_material_and_water",
   "normalization": "per_kg_dry_material",
   "materials": [
-    {"label": "MODAL_SU", "refractive_index": "suso00", "density": 1700.0, "kappa": 0.507},
-    {"label": "MODAL_BC", "refractive_index": "soot00", "density": 1000.0, "kappa": 0.0},
-    {"label": "MODAL_OC", "refractive_index": "waso00", "density": 1800.0, "kappa": 0.14},
-    {"label": "MODAL_SS", "refractive_index": "sscm00", "density": 2200.0, "kappa": 1.16},
-    {"label": "MODAL_DU", "refractive_index": "ri-dust.wsv", "format": "wsv", "density": 2650.0, "kappa": 0.0,
-     "description": "Dry spherical mineral dust; not a nonspherical spheroid model"},
-    {"label": "MODAL_NI", "refractive_index": "ri-nitrate.wsv", "format": "wsv", "density": 1725.0, "kappa": 0.67,
-     "description": "Ammonium-nitrate-equivalent dry material; mass includes the complete salt"}
-  ]
+    {
+      "label": "MODAL_SU",
+      "refractive_index": "suso00",
+      "density": 1700.0,
+      "kappa": 0.507
+    },
+    {
+      "label": "MODAL_BC",
+      "refractive_index": "soot00",
+      "density": 1000.0,
+      "kappa": 0.0
+    },
+    {
+      "label": "MODAL_OC",
+      "refractive_index": "waso00",
+      "density": 1800.0,
+      "kappa": 0.14
+    },
+    {
+      "label": "MODAL_SS",
+      "refractive_index": "sscm00",
+      "density": 2200.0,
+      "kappa": 1.16
+    },
+    {
+      "label": "MODAL_DU",
+      "refractive_index": "ri-dust.wsv",
+      "format": "wsv",
+      "density": 2650.0,
+      "kappa": 0.0,
+      "description": "Dry spherical mineral dust; not a nonspherical spheroid model"
+    },
+    {
+      "label": "MODAL_NI",
+      "refractive_index": "ri-nitrate.wsv",
+      "format": "wsv",
+      "density": 1725.0,
+      "kappa": 0.67,
+      "description": "Ammonium-nitrate-equivalent dry material; mass includes the complete salt"
+    }
+  ],
+  "band_average": {
+    "set": "RRTMG_30",
+    "definition_repository": "GEOS-ESM/GEOSmie",
+    "definition_commit": "fbc507e6edc09cf6dcaa5a1d88d63ffda4f30652",
+    "definition": "src/geosmie/bandaverage.py:getBands('RRTMG')",
+    "samples_per_band": 100,
+    "weighting": "uniform_wavenumber_arithmetic_mean",
+    "asymmetry": "scattering_weighted_arithmetic_mean",
+    "bands": [
+      {
+        "source_id": 1,
+        "lower_wavenumber_cm1": 2600,
+        "upper_wavenumber_cm1": 3250
+      },
+      {
+        "source_id": 2,
+        "lower_wavenumber_cm1": 3250,
+        "upper_wavenumber_cm1": 4000
+      },
+      {
+        "source_id": 3,
+        "lower_wavenumber_cm1": 4000,
+        "upper_wavenumber_cm1": 4650
+      },
+      {
+        "source_id": 4,
+        "lower_wavenumber_cm1": 4650,
+        "upper_wavenumber_cm1": 5150
+      },
+      {
+        "source_id": 5,
+        "lower_wavenumber_cm1": 5150,
+        "upper_wavenumber_cm1": 6150
+      },
+      {
+        "source_id": 6,
+        "lower_wavenumber_cm1": 6150,
+        "upper_wavenumber_cm1": 7700
+      },
+      {
+        "source_id": 7,
+        "lower_wavenumber_cm1": 7700,
+        "upper_wavenumber_cm1": 8050
+      },
+      {
+        "source_id": 8,
+        "lower_wavenumber_cm1": 8050,
+        "upper_wavenumber_cm1": 12850
+      },
+      {
+        "source_id": 9,
+        "lower_wavenumber_cm1": 12850,
+        "upper_wavenumber_cm1": 16000
+      },
+      {
+        "source_id": 10,
+        "lower_wavenumber_cm1": 16000,
+        "upper_wavenumber_cm1": 22650
+      },
+      {
+        "source_id": 11,
+        "lower_wavenumber_cm1": 22650,
+        "upper_wavenumber_cm1": 29000
+      },
+      {
+        "source_id": 12,
+        "lower_wavenumber_cm1": 29000,
+        "upper_wavenumber_cm1": 38000
+      },
+      {
+        "source_id": 13,
+        "lower_wavenumber_cm1": 38000,
+        "upper_wavenumber_cm1": 50000
+      },
+      {
+        "source_id": 14,
+        "lower_wavenumber_cm1": 820,
+        "upper_wavenumber_cm1": 2600
+      },
+      {
+        "source_id": 15,
+        "lower_wavenumber_cm1": 10,
+        "upper_wavenumber_cm1": 350
+      },
+      {
+        "source_id": 16,
+        "lower_wavenumber_cm1": 350,
+        "upper_wavenumber_cm1": 500
+      },
+      {
+        "source_id": 17,
+        "lower_wavenumber_cm1": 500,
+        "upper_wavenumber_cm1": 630
+      },
+      {
+        "source_id": 18,
+        "lower_wavenumber_cm1": 630,
+        "upper_wavenumber_cm1": 700
+      },
+      {
+        "source_id": 19,
+        "lower_wavenumber_cm1": 700,
+        "upper_wavenumber_cm1": 820
+      },
+      {
+        "source_id": 20,
+        "lower_wavenumber_cm1": 820,
+        "upper_wavenumber_cm1": 980
+      },
+      {
+        "source_id": 21,
+        "lower_wavenumber_cm1": 980,
+        "upper_wavenumber_cm1": 1080
+      },
+      {
+        "source_id": 22,
+        "lower_wavenumber_cm1": 1080,
+        "upper_wavenumber_cm1": 1180
+      },
+      {
+        "source_id": 23,
+        "lower_wavenumber_cm1": 1180,
+        "upper_wavenumber_cm1": 1390
+      },
+      {
+        "source_id": 24,
+        "lower_wavenumber_cm1": 1390,
+        "upper_wavenumber_cm1": 1480
+      },
+      {
+        "source_id": 25,
+        "lower_wavenumber_cm1": 1480,
+        "upper_wavenumber_cm1": 1800
+      },
+      {
+        "source_id": 26,
+        "lower_wavenumber_cm1": 1800,
+        "upper_wavenumber_cm1": 2080
+      },
+      {
+        "source_id": 27,
+        "lower_wavenumber_cm1": 2080,
+        "upper_wavenumber_cm1": 2250
+      },
+      {
+        "source_id": 28,
+        "lower_wavenumber_cm1": 2250,
+        "upper_wavenumber_cm1": 2380
+      },
+      {
+        "source_id": 29,
+        "lower_wavenumber_cm1": 2380,
+        "upper_wavenumber_cm1": 2600
+      },
+      {
+        "source_id": 30,
+        "lower_wavenumber_cm1": 2600,
+        "upper_wavenumber_cm1": 3250
+      }
+    ]
+  }
 }

@@ -7,6 +7,7 @@
 /// otherwise.
 #include <exaero/IAerosolPackage.hpp>
 #include <exaero/ModalConfig.hpp>
+#include <exaero/RadiationBands.hpp>
 #include <memory>
 #include <span>
 
@@ -44,6 +45,18 @@ public:
   evaluate(const ModalConfig &, std::size_t mode, double temperature, double rh,
            double wavelength, std::span<const double> species_mass,
            std::span<const double> properties) const = 0;
+};
+/// @brief Synchronous provider for internally mixed native band optics.
+/// Results are complete mode integrals, already including water exactly once.
+class IModalBandOpticsProvider {
+public:
+  virtual ~IModalBandOpticsProvider() = default;
+  virtual bool supports(const ModalConfig &, std::size_t mode,
+                        const RadiationBandInfo &) const = 0;
+  virtual ModalOpticalResult evaluateBand(
+      const ModalConfig &, std::size_t mode, const RadiationBandInfo &,
+      double temperature, double rh, std::span<const double> species_mass,
+      std::span<const double> properties) const = 0;
 };
 /// @brief Rate contributions for MKPP; EX-aero never applies these to state.
 struct ModalNucleationTerms {
@@ -91,6 +104,8 @@ public:
   /// @brief Install/remove the optional internally mixed provider.
   virtual void
       setModalOpticsProvider(std::shared_ptr<const IModalOpticsProvider>) = 0;
+  virtual void setModalBandOpticsProvider(
+      std::shared_ptr<const IModalBandOpticsProvider>) = 0;
 };
 /// @brief Checked access to the separate modal interface (throws if
 /// unsupported).

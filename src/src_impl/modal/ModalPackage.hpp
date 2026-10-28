@@ -4,11 +4,13 @@
 /// @author EX-aero contributors
 /// @details History: 2026-10. Usage: createPackage("modal"). No file output.
 #include <exaero/ModalCoupling.hpp>
+#include <exaero/OpticsBandCoupling.hpp>
 #include <modal/ModalSolver.hpp>
 
 namespace exaero {
 /// @brief Two-moment modal backend with optional table/provider optics.
-class ModalPackage final : public IAerosolPackage, public IModalCoupling {
+class ModalPackage final : public IAerosolPackage, public IModalCoupling,
+                           public IOpticsBandCoupling {
   ModalConfig config_;
   modal::Parameters parameters_;
   std::vector<modal::Table> tables_;
@@ -16,6 +18,7 @@ class ModalPackage final : public IAerosolPackage, public IModalCoupling {
   bool initialized_ = false;
   mutable std::shared_ptr<modal::Solver> solver_;
   std::shared_ptr<const IModalOpticsProvider> optics_provider_;
+  std::shared_ptr<const IModalBandOpticsProvider> band_optics_provider_;
   /// @brief Validate host arrays and material/number consistency atomically.
   void validate(const EnvironmentalStateView &, const View3D<const double> &,
                 bool full_environment = true) const;
@@ -56,6 +59,13 @@ public:
   void computeOptics(const EnvironmentalStateView &,
                      const View3D<const double> &, const View1D<const double> &,
                      View4D<double> &) override;
+  std::vector<RadiationBandInfo>
+  radiationBandInfo(RadiationBandSet) const override;
+  std::vector<RadiationBandComponentAvailability>
+  bandAvailability(RadiationBandSet) const override;
+  void computeBandOptics(const EnvironmentalStateView &,
+                         const View3D<const double> &, RadiationBandSet,
+                         std::span<const int>, View4D<double> &) override;
   void computeEmissions(const EnvironmentalStateView &,
                         const EmissionsInputView &, View3D<double> &) override;
   int getSpeciesIndex(const std::string &) const override;
@@ -73,6 +83,10 @@ public:
   void setModalOpticsProvider(
       std::shared_ptr<const IModalOpticsProvider> provider) override {
     optics_provider_ = std::move(provider);
+  }
+  void setModalBandOpticsProvider(
+      std::shared_ptr<const IModalBandOpticsProvider> provider) override {
+    band_optics_provider_ = std::move(provider);
   }
 };
 } // namespace exaero

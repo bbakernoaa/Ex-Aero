@@ -78,5 +78,166 @@
     }
   ],
   "mam4xx_commit": "c994f6889f270c3da4aca8a4703a1ebe30f92f69",
-  "purpose": "MAM4xx component-table approximation; native material density and kappa; equilibrium optical growth differs from native hysteretic water diagnostics"
+  "purpose": "MAM4xx component-table approximation; native material density and kappa; equilibrium optical growth differs from native hysteretic water diagnostics",
+  "band_average": {
+    "set": "RRTMG_30",
+    "definition_repository": "GEOS-ESM/GEOSmie",
+    "definition_commit": "fbc507e6edc09cf6dcaa5a1d88d63ffda4f30652",
+    "definition": "src/geosmie/bandaverage.py:getBands('RRTMG')",
+    "samples_per_band": 100,
+    "weighting": "uniform_wavenumber_arithmetic_mean",
+    "asymmetry": "scattering_weighted_arithmetic_mean",
+    "bands": [
+      {
+        "source_id": 1,
+        "lower_wavenumber_cm1": 2600,
+        "upper_wavenumber_cm1": 3250
+      },
+      {
+        "source_id": 2,
+        "lower_wavenumber_cm1": 3250,
+        "upper_wavenumber_cm1": 4000
+      },
+      {
+        "source_id": 3,
+        "lower_wavenumber_cm1": 4000,
+        "upper_wavenumber_cm1": 4650
+      },
+      {
+        "source_id": 4,
+        "lower_wavenumber_cm1": 4650,
+        "upper_wavenumber_cm1": 5150
+      },
+      {
+        "source_id": 5,
+        "lower_wavenumber_cm1": 5150,
+        "upper_wavenumber_cm1": 6150
+      },
+      {
+        "source_id": 6,
+        "lower_wavenumber_cm1": 6150,
+        "upper_wavenumber_cm1": 7700
+      },
+      {
+        "source_id": 7,
+        "lower_wavenumber_cm1": 7700,
+        "upper_wavenumber_cm1": 8050
+      },
+      {
+        "source_id": 8,
+        "lower_wavenumber_cm1": 8050,
+        "upper_wavenumber_cm1": 12850
+      },
+      {
+        "source_id": 9,
+        "lower_wavenumber_cm1": 12850,
+        "upper_wavenumber_cm1": 16000
+      },
+      {
+        "source_id": 10,
+        "lower_wavenumber_cm1": 16000,
+        "upper_wavenumber_cm1": 22650
+      },
+      {
+        "source_id": 11,
+        "lower_wavenumber_cm1": 22650,
+        "upper_wavenumber_cm1": 29000
+      },
+      {
+        "source_id": 12,
+        "lower_wavenumber_cm1": 29000,
+        "upper_wavenumber_cm1": 38000
+      },
+      {
+        "source_id": 13,
+        "lower_wavenumber_cm1": 38000,
+        "upper_wavenumber_cm1": 50000
+      },
+      {
+        "source_id": 14,
+        "lower_wavenumber_cm1": 820,
+        "upper_wavenumber_cm1": 2600
+      },
+      {
+        "source_id": 15,
+        "lower_wavenumber_cm1": 10,
+        "upper_wavenumber_cm1": 350
+      },
+      {
+        "source_id": 16,
+        "lower_wavenumber_cm1": 350,
+        "upper_wavenumber_cm1": 500
+      },
+      {
+        "source_id": 17,
+        "lower_wavenumber_cm1": 500,
+        "upper_wavenumber_cm1": 630
+      },
+      {
+        "source_id": 18,
+        "lower_wavenumber_cm1": 630,
+        "upper_wavenumber_cm1": 700
+      },
+      {
+        "source_id": 19,
+        "lower_wavenumber_cm1": 700,
+        "upper_wavenumber_cm1": 820
+      },
+      {
+        "source_id": 20,
+        "lower_wavenumber_cm1": 820,
+        "upper_wavenumber_cm1": 980
+      },
+      {
+        "source_id": 21,
+        "lower_wavenumber_cm1": 980,
+        "upper_wavenumber_cm1": 1080
+      },
+      {
+        "source_id": 22,
+        "lower_wavenumber_cm1": 1080,
+        "upper_wavenumber_cm1": 1180
+      },
+      {
+        "source_id": 23,
+        "lower_wavenumber_cm1": 1180,
+        "upper_wavenumber_cm1": 1390
+      },
+      {
+        "source_id": 24,
+        "lower_wavenumber_cm1": 1390,
+        "upper_wavenumber_cm1": 1480
+      },
+      {
+        "source_id": 25,
+        "lower_wavenumber_cm1": 1480,
+        "upper_wavenumber_cm1": 1800
+      },
+      {
+        "source_id": 26,
+        "lower_wavenumber_cm1": 1800,
+        "upper_wavenumber_cm1": 2080
+      },
+      {
+        "source_id": 27,
+        "lower_wavenumber_cm1": 2080,
+        "upper_wavenumber_cm1": 2250
+      },
+      {
+        "source_id": 28,
+        "lower_wavenumber_cm1": 2250,
+        "upper_wavenumber_cm1": 2380
+      },
+      {
+        "source_id": 29,
+        "lower_wavenumber_cm1": 2380,
+        "upper_wavenumber_cm1": 2600
+      },
+      {
+        "source_id": 30,
+        "lower_wavenumber_cm1": 2600,
+        "upper_wavenumber_cm1": 3250
+      }
+    ]
+  }
 }

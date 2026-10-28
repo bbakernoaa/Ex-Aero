@@ -3,12 +3,14 @@
 /// @brief Experimental modal package; this translation-unit boundary excludes
 /// Kokkos.
 #include <exaero/IAerosolPackage.hpp>
+#include <exaero/OpticsBandCoupling.hpp>
 #include <memory>
 
 namespace exaero {
 /// @brief MAM4xx clear-air coagulation, water uptake, and modal diagnostics.
 /// Host views use layout_left. Component-table optics are opt-in.
-class Mam4xxPackage final : public IAerosolPackage {
+class Mam4xxPackage final : public IAerosolPackage,
+                            public IOpticsBandCoupling {
   bool initialized_ =
       false; ///< Successful configuration required before compute.
   std::unique_ptr<IAerosolPackage> optics_; ///< Optional shared modal optics.
@@ -24,8 +26,9 @@ public:
   }
   /// @brief Supported surfaces; optics available after explicit configuration.
   unsigned capabilities() const override {
+    const auto *band = optics_ ? dynamic_cast<const IOpticsBandCoupling *>(optics_.get()) : nullptr;
     return Microphysics | Diagnostics | CCN | Emissions |
-           (optics_ ? Optics : 0u);
+           (optics_ ? Optics : 0u) | (band ? OpticsBands : 0u);
   }
   /// @brief All 64 state slots in public mam4xx_layout order.
   std::vector<StateField> stateFields() const override;
@@ -44,6 +47,13 @@ public:
   void computeOptics(const EnvironmentalStateView &,
                      const View3D<const double> &, const View1D<const double> &,
                      View4D<double> &) override;
+  std::vector<RadiationBandInfo>
+  radiationBandInfo(RadiationBandSet) const override;
+  std::vector<RadiationBandComponentAvailability>
+  bandAvailability(RadiationBandSet) const override;
+  void computeBandOptics(const EnvironmentalStateView &,
+                         const View3D<const double> &, RadiationBandSet,
+                         std::span<const int>, View4D<double> &) override;
   /// @brief Evaluate modal kappa-Kohler spectra at arbitrary nonnegative
   /// supersaturations.
   void computeCCN(const EnvironmentalStateView &, const View3D<const double> &,

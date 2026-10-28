@@ -174,6 +174,11 @@ RH 0–0.98 and five wavelengths 355–1640 nm. The integrator rejects an unsupp
 RH/wavelength or a distribution with more than 1e-8 of its dry mass outside the
 radius range. It does not extrapolate. These are visible/NIR starter tables,
 not full RRTMG bands. The generic guide documents output slots and integration.
+The native C++ band interface delegates through the same generic-modal adapter.
+With the checked-in wavelength-only tables, all MAM4xx material band statuses
+are `NotInSource`; a positive-mass band calculation fails atomically. Supplying
+validated native band tables through the configured optics data file enables
+only their listed source IDs.
 
 Optional `sources` entries select alternate curve labels; an optional `data_file`
 is merged through the existing EX-aero MIE loader before resolving them. Every

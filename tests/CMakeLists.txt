@@ -22,6 +22,13 @@ target_compile_features(exaero_cloud_ice_yaml_test PRIVATE cxx_std_23)
 add_test(NAME ExaeroCloudIceYaml COMMAND exaero_cloud_ice_yaml_test)
 add_executable(exaero_modal_test test_modal.cpp test_modal_mam4.cpp
                                  test_modal_chemistry.cpp test_modal_main.cpp)
+add_executable(exaero_modal_optics_bands_test test_modal_optics_bands.cpp)
+target_link_libraries(exaero_modal_optics_bands_test PRIVATE exaero)
+target_compile_features(exaero_modal_optics_bands_test PRIVATE cxx_std_23)
+target_compile_definitions(
+  exaero_modal_optics_bands_test
+  PRIVATE EXAERO_TEST_DATA_DIR="${CMAKE_CURRENT_SOURCE_DIR}/data")
+add_test(NAME ModalOpticsBands COMMAND exaero_modal_optics_bands_test)
 add_executable(exaero_modal_removal_math_test test_modal_removal_math.cpp)
 add_test(NAME ExaeroModalRemovalMath COMMAND exaero_modal_removal_math_test)
 target_include_directories(exaero_modal_removal_math_test PRIVATE ${EXAERO_REPO_ROOT}/src)

@@ -43,6 +43,17 @@ assumes spheres. Nitrate is normalized to complete dry ammonium-nitrate-equivale
 mass, rather than nitrate-ion mass. Full scope, physical assumptions, domains,
 and coupling limitations are in [the backend guide](../../docs/guides/generic-modal.md).
 
+The manifests now pin native `RRTMG_30` band edges and GEOSmie's averaging
+recipe: 100 equally spaced wavenumber samples per band, arithmetic means for
+extinction, scattering, and backscatter, and scattering-weighted asymmetry.
+Generation checks every sample against both the material and water refractive
+index domains; an uncovered material/band pair is omitted from that material's
+band axis and is reported unavailable. Unsupported ranges are never endpoint
+clamped or filled at band centers. The current checked-in snapshots have not
+yet been regenerated with those band fields, so the native modal interface
+reports their bands unavailable until the pinned source and generator
+environment are used to regenerate them.
+
 GEOSmie is Apache-2.0, with its pymiecoated component carrying the MIT license.
 Refractive indices are distributed with the pinned GEOSmie source. See
 [`GEOSmie/LICENSE`](https://github.com/bbakernoaa/GEOSmie/blob/c535388356c7e8982ead98deeebff33985254f9c/LICENSE)

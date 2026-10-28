@@ -49,6 +49,8 @@ struct SpeciesCurve {
   std::string citation;       ///< provenance citation string.
   bool modal_particle_resolved = false; ///< Authoritative generated metadata.
   bool physical_wavelengths = false;    ///< False for legacy RRTMG band IDs.
+  /// Independent modal RRTMG axis and band-averaged mass coefficients.
+  std::vector<double> band_source_ids, band_bext, band_bsca, band_bbck, band_g;
   double modal_density = 0, modal_kappa = 0; ///< Valid when particle-resolved.
   std::vector<double> radius; ///< [n_radius] representative radii [m] (may be
                               ///< non-strict: modes).

@@ -1,0 +1,15 @@
+# @format exaero_mie_v1
+# @source_version modal-native-band-fixture-v1
+# @citation Deterministic software-test native RRTMG band coefficients
+# @species MODAL_TEST
+# @axis radius m 2 1e-10 1e-4
+# @axis rh fraction 2 0 0.98
+# @axis lambda band_index 2 3 5
+# @field bext radius,rh,lambda m^2 (kg dry mass)^-1 8
+10 20 10 20 10 20 10 20
+# @field bsca radius,rh,lambda m^2 (kg dry mass)^-1 8
+5 8 5 8 5 8 5 8
+# @field bbck radius,rh,lambda m^2 (kg dry mass)^-1 sr^-1 8
+0.1 0.2 0.1 0.2 0.1 0.2 0.1 0.2
+# @field g radius,rh,lambda 1 8
+0.4 0.6 0.4 0.6 0.4 0.6 0.4 0.6

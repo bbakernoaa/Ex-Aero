@@ -288,3 +288,22 @@ C entry points (all CCPP `errmsg`/`errflg`): `exaero_set_attribute_activation`,
 `bind(c)` parameters `exaero_CAT_*`, `exaero_STATUS_*`, `exaero_PMOM_ELEMENT_STRIDE`, and the
 microphysical/spectral index constants. Arrays cross the boundary flat with explicit dims;
 `value_out` is written only on an available/interpolated status (FR-008).
+
+### F. Native radiation-band optics
+
+The additive C++ `IOpticsBandCoupling` extension exposes `RRTMG_30` independently
+of `computeOptics`' physical-wavelength axis. Its metadata contains 14 shortwave
+and 16 longwave bands; selections are zero-based positions in that metadata and
+map to GEOSmie source IDs 1–30. An empty selection requests all bands. The output
+shape is `(cell, level, selected_band, optical_index)`, with column AOT values
+stored at level zero. Metadata and per-component availability are queried before
+use. A calculation fails atomically if any positive-mass component lacks a
+requested native band; zero-mass unsupported components do not block it.
+
+This extension is currently native C++ only. GOCART reads the pinned native
+RRTMG source tables. Generic modal accepts explicit `band_index` tables or a
+registered internal-mixture band provider. Its checked-in generated modal tables
+remain physical-wavelength-only, so they report `NotInSource` for RRTMG bands
+until validated band products are generated. MAM4xx delegates to its configured
+generic-modal optics package and reports that package's component availability.
+No physical wavelength is converted to a band index or vice versa.

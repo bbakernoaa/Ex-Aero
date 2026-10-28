@@ -207,6 +207,38 @@ void Mam4xxPackage::computeOptics(const EnvironmentalStateView &env,
   optics_->computeOptics(env, input, wavelengths, output);
 }
 
+std::vector<RadiationBandInfo>
+Mam4xxPackage::radiationBandInfo(RadiationBandSet set) const {
+  require(bool(optics_), "enable optics with treatment: component_tables");
+  const auto *coupling=dynamic_cast<const IOpticsBandCoupling *>(optics_.get());
+  require(coupling,"configured optics package has no native band interface");
+  return coupling->radiationBandInfo(set);
+}
+
+std::vector<RadiationBandComponentAvailability>
+Mam4xxPackage::bandAvailability(RadiationBandSet set) const {
+  require(bool(optics_), "enable optics with treatment: component_tables");
+  const auto *coupling=dynamic_cast<const IOpticsBandCoupling *>(optics_.get());
+  require(coupling,"configured optics package has no native band interface");
+  return coupling->bandAvailability(set);
+}
+
+void Mam4xxPackage::computeBandOptics(const EnvironmentalStateView &env,
+                                     const View3D<const double> &state,
+                                     RadiationBandSet set,
+                                     std::span<const int> band_indices,
+                                     View4D<double> &output) {
+  validate(env,state);
+  require(bool(optics_), "enable optics with treatment: component_tables");
+  auto *coupling=dynamic_cast<IOpticsBandCoupling *>(optics_.get());
+  require(coupling,"configured optics package has no native band interface");
+  const View3D<const double> input(
+      state.data_handle(),state.extent(0),state.extent(1),
+      include_cloudborne_ ? mam4xx_layout::fields
+                          : mam4xx_layout::fields_per_phase);
+  coupling->computeBandOptics(env,input,set,band_indices,output);
+}
+
 void Mam4xxPackage::computeCCN(const EnvironmentalStateView &env,
                                const View3D<const double> &state,
                                const View1D<const double> &supersaturations,

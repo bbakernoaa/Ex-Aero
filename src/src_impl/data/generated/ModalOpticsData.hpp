@@ -3,7 +3,9 @@
 namespace exaero::mie_modal {
 struct Curve { const char *label; int nr, nh, nl; double density, kappa;
 const double *radius, *rh, *wavelength, *rEff, *particle_mass,
-*qext, *qsca, *bext, *bsca, *bbck, *g, *refreal, *refimag; };
+*qext, *qsca, *bext, *bsca, *bbck, *g, *refreal, *refimag;
+int nb = 0; const double *band_source_ids = nullptr, *band_bext = nullptr,
+*band_bsca = nullptr, *band_bbck = nullptr, *band_g = nullptr; };
 inline constexpr char source_version[] = "GEOSmie/c535388356c7e8982ead98deeebff33985254f9c";
 inline constexpr char recipe_sha256[] = "3c3570a959242636c99945d2860bca875fc469c2440f8bbe3f730b6abb6767c6";
 inline constexpr char citation[] = "GEOSmie (Kemppinen et al. 2022); OPAC refractive indices; EX-aero modal recipe";
@@ -97339,10 +97341,10 @@ inline constexpr double MODAL_NI_refimag[] = {
   4.8456310997815195e-07, 4.5673920854576465e-06, 0.00010006701979739124, 6.5515607449009769e-09,
   1.9345787762341115e-09, 5.0653876736624504e-07, 4.6612324366932819e-06, 0.00010343004326445059,
 };
-inline constexpr Curve curves[] = {{"MODAL_SU", 256, 6, 5, 1700.0, 0.507, MODAL_SU_radius, MODAL_SU_rh, MODAL_SU_wavelength, MODAL_SU_rEff, MODAL_SU_particle_mass, MODAL_SU_qext, MODAL_SU_qsca, MODAL_SU_bext, MODAL_SU_bsca, MODAL_SU_bbck, MODAL_SU_g, MODAL_SU_refreal, MODAL_SU_refimag},
-{"MODAL_BC", 256, 6, 5, 1000.0, 0.0, MODAL_BC_radius, MODAL_BC_rh, MODAL_BC_wavelength, MODAL_BC_rEff, MODAL_BC_particle_mass, MODAL_BC_qext, MODAL_BC_qsca, MODAL_BC_bext, MODAL_BC_bsca, MODAL_BC_bbck, MODAL_BC_g, MODAL_BC_refreal, MODAL_BC_refimag},
-{"MODAL_OC", 256, 6, 5, 1800.0, 0.14, MODAL_OC_radius, MODAL_OC_rh, MODAL_OC_wavelength, MODAL_OC_rEff, MODAL_OC_particle_mass, MODAL_OC_qext, MODAL_OC_qsca, MODAL_OC_bext, MODAL_OC_bsca, MODAL_OC_bbck, MODAL_OC_g, MODAL_OC_refreal, MODAL_OC_refimag},
-{"MODAL_SS", 256, 6, 5, 2200.0, 1.16, MODAL_SS_radius, MODAL_SS_rh, MODAL_SS_wavelength, MODAL_SS_rEff, MODAL_SS_particle_mass, MODAL_SS_qext, MODAL_SS_qsca, MODAL_SS_bext, MODAL_SS_bsca, MODAL_SS_bbck, MODAL_SS_g, MODAL_SS_refreal, MODAL_SS_refimag},
-{"MODAL_DU", 256, 6, 5, 2650.0, 0.0, MODAL_DU_radius, MODAL_DU_rh, MODAL_DU_wavelength, MODAL_DU_rEff, MODAL_DU_particle_mass, MODAL_DU_qext, MODAL_DU_qsca, MODAL_DU_bext, MODAL_DU_bsca, MODAL_DU_bbck, MODAL_DU_g, MODAL_DU_refreal, MODAL_DU_refimag},
-{"MODAL_NI", 256, 6, 5, 1725.0, 0.67, MODAL_NI_radius, MODAL_NI_rh, MODAL_NI_wavelength, MODAL_NI_rEff, MODAL_NI_particle_mass, MODAL_NI_qext, MODAL_NI_qsca, MODAL_NI_bext, MODAL_NI_bsca, MODAL_NI_bbck, MODAL_NI_g, MODAL_NI_refreal, MODAL_NI_refimag}};
+inline constexpr Curve curves[] = {{"MODAL_SU", 256, 6, 5, 1700.0, 0.507, MODAL_SU_radius, MODAL_SU_rh, MODAL_SU_wavelength, MODAL_SU_rEff, MODAL_SU_particle_mass, MODAL_SU_qext, MODAL_SU_qsca, MODAL_SU_bext, MODAL_SU_bsca, MODAL_SU_bbck, MODAL_SU_g, MODAL_SU_refreal, MODAL_SU_refimag, 0, nullptr, nullptr, nullptr, nullptr, nullptr},
+{"MODAL_BC", 256, 6, 5, 1000.0, 0.0, MODAL_BC_radius, MODAL_BC_rh, MODAL_BC_wavelength, MODAL_BC_rEff, MODAL_BC_particle_mass, MODAL_BC_qext, MODAL_BC_qsca, MODAL_BC_bext, MODAL_BC_bsca, MODAL_BC_bbck, MODAL_BC_g, MODAL_BC_refreal, MODAL_BC_refimag, 0, nullptr, nullptr, nullptr, nullptr, nullptr},
+{"MODAL_OC", 256, 6, 5, 1800.0, 0.14, MODAL_OC_radius, MODAL_OC_rh, MODAL_OC_wavelength, MODAL_OC_rEff, MODAL_OC_particle_mass, MODAL_OC_qext, MODAL_OC_qsca, MODAL_OC_bext, MODAL_OC_bsca, MODAL_OC_bbck, MODAL_OC_g, MODAL_OC_refreal, MODAL_OC_refimag, 0, nullptr, nullptr, nullptr, nullptr, nullptr},
+{"MODAL_SS", 256, 6, 5, 2200.0, 1.16, MODAL_SS_radius, MODAL_SS_rh, MODAL_SS_wavelength, MODAL_SS_rEff, MODAL_SS_particle_mass, MODAL_SS_qext, MODAL_SS_qsca, MODAL_SS_bext, MODAL_SS_bsca, MODAL_SS_bbck, MODAL_SS_g, MODAL_SS_refreal, MODAL_SS_refimag, 0, nullptr, nullptr, nullptr, nullptr, nullptr},
+{"MODAL_DU", 256, 6, 5, 2650.0, 0.0, MODAL_DU_radius, MODAL_DU_rh, MODAL_DU_wavelength, MODAL_DU_rEff, MODAL_DU_particle_mass, MODAL_DU_qext, MODAL_DU_qsca, MODAL_DU_bext, MODAL_DU_bsca, MODAL_DU_bbck, MODAL_DU_g, MODAL_DU_refreal, MODAL_DU_refimag, 0, nullptr, nullptr, nullptr, nullptr, nullptr},
+{"MODAL_NI", 256, 6, 5, 1725.0, 0.67, MODAL_NI_radius, MODAL_NI_rh, MODAL_NI_wavelength, MODAL_NI_rEff, MODAL_NI_particle_mass, MODAL_NI_qext, MODAL_NI_qsca, MODAL_NI_bext, MODAL_NI_bsca, MODAL_NI_bbck, MODAL_NI_g, MODAL_NI_refreal, MODAL_NI_refimag, 0, nullptr, nullptr, nullptr, nullptr, nullptr}};
 } // namespace exaero::mie_modal

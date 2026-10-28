@@ -37,6 +37,10 @@ struct Table {
   std::string source_label, source_version, citation;
   std::vector<double> radius, rh, wavelength, extinction, scattering, asymmetry,
       backscatter;
+  /// Independent source-band axis and coefficients. Empty means this table
+  /// contains no native band data; wavelength nodes are never substituted.
+  std::vector<double> band_source_ids, band_extinction, band_scattering,
+      band_asymmetry, band_backscatter;
 };
 /// @brief Opaque Kokkos configuration owner; release before Kokkos
 /// finalization.

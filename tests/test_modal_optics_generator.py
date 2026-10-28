@@ -55,6 +55,41 @@ def test_eager_and_lazy_optical_generation(lazy: bool) -> None:
     xr.testing.assert_allclose(result.compute(), eager)
 
 
+def test_native_rRTMG_band_average_and_extreme_lw_support() -> None:
+    """Band mean uses 100 uniform-wavenumber samples and never extrapolates."""
+    radius = xr.DataArray([1e-7], dims="radius")
+    growth = xr.DataArray([1.0], dims="rh")
+    refractive = np.array([[0.1, 1.5, 0.01], [200.0, 1.5, 0.01]])
+    result = GENERATOR.band_optical_coefficients(
+        radius, growth, 1800.0, refractive, refractive, Sphere
+    )
+    assert result.band_available.sel(band=3).item()
+    assert not result.band_available.sel(band=15).item()
+    assert np.isnan(result.band_bext.sel(band=15)).all()
+    wavenumber = np.linspace(4000, 4650, 100)
+    wavelength = 1e-2 / wavenumber
+    x = 2 * np.pi * 1e-7 / wavelength
+    expected = np.mean(2 * x * np.pi * (1e-7) ** 2 /
+                       (4 * np.pi / 3 * 1800 * (1e-7) ** 3))
+    assert result.band_bext.sel(band=3).item() == pytest.approx(expected)
+    assert result.band_g.sel(band=3).item() == pytest.approx(0.4)
+
+
+def test_modal_band_metadata_is_pinned_and_wavelength_interpolation_is_bounded() -> None:
+    recipe = json.loads((ROOT / "tools/modal_optics/manifest.json").read_text())[
+        "band_average"
+    ]
+    assert recipe["set"] == "RRTMG_30"
+    assert recipe["definition_commit"] == "fbc507e6edc09cf6dcaa5a1d88d63ffda4f30652"
+    assert len(recipe["bands"]) == 30
+    assert recipe["bands"][12]["lower_wavenumber_cm1"] == 38000
+    source = np.array([[0.25, 1.5, .01], [40., 1.6, .02]])
+    assert not GENERATOR.band_coverage(np.array([0.2e-6, 0.25e-6]), source,
+                                       np.array([[.2, 1.3, .01], [30000, 1.2, .01]]))
+    with pytest.raises(ValueError, match="exceeds source domain"):
+        GENERATOR.interpolate_index(np.array([0.2e-6]), source, "dust")
+
+
 @pytest.mark.parametrize("snapshot", ["modal_mie_v1.nc", "mam4xx_mie_v1.nc"])
 def test_generated_snapshot_rayleigh_limit_and_mass_normalization(
     snapshot: str,
@@ -115,7 +150,16 @@ def test_mam4xx_recipe_and_header() -> None:
         if m["label"] in ("MAM4_SOA", "MAM4_POM", "MAM4_MOM"):
             assert m["surrogate"] and "surrogate" in m["description"]
     with xr.open_dataset(ROOT / "tools/modal_optics/mam4xx_mie_v1.nc") as ds:
-        assert json.loads(ds.attrs["recipe"]) == recipe
+        snapshot_recipe = json.loads(ds.attrs["recipe"])
+        # The checked-in MAM4xx snapshot predates native bands. Keep asserting
+        # its exact legacy recipe while allowing a regenerated snapshot to
+        # carry the newly pinned band recipe.
+        assert {k: v for k, v in recipe.items() if k != "band_average"} == snapshot_recipe
+        if "band_average" in snapshot_recipe:
+            assert snapshot_recipe == recipe
+            assert ds.band.size == 30
+        else:
+            assert "band" not in ds.coords
     GENERATOR.bake(
         ROOT / "tools/modal_optics/mam4xx_mie_v1.nc",
         ROOT / "src/src_impl/data/generated/Mam4xxOpticsData.hpp",

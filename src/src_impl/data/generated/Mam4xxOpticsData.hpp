@@ -3,7 +3,9 @@
 namespace exaero::mie_mam4xx {
 struct Curve { const char *label; int nr, nh, nl; double density, kappa;
 const double *radius, *rh, *wavelength, *rEff, *particle_mass,
-*qext, *qsca, *bext, *bsca, *bbck, *g, *refreal, *refimag; };
+*qext, *qsca, *bext, *bsca, *bbck, *g, *refreal, *refimag;
+int nb = 0; const double *band_source_ids = nullptr, *band_bext = nullptr,
+*band_bsca = nullptr, *band_bbck = nullptr, *band_g = nullptr; };
 inline constexpr char source_version[] = "GEOSmie/c535388356c7e8982ead98deeebff33985254f9c";
 inline constexpr char recipe_sha256[] = "ad717fe26d6fae9ff55d3d3e709a4f5410a57364fe07d2eece4759135bbfc0b5";
 inline constexpr char citation[] = "GEOSmie (Kemppinen et al. 2022); OPAC refractive indices; EX-aero modal recipe";
@@ -141897,11 +141899,11 @@ inline constexpr double MAM4_MOM_refimag[] = {
   3.6550517241379439e-07, 3.1197080459770184e-06, 6.9293392476489e-05, 1.7152372881355943e-08,
   1.3326101694915265e-08, 4.4485000000000171e-07, 3.9361276836158294e-06, 8.7819094298921408e-05,
 };
-inline constexpr Curve curves[] = {{"MAM4_SOA", 320, 6, 5, 1000, 0.1, MAM4_SOA_radius, MAM4_SOA_rh, MAM4_SOA_wavelength, MAM4_SOA_rEff, MAM4_SOA_particle_mass, MAM4_SOA_qext, MAM4_SOA_qsca, MAM4_SOA_bext, MAM4_SOA_bsca, MAM4_SOA_bbck, MAM4_SOA_g, MAM4_SOA_refreal, MAM4_SOA_refimag},
-{"MAM4_SO4", 320, 6, 5, 1770, 0.507, MAM4_SO4_radius, MAM4_SO4_rh, MAM4_SO4_wavelength, MAM4_SO4_rEff, MAM4_SO4_particle_mass, MAM4_SO4_qext, MAM4_SO4_qsca, MAM4_SO4_bext, MAM4_SO4_bsca, MAM4_SO4_bbck, MAM4_SO4_g, MAM4_SO4_refreal, MAM4_SO4_refimag},
-{"MAM4_POM", 320, 6, 5, 1000, 1e-10, MAM4_POM_radius, MAM4_POM_rh, MAM4_POM_wavelength, MAM4_POM_rEff, MAM4_POM_particle_mass, MAM4_POM_qext, MAM4_POM_qsca, MAM4_POM_bext, MAM4_POM_bsca, MAM4_POM_bbck, MAM4_POM_g, MAM4_POM_refreal, MAM4_POM_refimag},
-{"MAM4_BC", 320, 6, 5, 1700, 1e-10, MAM4_BC_radius, MAM4_BC_rh, MAM4_BC_wavelength, MAM4_BC_rEff, MAM4_BC_particle_mass, MAM4_BC_qext, MAM4_BC_qsca, MAM4_BC_bext, MAM4_BC_bsca, MAM4_BC_bbck, MAM4_BC_g, MAM4_BC_refreal, MAM4_BC_refimag},
-{"MAM4_NACL", 320, 6, 5, 1900, 1.16, MAM4_NACL_radius, MAM4_NACL_rh, MAM4_NACL_wavelength, MAM4_NACL_rEff, MAM4_NACL_particle_mass, MAM4_NACL_qext, MAM4_NACL_qsca, MAM4_NACL_bext, MAM4_NACL_bsca, MAM4_NACL_bbck, MAM4_NACL_g, MAM4_NACL_refreal, MAM4_NACL_refimag},
-{"MAM4_DST", 320, 6, 5, 2600, 0.14, MAM4_DST_radius, MAM4_DST_rh, MAM4_DST_wavelength, MAM4_DST_rEff, MAM4_DST_particle_mass, MAM4_DST_qext, MAM4_DST_qsca, MAM4_DST_bext, MAM4_DST_bsca, MAM4_DST_bbck, MAM4_DST_g, MAM4_DST_refreal, MAM4_DST_refimag},
-{"MAM4_MOM", 320, 6, 5, 1601, 0.1, MAM4_MOM_radius, MAM4_MOM_rh, MAM4_MOM_wavelength, MAM4_MOM_rEff, MAM4_MOM_particle_mass, MAM4_MOM_qext, MAM4_MOM_qsca, MAM4_MOM_bext, MAM4_MOM_bsca, MAM4_MOM_bbck, MAM4_MOM_g, MAM4_MOM_refreal, MAM4_MOM_refimag}};
+inline constexpr Curve curves[] = {{"MAM4_SOA", 320, 6, 5, 1000, 0.1, MAM4_SOA_radius, MAM4_SOA_rh, MAM4_SOA_wavelength, MAM4_SOA_rEff, MAM4_SOA_particle_mass, MAM4_SOA_qext, MAM4_SOA_qsca, MAM4_SOA_bext, MAM4_SOA_bsca, MAM4_SOA_bbck, MAM4_SOA_g, MAM4_SOA_refreal, MAM4_SOA_refimag, 0, nullptr, nullptr, nullptr, nullptr, nullptr},
+{"MAM4_SO4", 320, 6, 5, 1770, 0.507, MAM4_SO4_radius, MAM4_SO4_rh, MAM4_SO4_wavelength, MAM4_SO4_rEff, MAM4_SO4_particle_mass, MAM4_SO4_qext, MAM4_SO4_qsca, MAM4_SO4_bext, MAM4_SO4_bsca, MAM4_SO4_bbck, MAM4_SO4_g, MAM4_SO4_refreal, MAM4_SO4_refimag, 0, nullptr, nullptr, nullptr, nullptr, nullptr},
+{"MAM4_POM", 320, 6, 5, 1000, 1e-10, MAM4_POM_radius, MAM4_POM_rh, MAM4_POM_wavelength, MAM4_POM_rEff, MAM4_POM_particle_mass, MAM4_POM_qext, MAM4_POM_qsca, MAM4_POM_bext, MAM4_POM_bsca, MAM4_POM_bbck, MAM4_POM_g, MAM4_POM_refreal, MAM4_POM_refimag, 0, nullptr, nullptr, nullptr, nullptr, nullptr},
+{"MAM4_BC", 320, 6, 5, 1700, 1e-10, MAM4_BC_radius, MAM4_BC_rh, MAM4_BC_wavelength, MAM4_BC_rEff, MAM4_BC_particle_mass, MAM4_BC_qext, MAM4_BC_qsca, MAM4_BC_bext, MAM4_BC_bsca, MAM4_BC_bbck, MAM4_BC_g, MAM4_BC_refreal, MAM4_BC_refimag, 0, nullptr, nullptr, nullptr, nullptr, nullptr},
+{"MAM4_NACL", 320, 6, 5, 1900, 1.16, MAM4_NACL_radius, MAM4_NACL_rh, MAM4_NACL_wavelength, MAM4_NACL_rEff, MAM4_NACL_particle_mass, MAM4_NACL_qext, MAM4_NACL_qsca, MAM4_NACL_bext, MAM4_NACL_bsca, MAM4_NACL_bbck, MAM4_NACL_g, MAM4_NACL_refreal, MAM4_NACL_refimag, 0, nullptr, nullptr, nullptr, nullptr, nullptr},
+{"MAM4_DST", 320, 6, 5, 2600, 0.14, MAM4_DST_radius, MAM4_DST_rh, MAM4_DST_wavelength, MAM4_DST_rEff, MAM4_DST_particle_mass, MAM4_DST_qext, MAM4_DST_qsca, MAM4_DST_bext, MAM4_DST_bsca, MAM4_DST_bbck, MAM4_DST_g, MAM4_DST_refreal, MAM4_DST_refimag, 0, nullptr, nullptr, nullptr, nullptr, nullptr},
+{"MAM4_MOM", 320, 6, 5, 1601, 0.1, MAM4_MOM_radius, MAM4_MOM_rh, MAM4_MOM_wavelength, MAM4_MOM_rEff, MAM4_MOM_particle_mass, MAM4_MOM_qext, MAM4_MOM_qsca, MAM4_MOM_bext, MAM4_MOM_bsca, MAM4_MOM_bbck, MAM4_MOM_g, MAM4_MOM_refreal, MAM4_MOM_refimag, 0, nullptr, nullptr, nullptr, nullptr, nullptr}};
 } // namespace exaero::mie_mam4xx

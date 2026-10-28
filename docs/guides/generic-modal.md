@@ -122,6 +122,18 @@ Coverage: dry particle radii 0.1 nm–50 um; RH nodes 0, 0.5, 0.8, 0.9, 0.95, 0.
 wavelengths 355, 550, 870, 1064, and 1640 nm. RH interpolation is linear and
 spectral interpolation is linear in log wavelength. These starter visible/NIR
 curves are **not RRTMG band averages** or a full thermal-infrared dataset.
+
+Native RRTMG calculations use the separate C++ `IOpticsBandCoupling` surface;
+they do not pass band IDs through `computeOptics`. Query `bandAvailability()`
+for each mode/material before requesting bands. The committed generic-modal and
+MAM4xx snapshots are still wavelength-only and therefore report
+`NotInSource` for RRTMG bands. A component table can supply a separate
+`@axis lambda band_index` coordinate with native `bext`, `bsca`, `bbck`, and `g`
+values, or an internally mixed mode can register an
+`IModalBandOpticsProvider`. The package never substitutes wavelength nodes or
+band centers for missing source data, and positive-mass unsupported requests
+leave the caller's output unchanged. Modal band tables are not yet included in
+the checked-in generated snapshots.
 The smallest tabulated radii extend interpolation support and should not be
 interpreted as validation of continuum sphere physics at molecular scales.
 

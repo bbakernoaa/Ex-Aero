@@ -374,6 +374,14 @@ void MieTableStore::ensure_modal_loaded() {
       c.physical_wavelengths = true;
       c.modal_density = a.density;
       c.modal_kappa = a.kappa;
+      if (a.nb > 0) {
+        c.band_source_ids = slice(a.band_source_ids, a.nb);
+        const int n = a.nr * a.nh * a.nb;
+        c.band_bext = slice(a.band_bext, n);
+        c.band_bsca = slice(a.band_bsca, n);
+        c.band_bbck = slice(a.band_bbck, n);
+        c.band_g = slice(a.band_g, n);
+      }
       const auto put = [&](const char *name, const double *values, int rank) {
         CurveField field;
         field.rank = rank;
@@ -762,6 +770,26 @@ void MieTableStore::resample_radius(SpeciesCurve &c,
       }
     }
     (void)nOld;
+  }
+  if (!c.band_source_ids.empty()) {
+    const int nB=static_cast<int>(c.band_source_ids.size());
+    const auto resample_band=[&](std::vector<double> &values) {
+      const auto source=values;
+      values.assign(nodes.size()*static_cast<std::size_t>(nH)*nB,0.);
+      for (int r=0;r<static_cast<int>(nodes.size());++r) {
+        int r0,r1; double wr;
+        locate(oldR,nodes[static_cast<std::size_t>(r)],r0,r1,wr);
+        for (int h=0;h<nH;++h)
+          for (int b=0;b<nB;++b) {
+            const auto i0=(static_cast<std::size_t>(r0)*nH+h)*nB+b;
+            const auto i1=(static_cast<std::size_t>(r1)*nH+h)*nB+b;
+            const auto out=(static_cast<std::size_t>(r)*nH+h)*nB+b;
+            values[out]=source[i0]+wr*(source[i1]-source[i0]);
+          }
+      }
+    };
+    resample_band(c.band_bext); resample_band(c.band_bsca);
+    resample_band(c.band_bbck); resample_band(c.band_g);
   }
 }
 
