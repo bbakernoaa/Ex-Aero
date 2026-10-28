@@ -97,6 +97,7 @@ add_library(
   modal/ModalCoupling_C.cpp
   gocart/GocartPackage.cpp
   gocart/BulkRemoval.cpp
+  gocart/BulkCloudIce.cpp
   gocart/BulkRemoval_C.cpp
   utils/LutGenerator.cpp
   utils/DubovikSpheroidDatabase.cpp

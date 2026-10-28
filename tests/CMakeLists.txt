@@ -19,6 +19,10 @@ add_executable(exaero_bulk_removal_test test_bulk_removal.cpp)
 target_link_libraries(exaero_bulk_removal_test PRIVATE exaero)
 target_compile_features(exaero_bulk_removal_test PRIVATE cxx_std_23)
 add_test(NAME ExaeroBulkRemoval COMMAND exaero_bulk_removal_test)
+add_executable(exaero_bulk_cloud_ice_test test_bulk_cloud_ice.cpp)
+target_link_libraries(exaero_bulk_cloud_ice_test PRIVATE exaero)
+target_compile_features(exaero_bulk_cloud_ice_test PRIVATE cxx_std_23)
+add_test(NAME ExaeroBulkCloudIce COMMAND exaero_bulk_cloud_ice_test)
 target_link_libraries(exaero_modal_test PRIVATE exaero Catch2::Catch2)
 target_compile_definitions(
   exaero_modal_test
