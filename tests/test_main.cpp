@@ -2828,6 +2828,30 @@ void test_gocart_ccn() {
   assert(ccn_50ss >= ccn_10ss);
   assert(ccn_10ss >= ccn_05ss);
 
+  // Zero hygroscopicity must remain inactive even at a high queried
+  // supersaturation; the denominator guard is not a physical activation path.
+  exaero::GocartPackage nonhygroscopic;
+  nonhygroscopic.initialize(R"(
+    species:
+      - name: NonHygroscopic
+        dry_density: 1800
+        molecular_weight: 98
+        dry_particle_diameter: 0.2e-6
+        hygroscopicity: 0
+        lognormal_sigma: 1.5
+        lognormal_dg: 0.15e-6
+        refractive_index_real: 1.43
+        refractive_index_imag: 1.0e-8
+  )");
+  double dry_state_raw[1] = {1.0e-6};
+  exaero::View3D<const double> dry_state(dry_state_raw, 1, 1, 1);
+  double high_ss_raw[1] = {0.02};
+  exaero::View1D<const double> high_ss(high_ss_raw, 1);
+  double dry_ccn_raw[1] = {-1};
+  exaero::View4D<double> dry_ccn(dry_ccn_raw, 1, 1, 1, 1);
+  nonhygroscopic.computeCCN(env, dry_state, high_ss, dry_ccn);
+  assert(dry_ccn_raw[0] == 0);
+
   std::cout << "GOCART Cloud CCN Activation Spectra: PASS" << std::endl;
 }
 

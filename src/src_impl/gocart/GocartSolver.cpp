@@ -393,6 +393,8 @@ void run_gocart_diagnostics(GocartSolverState *state, int num_cells,
 
           if (mass_conc <= 0.0)
             continue;
+          if (params.hygroscopicity <= 0.0)
+            continue;
 
           // 0. GEOSmie table-backed microphysics when this species is
           // curve-bound, growth factor and wet particle density are read
