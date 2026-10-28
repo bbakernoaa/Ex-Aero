@@ -79,8 +79,9 @@ while LW consumers request absorption.
 ### Separate coordinate spaces
 
 `computeOptics` remains the physical-wavelength operation. Add an additive
-band operation that takes a `RadiationBandSet` identifier and returns the
-complete band axis in canonical order. The first supported identifier is
+band operation that takes a `RadiationBandSet` identifier and an ordered list
+of zero-based band indices. Callers may request SW, LW, or selected bands; an
+empty selection requests the complete axis in canonical order. The first supported identifier is
 `RRTMG_30`; its entries are zero-based at the API boundary and map explicitly
 to source IDs 1–30. Metadata reports 14 SW bands, 16 LW bands, the source
 convention/version, and the band edges/centers where available. No implicit
@@ -140,8 +141,8 @@ that gap rather than introduce a surrogate value.
 - Add a per-species availability query that reports supported bands and
   source/provenance without requiring a state-dependent optical calculation.
 - Band calculations aggregate species, so they fail atomically if any
-  species with positive mass in the requested cell/level lacks the requested
-  band data. On failure the caller's output remains untouched. No partial
+  species with positive mass in any requested cell/level lacks data for any
+  requested band. On failure the caller's output remains untouched. No partial
   aggregate is returned; callers can query availability before a calculation
   to resolve the configured species set.
 - Add an additive virtual/interface path that does not change the existing
