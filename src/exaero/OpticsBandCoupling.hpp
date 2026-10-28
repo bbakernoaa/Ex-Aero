@@ -10,6 +10,12 @@ namespace exaero {
 class IOpticsBandCoupling {
 public:
   virtual ~IOpticsBandCoupling() = default;
+  /// Metadata order follows the selected set. Empty band_indices selects all
+  /// bands; otherwise indices are zero-based positions in that set and retain
+  /// caller order. Output shape is (cell, level, selected-band, optical-index)
+  /// over host-accessible View4D storage. Layer diagnostics occupy every
+  /// level; column AOT values are stored at level zero. Implementations
+  /// validate the complete request first and leave output unchanged on error.
   virtual std::vector<RadiationBandInfo>
   radiationBandInfo(RadiationBandSet) const = 0;
   virtual std::vector<RadiationBandComponentAvailability>

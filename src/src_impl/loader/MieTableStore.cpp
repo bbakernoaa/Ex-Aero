@@ -596,7 +596,8 @@ void MieTableStore::apply_runtime_file(const std::string &path) {
       curves_[c.species_name] = std::move(c);
     } else {
       SpeciesCurve &dst = it->second;
-      const bool axis_replaced = !c.lambda.empty() && c.lambda != dst.lambda;
+      const bool axis_replaced = !c.lambda.empty() &&
+          (c.lambda != dst.lambda || c.physical_wavelengths != dst.physical_wavelengths);
       if (axis_replaced) {
         // A file that redefines the spectral axis (e.g. a monochromatic set
         // over the baked RRTMG bands) replaces it; any baked rank-3 field the
@@ -604,6 +605,7 @@ void MieTableStore::apply_runtime_file(const std::string &path) {
         // the new one, so we drop those stale fields first (the file's
         // set wins on the new axis).
         dst.lambda = c.lambda;
+        dst.physical_wavelengths = c.physical_wavelengths;
         for (auto fit = dst.fields.begin(); fit != dst.fields.end();) {
           if (fit->second.rank == 3 && !c.fields.count(fit->first)) {
             fit = dst.fields.erase(fit);
@@ -613,6 +615,7 @@ void MieTableStore::apply_runtime_file(const std::string &path) {
         }
       } else if (!c.lambda.empty()) {
         dst.lambda = c.lambda;
+        dst.physical_wavelengths = c.physical_wavelengths;
       }
       // The polarized axes ride with the pmom field: merge them too, and
       // drop a stale baked rank-5 field when the new axes change its shape.

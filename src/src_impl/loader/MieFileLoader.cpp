@@ -208,6 +208,21 @@ std::vector<SpeciesCurve> MieFileLoader::load(const std::string &path) {
                   : (name == "pol")    ? cur->pol
                                        : cur->moment;
       dst = std::move(vals);
+      if (name == "lambda") {
+        if (units == "m")
+          cur->physical_wavelengths = true;
+        else if (units == "um" || units == "micron" || units == "microns") {
+          cur->physical_wavelengths = true;
+          for (double &lambda : cur->lambda) lambda *= 1.e-6;
+        } else if (units == "nm") {
+          cur->physical_wavelengths = true;
+          for (double &lambda : cur->lambda) lambda *= 1.e-9;
+        }
+        else if (units == "band_index" || units == "band_id")
+          cur->physical_wavelengths = false;
+        else
+          loader_fatal("unsupported lambda axis units '" + units + "'");
+      }
       if (name == "radius") {
         cur->radius_resamplable =
             cur->radius.size() >= 2 &&
@@ -215,7 +230,6 @@ std::vector<SpeciesCurve> MieFileLoader::load(const std::string &path) {
                                [](double a, double b) { return !(b > a); }) ==
                 cur->radius.end();
       }
-      (void)units; // axis units validated by the store's curve validation
     } else if (kw == "@field") {
       if (!cur)
         loader_fatal("@field outside @species block");

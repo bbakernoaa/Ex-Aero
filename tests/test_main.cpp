@@ -1198,6 +1198,9 @@ activation:
 
   exaero::GocartPackage package;
   package.initialize(yaml);
+  // Runtime wavelength-axis units must survive the merge and enable the
+  // physical wavelength solver path.
+  assert(package.get_species_params(0).spec_physical_wavelengths);
 
   double v = 0.0;
   exaero::ProvenanceInfo p{};

@@ -1,3 +1,6 @@
+#ifdef NDEBUG
+#undef NDEBUG
+#endif
 #include <exaero/AerosolIndices.hpp>
 #include <exaero/Environment.hpp>
 #include <exaero/OpticsBandCoupling.hpp>
@@ -81,13 +84,17 @@ int main() {
   }
   // Unsupported positive mass throws before touching any output element.
   {
-    GocartConfig cfg; cfg.species.push_back(species("BR"));
+    GocartConfig cfg; cfg.species={species("DU"),species("BR")};
     GocartPackage pkg; pkg.initialize(cfg);
-    double t=280., p=90000., rho=1., rh=.5, dz=120., mass=1.e-6;
-    auto env=environment(t,p,rho,rh,dz); View3D<const double> state(&mass,1,1,1);
-    std::vector<double> result(optical_indices::NUM_OPTICS,123.); View4D<double> out(result.data(),1,1,1,optical_indices::NUM_OPTICS);
+    double t[]={280.,280.}, p[]={90000.,90000.}, rho[]={1.,1.}, rh[]={.5,.5}, dz[]={120.,120.};
+    double mass[]={1.e-6,0.,0.,1.e-6};
+    EnvironmentalStateView env{View2D<const double>(t,2,1),View2D<const double>(p,2,1),
+      View2D<const double>(rho,2,1),View2D<const double>(rh,2,1),View2D<const double>(dz,2,1)};
+    View3D<const double> state(mass,2,1,2);
+    int selected[]={2};
+    std::vector<double> result(2*optical_indices::NUM_OPTICS,123.); View4D<double> out(result.data(),2,1,1,optical_indices::NUM_OPTICS);
     bool threw=false;
-    try { opticsBandCoupling(pkg).computeBandOptics(env,state,RadiationBandSet::RRTMG_30,{},out); }
+    try { opticsBandCoupling(pkg).computeBandOptics(env,state,RadiationBandSet::RRTMG_30,selected,out); }
     catch (const std::runtime_error &) { threw=true; }
     assert(threw); for (double x:result) assert(x==123.);
   }
@@ -113,6 +120,21 @@ int main() {
     int selected[]={2}; double result[optical_indices::NUM_OPTICS]{}; View4D<double> out(result,1,1,1,optical_indices::NUM_OPTICS);
     opticsBandCoupling(pkg).computeBandOptics(env,state,RadiationBandSet::RRTMG_30,selected,out);
     assert(std::isfinite(out(0,0,0,optical_indices::EXTINCTION_COEFF)) && result[0]>0.);
+  }
+  // A second package initialization must not mutate the first package's curves.
+  {
+    GocartConfig first; first.species.push_back(species("DU"));
+    GocartPackage pkg_a; pkg_a.initialize(first);
+    GocartConfig second; second.species.push_back(species("SS"));
+    GocartPackage pkg_b; pkg_b.initialize(second);
+    const auto a = opticsBandCoupling(pkg_a).bandAvailability(RadiationBandSet::RRTMG_30);
+    assert(a.size()==1 && a[0].status[1]==RadiationBandStatus::Available);
+    double t=280., p=90000., rho=1., rh=.5, dz=120., mass=1.e-6;
+    auto env=environment(t,p,rho,rh,dz); View3D<const double> state(&mass,1,1,1);
+    int selected[]={2}; double result[optical_indices::NUM_OPTICS]{};
+    View4D<double> out(result,1,1,1,optical_indices::NUM_OPTICS);
+    opticsBandCoupling(pkg_a).computeBandOptics(env,state,RadiationBandSet::RRTMG_30,selected,out);
+    assert(result[optical_indices::EXTINCTION_COEFF]>0.);
   }
   finalize_environment();
 }

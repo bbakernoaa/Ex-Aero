@@ -68,6 +68,11 @@ public:
   }
 
 private:
+  struct NativeBandCurve {
+    std::vector<double> rh, lambda, bext, bsca, bbck, g;
+    int solver_radius_node = -1, n_radius = 0;
+    bool physical_wavelengths = false;
+  };
   int num_species_ = 0; ///< Active species count (state axis length).
   std::vector<GocartSpeciesParams> h_species_params_;
   std::vector<std::string>
@@ -78,6 +83,9 @@ private:
   /// @brief Host staging for the single flat curve pool uploaded to device
   /// once at init (zero H2D in the timestep loop).
   std::vector<double> h_curve_pool_;
+  /// Native band tables are copied at initialization so another package
+  /// cannot mutate this package's view through MieTableStore's singleton.
+  std::vector<NativeBandCurve> native_band_curves_;
 
   /// @brief Opaque device-resident solver state (Kokkos views, pool
   /// pointer). Lifetime managed by this package; forward-declared to

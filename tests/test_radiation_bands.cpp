@@ -1,3 +1,6 @@
+#ifdef NDEBUG
+#undef NDEBUG
+#endif
 #include <exaero/OpticsBandCoupling.hpp>
 #include <exaero/RadiationBands.hpp>
 #include <cassert>

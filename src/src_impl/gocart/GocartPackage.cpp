@@ -565,6 +565,8 @@ void GocartPackage::initializeImpl(PackageConfigReader &reader) {
   ice_rules_.reserve(num_species_);
   h_curve_pool_
       .clear(); // rebuilt from scratch each initialize (single H2D upload)
+  native_band_curves_.clear();
+  native_band_curves_.resize(static_cast<std::size_t>(num_species_));
 
   for (int i = 0; i < num_species_; ++i) {
     // Extract the dynamic species name
@@ -645,6 +647,26 @@ void GocartPackage::initializeImpl(PackageConfigReader &reader) {
   }
   if (!curve_configs.empty())
     setSpeciesCurveConfig(curve_configs);
+
+  // Preserve native band data with the package: MieTableStore is process-wide
+  // and may be reset when a second package initializes.
+  for (int i = 0; i < num_species_; ++i) {
+    const SpeciesCurve *curve = store.find_curve(species_names_[i]);
+    if (!curve) continue;
+    auto &owned = native_band_curves_[static_cast<std::size_t>(i)];
+    owned.rh = curve->rh;
+    owned.lambda = curve->lambda;
+    owned.solver_radius_node = curve->solver_radius_node;
+    owned.n_radius = curve->n_radius();
+    owned.physical_wavelengths = curve->physical_wavelengths;
+    auto copy_field = [&](const char *name, std::vector<double> &dst) {
+      const auto it = curve->fields.find(name);
+      if (it != curve->fields.end() && it->second.rank == 3)
+        dst = it->second.values;
+    };
+    copy_field("bext", owned.bext); copy_field("bsca", owned.bsca);
+    copy_field("bbck", owned.bbck); copy_field("g", owned.g);
+  }
 
   // --- Device-resident microphysical curves append each
   // curve-bound species' {rh, growth_factor, wet_particle_density} block to
@@ -950,44 +972,36 @@ void GocartPackage::computeOptics(const EnvironmentalStateView &env,
 }
 
 namespace {
-constexpr std::array<const char *, 4> kRequiredBandFields = {
-    "bext", "bsca", "bbck", "g"};
-
-bool has_native_band(const SpeciesCurve *curve, int source_id) {
+template <typename Curve>
+bool has_native_band(const Curve *curve, int source_id) {
   if (!curve || curve->physical_wavelengths || source_id < 1 ||
       source_id > 30 || curve->solver_radius_node < 0 ||
-      curve->solver_radius_node >= curve->n_radius())
+      curve->solver_radius_node >= curve->n_radius)
     return false;
   const auto axis = std::find(curve->lambda.begin(), curve->lambda.end(),
                               static_cast<double>(source_id));
   if (axis == curve->lambda.end())
     return false;
-  const auto n_values = static_cast<std::size_t>(curve->n_radius()) *
-                        static_cast<std::size_t>(curve->n_rh()) *
-                        static_cast<std::size_t>(curve->n_lambda());
-  for (const char *name : kRequiredBandFields) {
-    const auto it = curve->fields.find(name);
-    if (it == curve->fields.end() || it->second.rank != 3 ||
-        it->second.values.size() != n_values)
-      return false;
-  }
-  return true;
+  const auto n_values = static_cast<std::size_t>(curve->n_radius) *
+                        curve->rh.size() * curve->lambda.size();
+  return curve->bext.size() == n_values && curve->bsca.size() == n_values &&
+         curve->bbck.size() == n_values && curve->g.size() == n_values;
 }
 
-bool sample_native_band(const SpeciesCurve &curve, const char *field_name,
+template <typename Curve>
+bool sample_native_band(const Curve &curve, const std::vector<double> &field,
                         double rh, int source_id, double &value) {
   if (!has_native_band(&curve, source_id))
     return false;
-  const auto field = curve.fields.find(field_name);
-  if (field == curve.fields.end())
+  if (!std::isfinite(rh) || field.empty())
     return false;
   const auto lambda = std::find(curve.lambda.begin(), curve.lambda.end(),
                                 static_cast<double>(source_id));
   const std::size_t l = static_cast<std::size_t>(lambda - curve.lambda.begin());
-  const int n_h = curve.n_rh();
-  const int n_l = curve.n_lambda();
+  const int n_h = static_cast<int>(curve.rh.size());
+  const int n_l = static_cast<int>(curve.lambda.size());
   const int r = curve.solver_radius_node;
-  const double query_rh = std::clamp(rh, 0.0, 0.99);
+  const double query_rh = std::clamp(rh, curve.rh.front(), curve.rh.back());
   auto upper = std::upper_bound(curve.rh.begin(), curve.rh.end(), query_rh);
   int h0 = upper == curve.rh.begin()
                ? 0
@@ -998,7 +1012,7 @@ bool sample_native_band(const SpeciesCurve &curve, const char *field_name,
   const double rh1 = curve.rh[static_cast<std::size_t>(h1)];
   const double w = h0 == h1 ? 0.0 : (query_rh - rh0) / (rh1 - rh0);
   const auto at = [&](int h) {
-    return field->second.values[(static_cast<std::size_t>(r) * n_h + h) * n_l + l];
+    return field[(static_cast<std::size_t>(r) * n_h + h) * n_l + l];
   };
   const double a = at(h0), b = at(h1);
   value = a + w * (b - a);
@@ -1015,7 +1029,6 @@ GocartPackage::radiationBandInfo(RadiationBandSet set) const {
 std::vector<RadiationBandComponentAvailability>
 GocartPackage::bandAvailability(RadiationBandSet set) const {
   const auto bands = exaero::radiationBandInfo(set);
-  auto &store = MieTableStore::instance();
   std::vector<RadiationBandComponentAvailability> result;
   result.reserve(species_names_.size());
   for (std::size_t i = 0; i < species_names_.size(); ++i) {
@@ -1023,7 +1036,7 @@ GocartPackage::bandAvailability(RadiationBandSet set) const {
     component.component_index = i;
     component.component_name = species_names_[i];
     component.status.reserve(bands.size());
-    const SpeciesCurve *curve = store.find_curve(species_names_[i]);
+    const NativeBandCurve *curve = &native_band_curves_[i];
     for (const auto &band : bands)
       component.status.push_back(has_native_band(curve, band.source_id)
                                      ? RadiationBandStatus::Available
@@ -1062,12 +1075,6 @@ void GocartPackage::computeBandOptics(const EnvironmentalStateView &env,
   const auto slot = [=](std::size_t c, std::size_t l, std::size_t b, int q) {
     return c + nc * (l + nl * (b + nb * static_cast<std::size_t>(q)));
   };
-  auto &store = MieTableStore::instance();
-  std::vector<const SpeciesCurve *> curves;
-  curves.reserve(species_names_.size());
-  for (const auto &name : species_names_)
-    curves.push_back(store.find_curve(name));
-
   for (std::size_t c = 0; c < nc; ++c) {
     for (std::size_t l = 0; l < nl; ++l) {
       const double rh = env.relative_humidity(c, l);
@@ -1077,14 +1084,14 @@ void GocartPackage::computeBandOptics(const EnvironmentalStateView &env,
           const double mass = state(c, l, static_cast<std::size_t>(s));
           if (!(mass > 0.0))
             continue;
-          const auto *curve = curves[static_cast<std::size_t>(s)];
+          const auto *curve = &native_band_curves_[static_cast<std::size_t>(s)];
           double bext = 0.0, bsca = 0.0, bbck = 0.0, g = 0.0;
           const int source_id = selected[b].source_id;
           if (!curve || !has_native_band(curve, source_id) ||
-              !sample_native_band(*curve, "bext", rh, source_id, bext) ||
-              !sample_native_band(*curve, "bsca", rh, source_id, bsca) ||
-              !sample_native_band(*curve, "bbck", rh, source_id, bbck) ||
-              !sample_native_band(*curve, "g", rh, source_id, g))
+              !sample_native_band(*curve, curve->bext, rh, source_id, bext) ||
+              !sample_native_band(*curve, curve->bsca, rh, source_id, bsca) ||
+              !sample_native_band(*curve, curve->bbck, rh, source_id, bbck) ||
+              !sample_native_band(*curve, curve->g, rh, source_id, g))
             throw std::runtime_error("positive-mass GOCART species lacks native RRTMG band data: " +
                                      species_names_[static_cast<std::size_t>(s)]);
           const double species_ext = mass * bext;
@@ -1114,12 +1121,12 @@ void GocartPackage::computeBandOptics(const EnvironmentalStateView &env,
         for (int s = 0; s < num_species_; ++s) {
           const double mass = state(c,l,static_cast<std::size_t>(s));
           if (!(mass > 0.0)) continue;
-          const auto *curve = curves[static_cast<std::size_t>(s)];
+          const auto *curve = &native_band_curves_[static_cast<std::size_t>(s)];
           double bext=0., bsca=0.;
           const int source_id=selected[b].source_id;
-          sample_native_band(*curve, "bext", env.relative_humidity(c,l),
+          sample_native_band(*curve, curve->bext, env.relative_humidity(c,l),
                              source_id, bext);
-          sample_native_band(*curve, "bsca", env.relative_humidity(c,l),
+          sample_native_band(*curve, curve->bsca, env.relative_humidity(c,l),
                              source_id, bsca);
           if (h_species_params_[static_cast<std::size_t>(s)].dry_particle_diameter <= 1.0e-6) {
             sums[2] += mass*bext*dz; sums[3] += mass*bsca*dz;
