@@ -16,6 +16,7 @@
 /// upload -> device views addressed by the offsets/extents recorded in
 /// each GocartSpeciesParams. Timestep kernels never touch host memory.
 #include <exaero/IAerosolPackage.hpp>
+#include <exaero/OpticsBandCoupling.hpp>
 #include <exaero/BulkRemoval.hpp>
 #include <exaero/CloudIceCoupling.hpp>
 #include <gocart/GocartSpeciesParams.hpp>
@@ -34,7 +35,8 @@ struct GocartSolverState;
 /// for the per-routine parameter and unit contracts overridden here.
 class GocartPackage : public IAerosolPackage,
                       public IBulkRemovalMetadata,
-                      public IBulkCloudIceMetadata {
+                      public IBulkCloudIceMetadata,
+                      public IOpticsBandCoupling {
 public:
   /// @brief Fixed dry size parameters for a configured bulk material.
   BulkSpeciesSize bulkSpeciesSize(std::size_t species_index) const override {
@@ -134,6 +136,16 @@ public:
                      const View1D<const double> &wavelengths,
                      View4D<double> &optics_out) override;
 
+  std::vector<RadiationBandInfo>
+  radiationBandInfo(RadiationBandSet set) const override;
+  std::vector<RadiationBandComponentAvailability>
+  bandAvailability(RadiationBandSet set) const override;
+  void computeBandOptics(const EnvironmentalStateView &env,
+                         const View3D<const double> &state,
+                         RadiationBandSet set,
+                         std::span<const int> band_indices,
+                         View4D<double> &optics_out) override;
+
   /// @brief Device Köhler CCN-activation kernel launch (see contract).
   /// @see IAerosolPackage::computeCCN.
   void computeCCN(const EnvironmentalStateView &env,
@@ -194,6 +206,9 @@ public:
 
   /// @brief Active species count (test accessor).
   int get_num_species() const { return num_species_; }
+  unsigned capabilities() const override {
+    return IAerosolPackage::capabilities() | OpticsBands;
+  }
   /// @brief Host species parameter block for @p i (test accessor).
   GocartSpeciesParams get_species_params(int i) const {
     return h_species_params_[i];

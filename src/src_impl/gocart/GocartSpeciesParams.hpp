@@ -77,11 +77,11 @@ struct GocartSpeciesParams {
   int solver_radius_node =
       0; ///< Size-bin the hot path queries (clamped to n_micro_radius-1).
 
-  // Table-backed spectral curves for the optics hot path.
-  // When spec_offset >= 0 the optics kernels read mass extinction,
-  // single-scattering albedo and asymmetry from the GEOSmie curve at the solver
-  // radius node, interpolating linearly in RH and linear-in-log over the band
-  // coordinate (the RRTMG lambda axis), replacing the ADT analytical solver.
+  // Table-backed physical-wavelength curves for computeOptics.
+  // When spec_offset >= 0 and spec_physical_wavelengths is true, the optics
+  // kernels read mass extinction, single-scattering albedo and asymmetry from
+  // the GEOSmie curve at the solver radius node. RRTMG band-ID axes are only
+  // consumed by computeBandOptics and never enter wavelength interpolation.
   // Block layout at pool[spec_offset...]; the extents are data (never
   // literals):
   // [0, nH) rh axis
@@ -94,7 +94,8 @@ struct GocartSpeciesParams {
       -1; ///< Index into the device curve pool; -1 => no spectral curve.
   int n_spec_radius = 0; ///< Radius-bin extent of the spectral block.
   int n_spec_rh = 0;     ///< RH-axis extent of the spectral block.
-  int n_spec_lambda = 0; ///< Band-axis extent of the spectral block.
+  int n_spec_lambda = 0; ///< Spectral-coordinate extent of the table block.
+  bool spec_physical_wavelengths = false; ///< Axis is metres, never RRTMG IDs.
 
   // Table-backed polarized phase-function moments for the device hot path.
   // When pmom_offset >= 0 the rank-5 moment

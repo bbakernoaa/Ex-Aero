@@ -20,6 +20,9 @@
 /// kernel, throwing an @c "EX-aero ... Error:" diagnostic rather than
 /// reading out of bounds.
 #include <cmath>
+#include <algorithm>
+#include <array>
+#include <limits>
 #include <CloudIceYaml.hpp>
 #include <gocart/GocartPackage.hpp>
 #include <loader/MieTableStore.hpp>
@@ -677,12 +680,10 @@ void GocartPackage::initializeImpl(PackageConfigReader &reader) {
   }
 
   // --- Device-resident spectral curves append each
-  // curve-bound
-  // species' {rh, lambda, bext, ssa, g} block so the optics kernels read
-  // mass extinction / albedo / asymmetry from the table (RH-linear,
-  // log-band) instead of the ADT analytical solver. Extents are data; a
-  // band coordinate outside the curve lambda domain declines to the
-  // fallback path (never a silent wrong value). ---
+  // curve-bound species' {rh, lambda, bext, ssa, g} block so the physical-
+  // wavelength optics path can interpolate curves that declare wavelength
+  // coordinates. RRTMG source-band tables are kept separate and consumed only
+  // by computeBandOptics. Extents are data and no axis is converted implicitly.
   for (int i = 0; i < num_species_; ++i) {
     const SpeciesCurve *c = store.find_curve(species_names_[i]);
     if (!c)
@@ -710,6 +711,7 @@ void GocartPackage::initializeImpl(PackageConfigReader &reader) {
     p.n_spec_radius = nR;
     p.n_spec_rh = nH;
     p.n_spec_lambda = nL;
+    p.spec_physical_wavelengths = c->physical_wavelengths;
     h_curve_pool_.insert(h_curve_pool_.end(), c->rh.begin(), c->rh.end());
     h_curve_pool_.insert(h_curve_pool_.end(), c->lambda.begin(),
                          c->lambda.end());
@@ -945,6 +947,204 @@ void GocartPackage::computeOptics(const EnvironmentalStateView &env,
   run_gocart_optics(solver_state_, num_cells, num_levels, num_bands,
                     num_species_, wavelengths_ptr, rh_ptr, thick_ptr, state_ptr,
                     optics_ptr);
+}
+
+namespace {
+constexpr std::array<const char *, 4> kRequiredBandFields = {
+    "bext", "bsca", "bbck", "g"};
+
+bool has_native_band(const SpeciesCurve *curve, int source_id) {
+  if (!curve || curve->physical_wavelengths || source_id < 1 ||
+      source_id > 30 || curve->solver_radius_node < 0 ||
+      curve->solver_radius_node >= curve->n_radius())
+    return false;
+  const auto axis = std::find(curve->lambda.begin(), curve->lambda.end(),
+                              static_cast<double>(source_id));
+  if (axis == curve->lambda.end())
+    return false;
+  const auto n_values = static_cast<std::size_t>(curve->n_radius()) *
+                        static_cast<std::size_t>(curve->n_rh()) *
+                        static_cast<std::size_t>(curve->n_lambda());
+  for (const char *name : kRequiredBandFields) {
+    const auto it = curve->fields.find(name);
+    if (it == curve->fields.end() || it->second.rank != 3 ||
+        it->second.values.size() != n_values)
+      return false;
+  }
+  return true;
+}
+
+bool sample_native_band(const SpeciesCurve &curve, const char *field_name,
+                        double rh, int source_id, double &value) {
+  if (!has_native_band(&curve, source_id))
+    return false;
+  const auto field = curve.fields.find(field_name);
+  if (field == curve.fields.end())
+    return false;
+  const auto lambda = std::find(curve.lambda.begin(), curve.lambda.end(),
+                                static_cast<double>(source_id));
+  const std::size_t l = static_cast<std::size_t>(lambda - curve.lambda.begin());
+  const int n_h = curve.n_rh();
+  const int n_l = curve.n_lambda();
+  const int r = curve.solver_radius_node;
+  const double query_rh = std::clamp(rh, 0.0, 0.99);
+  auto upper = std::upper_bound(curve.rh.begin(), curve.rh.end(), query_rh);
+  int h0 = upper == curve.rh.begin()
+               ? 0
+               : static_cast<int>(upper - curve.rh.begin()) - 1;
+  h0 = std::clamp(h0, 0, n_h - 1);
+  const int h1 = std::min(h0 + 1, n_h - 1);
+  const double rh0 = curve.rh[static_cast<std::size_t>(h0)];
+  const double rh1 = curve.rh[static_cast<std::size_t>(h1)];
+  const double w = h0 == h1 ? 0.0 : (query_rh - rh0) / (rh1 - rh0);
+  const auto at = [&](int h) {
+    return field->second.values[(static_cast<std::size_t>(r) * n_h + h) * n_l + l];
+  };
+  const double a = at(h0), b = at(h1);
+  value = a + w * (b - a);
+  return std::isfinite(value);
+}
+} // namespace
+
+std::vector<RadiationBandInfo>
+GocartPackage::radiationBandInfo(RadiationBandSet set) const {
+  const auto &metadata = exaero::radiationBandInfo(set);
+  return {metadata.begin(), metadata.end()};
+}
+
+std::vector<RadiationBandComponentAvailability>
+GocartPackage::bandAvailability(RadiationBandSet set) const {
+  const auto bands = exaero::radiationBandInfo(set);
+  auto &store = MieTableStore::instance();
+  std::vector<RadiationBandComponentAvailability> result;
+  result.reserve(species_names_.size());
+  for (std::size_t i = 0; i < species_names_.size(); ++i) {
+    RadiationBandComponentAvailability component;
+    component.component_index = i;
+    component.component_name = species_names_[i];
+    component.status.reserve(bands.size());
+    const SpeciesCurve *curve = store.find_curve(species_names_[i]);
+    for (const auto &band : bands)
+      component.status.push_back(has_native_band(curve, band.source_id)
+                                     ? RadiationBandStatus::Available
+                                     : RadiationBandStatus::NotInSource);
+    result.push_back(std::move(component));
+  }
+  return result;
+}
+
+void GocartPackage::computeBandOptics(const EnvironmentalStateView &env,
+                                     const View3D<const double> &state,
+                                     RadiationBandSet set,
+                                     std::span<const int> band_indices,
+                                     View4D<double> &optics_out) {
+  if (!solver_state_)
+    throw std::runtime_error("GocartPackage not initialized");
+  const auto selected = selectRadiationBands(set, band_indices);
+  const std::size_t nc = state.extent(0), nl = state.extent(1);
+  if (state.extent(2) != static_cast<std::size_t>(num_species_) ||
+      env.temperature.extent(0) != nc || env.temperature.extent(1) != nl ||
+      env.pressure.extent(0) != nc || env.pressure.extent(1) != nl ||
+      env.air_density.extent(0) != nc || env.air_density.extent(1) != nl ||
+      env.relative_humidity.extent(0) != nc ||
+      env.relative_humidity.extent(1) != nl ||
+      env.layer_thickness.extent(0) != nc ||
+      env.layer_thickness.extent(1) != nl || optics_out.extent(0) != nc ||
+      optics_out.extent(1) != nl || optics_out.extent(2) != selected.size() ||
+      optics_out.extent(3) != optical_indices::NUM_OPTICS)
+    throw std::invalid_argument("GOCART band optics buffer dimensions do not match request");
+
+  const std::size_t nb = selected.size();
+  if (nc && nl && nb > std::numeric_limits<std::size_t>::max() / nc / nl /
+                              optical_indices::NUM_OPTICS)
+    throw std::length_error("GOCART band optics output is too large");
+  std::vector<double> scratch(nc * nl * nb * optical_indices::NUM_OPTICS, 0.0);
+  const auto slot = [=](std::size_t c, std::size_t l, std::size_t b, int q) {
+    return c + nc * (l + nl * (b + nb * static_cast<std::size_t>(q)));
+  };
+  auto &store = MieTableStore::instance();
+  std::vector<const SpeciesCurve *> curves;
+  curves.reserve(species_names_.size());
+  for (const auto &name : species_names_)
+    curves.push_back(store.find_curve(name));
+
+  for (std::size_t c = 0; c < nc; ++c) {
+    for (std::size_t l = 0; l < nl; ++l) {
+      const double rh = env.relative_humidity(c, l);
+      for (std::size_t b = 0; b < nb; ++b) {
+        double ext = 0.0, sca = 0.0, back = 0.0, weighted_g = 0.0;
+        for (int s = 0; s < num_species_; ++s) {
+          const double mass = state(c, l, static_cast<std::size_t>(s));
+          if (!(mass > 0.0))
+            continue;
+          const auto *curve = curves[static_cast<std::size_t>(s)];
+          double bext = 0.0, bsca = 0.0, bbck = 0.0, g = 0.0;
+          const int source_id = selected[b].source_id;
+          if (!curve || !has_native_band(curve, source_id) ||
+              !sample_native_band(*curve, "bext", rh, source_id, bext) ||
+              !sample_native_band(*curve, "bsca", rh, source_id, bsca) ||
+              !sample_native_band(*curve, "bbck", rh, source_id, bbck) ||
+              !sample_native_band(*curve, "g", rh, source_id, g))
+            throw std::runtime_error("positive-mass GOCART species lacks native RRTMG band data: " +
+                                     species_names_[static_cast<std::size_t>(s)]);
+          const double species_ext = mass * bext;
+          const double species_sca = mass * bsca;
+          ext += species_ext;
+          sca += species_sca;
+          back += mass * bbck;
+          weighted_g += species_sca * g;
+        }
+        scratch[slot(c,l,b,optical_indices::EXTINCTION_COEFF)] = ext;
+        scratch[slot(c,l,b,optical_indices::SCATTERING_COEFF)] = sca;
+        scratch[slot(c,l,b,optical_indices::BACKSCATTER_COEFF)] = back;
+        scratch[slot(c,l,b,optical_indices::ASYMMETRY_FACTOR)] = sca > 0.0 ? weighted_g / sca : 0.0;
+        scratch[slot(c,l,b,optical_indices::LIDAR_BACKSCATTER)] = back;
+      }
+    }
+  }
+  // Recompute column accumulations separately so level zero receives the
+  // complete vertical integral while all output remains scratch-only.
+  for (std::size_t c = 0; c < nc; ++c) {
+    for (std::size_t b = 0; b < nb; ++b) {
+      double sums[6]{};
+      for (std::size_t l = 0; l < nl; ++l) {
+        const double dz = env.layer_thickness(c, l);
+        sums[0] += scratch[slot(c,l,b,optical_indices::EXTINCTION_COEFF)] * dz;
+        sums[1] += scratch[slot(c,l,b,optical_indices::SCATTERING_COEFF)] * dz;
+        for (int s = 0; s < num_species_; ++s) {
+          const double mass = state(c,l,static_cast<std::size_t>(s));
+          if (!(mass > 0.0)) continue;
+          const auto *curve = curves[static_cast<std::size_t>(s)];
+          double bext=0., bsca=0.;
+          const int source_id=selected[b].source_id;
+          sample_native_band(*curve, "bext", env.relative_humidity(c,l),
+                             source_id, bext);
+          sample_native_band(*curve, "bsca", env.relative_humidity(c,l),
+                             source_id, bsca);
+          if (h_species_params_[static_cast<std::size_t>(s)].dry_particle_diameter <= 1.0e-6) {
+            sums[2] += mass*bext*dz; sums[3] += mass*bsca*dz;
+          }
+          if (h_species_params_[static_cast<std::size_t>(s)].dry_particle_diameter <= 2.5e-6) {
+            sums[4] += mass*bext*dz; sums[5] += mass*bsca*dz;
+          }
+        }
+      }
+      if (nl > 0) {
+        const int q[] = {optical_indices::EXTINCTION_AOT,
+                         optical_indices::SCATTERING_AOT,
+                         optical_indices::FINE_MODE_EXTINCTION_AOT,
+                         optical_indices::FINE_MODE_SCATTERING_AOT,
+                         optical_indices::PM2_5_EXTINCTION_AOT,
+                         optical_indices::PM2_5_SCATTERING_AOT};
+        for (int i=0;i<6;++i) scratch[slot(c,0,b,q[i])] = sums[i];
+      }
+    }
+  }
+  for (std::size_t b = 0; b < nb; ++b)
+    for (std::size_t l = 0; l < nl; ++l)
+      for (std::size_t c = 0; c < nc; ++c)
+        for (int q = 0; q < optical_indices::NUM_OPTICS; ++q)
+          optics_out(c,l,b,q) = scratch[slot(c,l,b,q)];
 }
 
 // @copydoc GocartPackage::computeCCN

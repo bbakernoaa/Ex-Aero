@@ -102,25 +102,24 @@ KOKKOS_INLINE_FUNCTION void curve_locate(const double *axis, int n, double v,
   }
 }
 
-// GEOSmie table spectral read mass extinction [m^2/kg],
-// single-scattering albedo and asymmetry at (rh, band coordinate) for the
-// species' solver radius node. Block layout documented in GocartSpeciesParams;
-// the extents are data, never literals. Returns false when the requested band
-// coordinate lies OUTSIDE the curve's declared lambda domain (e.g. a physical
-// wavelength in metres against a band-index axis): the caller must then fall
-// back to its analytical path rather than silently clamping to an unrelated
-// band (fail-loud intent, no silent wrong physics).
+// GEOSmie table spectral read of mass extinction [m^2/kg], single-scattering
+// albedo and asymmetry at a physical wavelength in metres for the species'
+// solver radius node. RRTMG band axes are rejected explicitly and served by
+// computeBandOptics instead. Returns false outside a physical source domain so
+// the existing analytical fallback semantics remain unchanged.
 KOKKOS_INLINE_FUNCTION bool
 species_spectral_table(const GocartSpeciesParams &params, const double *pool,
-                       double rh, double band, double &ext_per_mass,
+                       double rh, double wavelength_m, double &ext_per_mass,
                        double &ssa_v, double &g_v) {
+  if (!params.spec_physical_wavelengths)
+    return false;
   const double *sb = pool + params.spec_offset;
   const int nH = params.n_spec_rh;
   const int nL = params.n_spec_lambda;
   const int nR = params.n_spec_radius;
   const double *srh = sb;
   const double *slam = sb + nH;
-  if (!(band >= slam[0] && band <= slam[nL - 1]))
+  if (!(wavelength_m >= slam[0] && wavelength_m <= slam[nL - 1]))
     return false;
   const long nfield = static_cast<long>(nR) * nH * nL;
   const double *f_ext = sb + nH + nL;
@@ -134,7 +133,7 @@ species_spectral_table(const GocartSpeciesParams &params, const double *pool,
   int h0, h1, l0, l1;
   double wh, wl;
   curve_locate(srh, nH, rh, 0, h0, h1, wh);
-  curve_locate(slam, nL, band, 1, l0, l1, wl);
+  curve_locate(slam, nL, wavelength_m, 1, l0, l1, wl);
   const long base = static_cast<long>(rnode) * nH;
   const double e00 = f_ext[(base + h0) * nL + l0];
   const double e10 = f_ext[(base + h1) * nL + l0];
