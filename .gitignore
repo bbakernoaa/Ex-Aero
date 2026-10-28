@@ -84,6 +84,7 @@ ENV/
 
 # --- AI specs ---
 .superpowers/
+.worktrees/
 .specify/
 specs/
 docs/specs/
