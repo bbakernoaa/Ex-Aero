@@ -32,8 +32,8 @@ while LW consumers request absorption.
 - Add a separately named band-indexed operation for a named band set, starting
   with the source-backed RRTMG 30-band set: 14 shortwave followed by 16
   longwave bands.
-- Make band metadata, ordering, and SW/LW partition queryable and stable at
-  the C++/C/Fortran boundary.
+- Make band metadata, ordering, SW/LW partition, and per-species availability
+  queryable and stable at the C++/C/Fortran boundary.
 - Use native GEOSmie band averages for the bulk species that have them.
 - Extend generic modal optics to provide both wavelength and SW/LW band
   products using documented material and spectral assumptions.
@@ -104,10 +104,10 @@ wavelength operation uses only curves that declare physical wavelength
 coordinates; when a request is outside a curve's domain, keep the established
 explicit fallback/error semantics and never reinterpret band IDs as metres.
 
-The bulk backend's treatment of species without native RRTMG tables must be
-explicit in per-band status output. The legacy RH-only lookup and ADT path
-remain available to the physical-wavelength operation; they are not an
-automatic substitute for missing RRTMG data.
+The bulk backend's treatment of species without native RRTMG tables is
+explicit through per-species band-availability queries. The legacy RH-only
+lookup and ADT path remain available to the physical-wavelength operation;
+they are not an automatic substitute for missing RRTMG data.
 
 ### Generic modal backend
 
@@ -137,6 +137,13 @@ that gap rather than introduce a surrogate value.
 
 - Add Kokkos-free band-set and band metadata definitions in the public C++
   interface.
+- Add a per-species availability query that reports supported bands and
+  source/provenance without requiring a state-dependent optical calculation.
+- Band calculations aggregate species, so they fail atomically if any
+  species with positive mass in the requested cell/level lacks the requested
+  band data. On failure the caller's output remains untouched. No partial
+  aggregate is returned; callers can query availability before a calculation
+  to resolve the configured species set.
 - Add an additive virtual/interface path that does not change the existing
   `IAerosolPackage` vtable; use the established separate extension-interface
   pattern for modal coupling where appropriate.
@@ -152,8 +159,12 @@ that gap rather than introduce a surrogate value.
   SW/LW split and monotone/valid band boundaries.
 - Compare bulk band results against direct pinned-table values at exact RH and
   radius nodes, and test interpolation between nodes.
-- Test a backend/species without native band data and ensure it reports
-  unsupported without using ADT, a band center, or zero as a silent result.
+- Test a backend/species without native band data and ensure the availability
+  query reports unsupported without using ADT, a band center, or zero as a
+  silent result.
+- Test that a positive-mass unsupported species causes an atomic failure and
+  leaves the full output buffer unchanged; zero-mass unsupported species do
+  not block a calculation.
 - Test physical wavelength queries continue to use physical-coordinate data
   and reject/flag band-index coordinates as incompatible.
 - Test modal generated spectral coverage and band integration against
@@ -163,7 +174,8 @@ that gap rather than introduce a surrogate value.
   single-scattering albedo, asymmetry bounds, finite outputs, RH behavior,
   and per-band column AOT.
 - Exercise C++ and C/Fortran APIs for both paths and verify dimensions,
-  ordering, band metadata, unsupported statuses, and error propagation.
+  ordering, band metadata, per-species availability, atomic failure, and
+  error propagation.
 - Run deterministic snapshot generation checks and existing bulk/modal optics
   tests.
 
