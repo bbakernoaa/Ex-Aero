@@ -7,6 +7,7 @@
 // SpeciesCurveConfig from AttributeQuery.hpp ; there is no parallel
 // curve type.
 #include <exaero/AttributeQuery.hpp>
+#include <exaero/CloudIceConfig.hpp>
 #include <optional>
 #include <string>
 #include <vector>
@@ -46,6 +47,8 @@ struct GocartSpeciesConfig {
   std::optional<double> dry_radius_upper; ///< [m] optional physical size bound.
   std::optional<double>
       dry_effective_radius; ///< [m] optional physical effective radius.
+  std::vector<IceCategory> ice_categories; ///< Physical ice-candidate roles.
+  std::vector<IcePopulationRule> ice_rules; ///< Explicit size/eligibility rules.
 };
 
 /// @brief Top-level attribute activation block (parity with YAML

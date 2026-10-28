@@ -20,6 +20,7 @@
 /// kernel, throwing an @c "EX-aero ... Error:" diagnostic rather than
 /// reading out of bounds.
 #include <cmath>
+#include <CloudIceYaml.hpp>
 #include <gocart/GocartPackage.hpp>
 #include <loader/MieTableStore.hpp>
 #include <stdexcept>
@@ -55,6 +56,8 @@ struct PackageConfigReader {
   /// offsets filled by the implementation; see GocartSpeciesParams).
   virtual GocartSpeciesParams speciesScalars(
       int i) const = 0; // 8 doubles + has_optics_lookup; offsets filled by impl
+  virtual std::vector<IceCategory> iceCategories(int i) const = 0;
+  virtual std::vector<IcePopulationRule> iceRules(int i) const = 0;
   /// @brief True iff species @c i declares a legacy optics lookup table.
   virtual bool hasOpticsLookup(int i) const = 0;
   /// @brief Validated legacy optics lookup for species @c i (n>=2, strictly
@@ -206,6 +209,12 @@ public:
                                         p.dry_effective_radius > 0)))
       throw std::invalid_argument("FATAL ERROR: invalid physical bulk radius");
     return p;
+  }
+  std::vector<IceCategory> iceCategories(int i) const override {
+    return cloud_ice_yaml::categories(species_[i]["ice_categories"]);
+  }
+  std::vector<IcePopulationRule> iceRules(int i) const override {
+    return cloud_ice_yaml::rules(species_[i]["ice_rules"]);
   }
 
   bool hasOpticsLookup(int i) const override {
@@ -417,6 +426,12 @@ public:
       throw std::invalid_argument("FATAL ERROR: invalid physical bulk radius");
     return p;
   }
+  std::vector<IceCategory> iceCategories(int i) const override {
+    return config_.species[i].ice_categories;
+  }
+  std::vector<IcePopulationRule> iceRules(int i) const override {
+    return config_.species[i].ice_rules;
+  }
   bool hasOpticsLookup(int i) const override {
     return config_.species[i].optics_lookup.has_value();
   }
@@ -541,6 +556,10 @@ void GocartPackage::initializeImpl(PackageConfigReader &reader) {
   h_species_params_.reserve(num_species_);
   species_names_.clear();
   species_names_.reserve(num_species_);
+  ice_categories_.clear();
+  ice_categories_.reserve(num_species_);
+  ice_rules_.clear();
+  ice_rules_.reserve(num_species_);
   h_curve_pool_
       .clear(); // rebuilt from scratch each initialize (single H2D upload)
 
@@ -548,6 +567,11 @@ void GocartPackage::initializeImpl(PackageConfigReader &reader) {
     // Extract the dynamic species name
     std::string name = reader.speciesName(i);
     species_names_.push_back(name);
+    auto categories = reader.iceCategories(i);
+    auto rules = reader.iceRules(i);
+    validateIceConfiguration(categories, rules);
+    ice_categories_.push_back(std::move(categories));
+    ice_rules_.push_back(std::move(rules));
 
     GocartSpeciesParams p = reader.speciesScalars(i);
     const bool has_lower = p.dry_radius_lower != 0;

@@ -5,6 +5,7 @@
 /// @details History: 2026-10 generic modal backend. Input/output: in-memory
 /// configuration only. Usage: initializeModal(package, config).
 #include <exaero/AttributeQuery.hpp>
+#include <exaero/CloudIceConfig.hpp>
 #include <optional>
 #include <string>
 #include <vector>
@@ -41,6 +42,7 @@ struct ModalSpeciesConfig {
   double molecular_weight = 0; ///< kg/mol (explicitly SI).
   double hygroscopicity = 0;   ///< Kappa, dimensionless and nonnegative.
   std::optional<ModalTableBinding> optics;
+  std::vector<IceCategory> ice_categories; ///< Physical candidate roles.
 };
 
 /// @brief One fixed-width lognormal mode; radius evolves with mass and number.
@@ -55,6 +57,7 @@ struct ModalModeConfig {
   double deliquescence_rh = 0.8;    ///< Native water upper transition RH.
   std::optional<double> dry_geometric_radius_min;
   std::optional<double> dry_geometric_radius_max;
+  std::vector<IcePopulationRule> ice_rules; ///< Mode/category ice rules.
 };
 /// @brief Route returned material from one mode to another once.
 struct ModalResuspensionRoute {

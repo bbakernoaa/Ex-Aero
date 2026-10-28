@@ -4,6 +4,7 @@
 /// @details History: 2026-10. Input: YAML/in-memory host arrays; no file
 /// output.
 #include <algorithm>
+#include <CloudIceYaml.hpp>
 #include <exaero/ModalPresets.hpp>
 #include <exaero/PackageFactory.hpp>
 #ifdef EXAERO_ENABLE_MAM4XX
@@ -241,13 +242,15 @@ void ModalPackage::initialize(const std::string &yaml) {
       config.coagulation = root["coagulation"].as<bool>();
     for (const auto &n : root["species"]) {
       keys(n,
-           {"name", "density", "molecular_weight", "hygroscopicity", "optics"});
+           {"name", "density", "molecular_weight", "hygroscopicity", "optics",
+            "ice_categories"});
       ModalSpeciesConfig s;
       s.name = n["name"].as<std::string>();
       s.density = n["density"].as<double>();
       s.molecular_weight = n["molecular_weight"].as<double>();
       if (n["hygroscopicity"])
         s.hygroscopicity = n["hygroscopicity"].as<double>();
+      s.ice_categories = cloud_ice_yaml::categories(n["ice_categories"]);
       if (const auto o = n["optics"]) {
         keys(o, {"source", "kind", "geometric_std_dev", "data_file",
                  "radius_nodes", "wavelength_nodes", "overrides"});
@@ -294,7 +297,8 @@ void ModalPackage::initialize(const std::string &yaml) {
     for (const auto &n : root["modes"]) {
       keys(n, {"name", "geometric_radius", "geometric_std_dev", "species",
                "optical_treatment", "crystallization_rh", "deliquescence_rh",
-               "dry_geometric_radius_min", "dry_geometric_radius_max"});
+               "dry_geometric_radius_min", "dry_geometric_radius_max",
+               "ice_rules"});
       ModalModeConfig m;
       m.name = n["name"].as<std::string>();
       if (n["crystallization_rh"])
@@ -309,6 +313,7 @@ void ModalPackage::initialize(const std::string &yaml) {
         m.dry_geometric_radius_max = n["dry_geometric_radius_max"].as<double>();
       if (n["species"])
         m.species = n["species"].as<std::vector<std::string>>();
+      m.ice_rules = cloud_ice_yaml::rules(n["ice_rules"]);
       if (n["optical_treatment"]) {
         const auto treatment = n["optical_treatment"].as<std::string>();
         require(treatment == "component_tables" ||
@@ -332,7 +337,7 @@ void ModalPackage::initialize(const std::string &yaml) {
         const auto &n = entry.second;
         keys(n, {"geometric_radius", "geometric_std_dev", "crystallization_rh",
                  "deliquescence_rh", "dry_geometric_radius_min",
-                 "dry_geometric_radius_max"});
+                 "dry_geometric_radius_max", "ice_rules"});
         if (n["geometric_radius"])
           mode->geometric_radius = n["geometric_radius"].as<double>();
         if (n["geometric_std_dev"])
@@ -345,6 +350,8 @@ void ModalPackage::initialize(const std::string &yaml) {
           mode->dry_geometric_radius_min = n["dry_geometric_radius_min"].as<double>();
         if (n["dry_geometric_radius_max"])
           mode->dry_geometric_radius_max = n["dry_geometric_radius_max"].as<double>();
+        if (n["ice_rules"])
+          mode->ice_rules = cloud_ice_yaml::rules(n["ice_rules"]);
       }
     }
     for (const char *key : {"coagulation_routes", "transfer_routes"})
@@ -490,6 +497,7 @@ void ModalPackage::initializeModal(const ModalConfig &config) {
     require(positive(v.density) && positive(v.molecular_weight) &&
                 std::isfinite(v.hygroscopicity) && v.hygroscopicity >= 0,
             "invalid material properties");
+    validateIceConfiguration(v.ice_categories, {});
     p.density.push_back(v.density);
     p.kappa.push_back(v.hygroscopicity);
   }
@@ -535,6 +543,15 @@ void ModalPackage::initializeModal(const ModalConfig &config) {
     for (std::size_t s = 0; s < ns; ++s)
       p.allowed[m * ns + s] =
           v.species.empty() || permitted.count(config.species[s].name);
+    std::vector<IceCategory> available_ice_categories;
+    for (std::size_t s = 0; s < ns; ++s)
+      if (p.allowed[m * ns + s])
+        for (auto category : config.species[s].ice_categories)
+          if (std::find(available_ice_categories.begin(),
+                        available_ice_categories.end(),
+                        category) == available_ice_categories.end())
+            available_ice_categories.push_back(category);
+    validateIceConfiguration(available_ice_categories, v.ice_rules);
     for (std::size_t s = 0; s <= ns; ++s) {
       const auto name =
           (s == ns ? "num" : config.species[s].name) + "_" + v.name + "_i";

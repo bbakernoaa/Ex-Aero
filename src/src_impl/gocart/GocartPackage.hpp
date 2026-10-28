@@ -56,6 +56,8 @@ private:
   std::vector<std::string>
       species_names_; ///< Parsed config species labels, index-aligned with
                       ///< the state axis.
+  std::vector<std::vector<IceCategory>> ice_categories_;
+  std::vector<std::vector<IcePopulationRule>> ice_rules_;
   /// @brief Host staging for the single flat curve pool uploaded to device
   /// once at init (zero H2D in the timestep loop).
   std::vector<double> h_curve_pool_;
