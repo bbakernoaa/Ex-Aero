@@ -14,6 +14,8 @@
 
 #include <exaero/AerosolIndices.hpp> // diagnostic / optical index constants
 #include <exaero/AttributeQuery.hpp> // AttributeCategory, AttributeStatus, ProvenanceInfo,
+#include <exaero/CloudIceCoupling.hpp>
+#include <exaero/CloudIceCoupling_C.h>
 // SpeciesCurveConfig, *_indices namespaces (new surface)
 #include <exaero/Environment.hpp> // initialize/finalize_environment declarations
 #include <exaero/IAerosolPackage_C.h> // C entry points incl. exaero_get_moment_counts
@@ -59,6 +61,10 @@ constexpr int kMask =
     exaero::attribute_category_bit(exaero::AttributeCategory::PolarizedMoment);
 static_assert(kMask == (1 << 2),
               "attribute_category_bit builds (1 << category)");
+static_assert(EXAERO_CLOUD_ICE_PROPERTY_COUNT ==
+              exaero::cloud_ice_properties::COUNT);
+static_assert(EXAERO_CLOUD_ICE_CONFIGURED ==
+              static_cast<int>(exaero::CloudIceStatus::Configured));
 
 } // namespace
 
@@ -78,6 +84,10 @@ int main() {
   // well-formed.
   (void)&exaero_get_moment_counts;
   (void)&exaero_query_attribute;
+  (void)&exaero_bulk_cloud_ice;
+  (void)&exaero_modal_cloud_ice;
+  (void)&exaero_bulk_activation_fractions;
+  (void)&exaero_modal_activation_fractions;
 
   return (prov.num_pol == 6 && prov.num_moment == 3 &&
           cfg.radius_nodes.size() == 3)

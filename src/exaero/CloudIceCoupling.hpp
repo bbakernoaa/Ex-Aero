@@ -57,4 +57,18 @@ void modalCloudIce(IAerosolPackage &package, const EnvironmentalStateView &env,
                    View4D<double> &ambient_out, View4D<double> &cloudborne_out,
                    View3D<int> &ambient_status,
                    View3D<int> &cloudborne_status);
+
+/// @brief Interstitial number and mass activation fractions for each S.
+/// @details Output is (cell,level,species-or-mode,2*num_S), with number
+/// fraction at 2*S and mass fraction at 2*S+1. Cloudborne aerosol is excluded.
+void bulkActivationFractions(IAerosolPackage &package,
+                             const EnvironmentalStateView &env,
+                             const View3D<const double> &ambient,
+                             const View1D<const double> &supersaturation,
+                             View4D<double> &fractions);
+void modalActivationFractions(IAerosolPackage &package,
+                              const EnvironmentalStateView &env,
+                              const View3D<const double> &ambient,
+                              const View1D<const double> &supersaturation,
+                              View4D<double> &fractions);
 } // namespace exaero

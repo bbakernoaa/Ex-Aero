@@ -28,6 +28,21 @@ module exaero_interface
   integer(c_int), parameter :: exaero_BULK_RADIUS_UNAVAILABLE = 0
   integer(c_int), parameter :: exaero_BULK_RADIUS_CONFIGURED = 1
   integer(c_int), parameter :: exaero_BULK_RADIUS_DERIVED = 2
+  ! Cloud/ice categories, statuses, and zero-based output property slots.
+  integer(c_int), parameter :: exaero_ICE_DUST = 0, exaero_ICE_SULFATE = 1
+  integer(c_int), parameter :: exaero_ICE_BLACK_CARBON = 2, exaero_ICE_STRATOSPHERIC_SULFATE = 3
+  integer(c_int), parameter :: exaero_CLOUD_ICE_ABSENT = -2, exaero_CLOUD_ICE_EMPTY = -1
+  integer(c_int), parameter :: exaero_CLOUD_ICE_NOT_CONFIGURED = 0, exaero_CLOUD_ICE_CONFIGURED = 1
+  integer(c_int), parameter :: exaero_CLOUD_ICE_MASS = 0, exaero_CLOUD_ICE_NUMBER = 1
+  integer(c_int), parameter :: exaero_CLOUD_ICE_DRY_NUMBER_MEDIAN_RADIUS = 2
+  integer(c_int), parameter :: exaero_CLOUD_ICE_DRY_SCAVENGING_RADIUS = 3
+  integer(c_int), parameter :: exaero_CLOUD_ICE_WET_SCAVENGING_RADIUS = 4
+  integer(c_int), parameter :: exaero_CLOUD_ICE_LOWER_RADIUS = 5, exaero_CLOUD_ICE_UPPER_RADIUS = 6
+  integer(c_int), parameter :: exaero_CLOUD_ICE_EFFECTIVE_RADIUS = 7
+  integer(c_int), parameter :: exaero_CLOUD_ICE_TYPE_WEIGHT = 8, exaero_CLOUD_ICE_SIZE_WEIGHT = 9
+  integer(c_int), parameter :: exaero_CLOUD_ICE_ELIGIBLE_NUMBER = 10
+  integer(c_int), parameter :: exaero_CLOUD_ICE_HETEROGENEOUS_FREEZING = 11
+  integer(c_int), parameter :: exaero_CLOUD_ICE_PROPERTY_COUNT = 12
   integer(c_int), parameter :: exaero_CAP_MICROPHYSICS = 1, exaero_CAP_DIAGNOSTICS = 2
   integer(c_int), parameter :: exaero_CAP_OPTICS = 4, exaero_CAP_CCN = 8, exaero_CAP_EMISSIONS = 16
 
@@ -132,6 +147,65 @@ module exaero_interface
   !> header for the full per-argument unit/index contract.
   ! Public C-bindings interfaces (CCPP-standard error signatures)
   interface
+    !> @brief Bulk ambient and optional cloudborne diagnostics (nc,nl,nf,12).
+    !> @details cloud_state is c_loc of a host mass buffer or c_null_ptr.
+    subroutine exaero_bulk_cloud_ice(pkg,nc,nl,nf,temp,rh,state,cloud_state,category, &
+        preexisting_ice,ambient_out,cloud_out,ambient_status,cloud_status,errmsg,errflg) &
+        bind(c,name="exaero_bulk_cloud_ice")
+      import :: c_int, c_double, c_char, c_ptr, exaero_package_t
+      implicit none
+      type(exaero_package_t), value, intent(in) :: pkg
+      integer(c_int), value, intent(in) :: nc,nl,nf,category,preexisting_ice
+      real(c_double), intent(in) :: temp(*),rh(*),state(*)
+      type(c_ptr), value, intent(in) :: cloud_state
+      real(c_double), intent(inout) :: ambient_out(*),cloud_out(*)
+      integer(c_int), intent(inout) :: ambient_status(*),cloud_status(*)
+      character(kind=c_char), intent(out) :: errmsg(*)
+      integer(c_int), intent(out) :: errflg
+    end subroutine exaero_bulk_cloud_ice
+
+    !> @brief Modal ambient and optional cloudborne diagnostics (nc,nl,nm,12).
+    subroutine exaero_modal_cloud_ice(pkg,nc,nl,nf,temp,rh,state,cloud_state,category, &
+        preexisting_ice,ambient_out,cloud_out,ambient_status,cloud_status,errmsg,errflg) &
+        bind(c,name="exaero_modal_cloud_ice")
+      import :: c_int, c_double, c_char, c_ptr, exaero_package_t
+      implicit none
+      type(exaero_package_t), value, intent(in) :: pkg
+      integer(c_int), value, intent(in) :: nc,nl,nf,category,preexisting_ice
+      real(c_double), intent(in) :: temp(*),rh(*),state(*)
+      type(c_ptr), value, intent(in) :: cloud_state
+      real(c_double), intent(inout) :: ambient_out(*),cloud_out(*)
+      integer(c_int), intent(inout) :: ambient_status(*),cloud_status(*)
+      character(kind=c_char), intent(out) :: errmsg(*)
+      integer(c_int), intent(out) :: errflg
+    end subroutine exaero_modal_cloud_ice
+
+    !> @brief Bulk interstitial activation fractions (nc,nl,nf,2*nss).
+    subroutine exaero_bulk_activation_fractions(pkg,nc,nl,nf,nss,temp,rh,state,ss, &
+        fractions,errmsg,errflg) bind(c,name="exaero_bulk_activation_fractions")
+      import :: c_int, c_double, c_char, exaero_package_t
+      implicit none
+      type(exaero_package_t), value, intent(in) :: pkg
+      integer(c_int), value, intent(in) :: nc,nl,nf,nss
+      real(c_double), intent(in) :: temp(*),rh(*),state(*),ss(*)
+      real(c_double), intent(inout) :: fractions(*)
+      character(kind=c_char), intent(out) :: errmsg(*)
+      integer(c_int), intent(out) :: errflg
+    end subroutine exaero_bulk_activation_fractions
+
+    !> @brief Modal interstitial activation fractions (nc,nl,nm,2*nss).
+    subroutine exaero_modal_activation_fractions(pkg,nc,nl,nf,nss,temp,rh,state,ss, &
+        fractions,errmsg,errflg) bind(c,name="exaero_modal_activation_fractions")
+      import :: c_int, c_double, c_char, exaero_package_t
+      implicit none
+      type(exaero_package_t), value, intent(in) :: pkg
+      integer(c_int), value, intent(in) :: nc,nl,nf,nss
+      real(c_double), intent(in) :: temp(*),rh(*),state(*),ss(*)
+      real(c_double), intent(inout) :: fractions(*)
+      character(kind=c_char), intent(out) :: errmsg(*)
+      integer(c_int), intent(out) :: errflg
+    end subroutine exaero_modal_activation_fractions
+
     !> @brief Diagnostic fixed particles/m3 for each bulk mass field.
     subroutine exaero_bulk_fixed_number(pkg,nc,nl,nf,state,number,errmsg,errflg) &
         bind(c,name="exaero_bulk_fixed_number")

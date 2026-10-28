@@ -5,6 +5,7 @@
 #include <cassert>
 #include <cmath>
 #include <exaero/CloudIceCoupling.hpp>
+#include <exaero/CloudIceCoupling_C.h>
 #include <exaero/ModalCoupling.hpp>
 #include <exaero/ModalRemovalMath.hpp>
 #include <stdexcept>
@@ -69,6 +70,7 @@ struct Package final : IAerosolPackage, IModalCoupling {
     out(0, 0, 0, modal_properties::DRY_RADIUS) = radius;
     out(0, 0, 0, modal_properties::WET_RADIUS) =
         number > 0 ? radius * 1.2 : 0;
+    out(0, 0, 0, modal_properties::KAPPA) = .5;
   }
   void modalUptake(const EnvironmentalStateView &, const View3D<const double> &,
                    std::span<const ModalVapor>, View4D<double> &,
@@ -129,6 +131,42 @@ int main() {
   assert(cs[0] == static_cast<int>(CloudIceStatus::Absent));
   for (double v : c)
     assert(v == 0);
+
+  const double kelvin = 4 * .076 * .01801528 / (8.314462618 * 280 * 1000);
+  const double critical =
+      std::sqrt(4 * std::pow(kelvin, 3) / (27 * .5 * std::pow(2 * radius, 3)));
+  std::array<double, 2> supersaturation{critical, 4 * critical};
+  std::array<double, 4> fractions{};
+  View1D<const double> ss(supersaturation.data(), 2);
+  View4D<double> activation(fractions.data(), 1, 1, 1, 4);
+  modalActivationFractions(p, env, ambient, ss, activation);
+  assert(near(fractions[0], .5));
+  assert(fractions[1] > .5 && fractions[1] < 1);
+  assert(fractions[2] > fractions[0] && fractions[3] > fractions[1]);
+
+  std::array<char, 256> error{};
+  int error_flag = -1;
+  exaero_modal_cloud_ice(&p, 1, 1, 3, temperature.data(), humidity.data(),
+                         ambient_data.data(), cloud_data.data(),
+                         EXAERO_ICE_DUST, 0, a.data(), c.data(), as.data(),
+                         cs.data(), error.data(), &error_flag);
+  assert(error_flag == 0 && error[0] == 0);
+  assert(near(a[cloud_ice_properties::ELIGIBLE_NUMBER], 2e6));
+  fractions.fill(-9);
+  exaero_modal_activation_fractions(
+      &p, 1, 1, 3, 2, temperature.data(), humidity.data(),
+      ambient_data.data(), supersaturation.data(), fractions.data(),
+      error.data(), &error_flag);
+  assert(error_flag == 0 && near(fractions[0], .5));
+  ambient_data[2] = 0;
+  bool invalid_pair = false;
+  try {
+    modalActivationFractions(p, env, ambient, ss, activation);
+  } catch (const std::invalid_argument &) {
+    invalid_pair = true;
+  }
+  assert(invalid_pair);
+  ambient_data[2] = 1e7;
 
   const auto old = a;
   ambient_data[2] = -1;

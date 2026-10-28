@@ -21,6 +21,7 @@ Our documentation is structured according to the **Diátaxis framework**, dividi
 
 ### 📖 Technical Reference (Reference)
 *   **[API Contracts](api-contracts.md)**: Reference manual for the public C++ interfaces, C/Fortran ISO_C_BINDINGS adapters, and exact indexing codes for diagnostics, optics, and CCN calculations.
+*   **[Cloud and Ice Coupling](guides/cloud-ice-coupling.md)**: Host-owned cloudborne buffers, category and size rules, and bulk/modal candidate and activation diagnostics.
 *   **[Codebase Guide](codebase-guide.md)**: Directory layout, namespaces, key source modules, and separation of concerns.
 *   **[Development Conventions](conventions.md)**: Mandatory NOAA EE2 coding standards, multi-file instruction precedence, quality gates, and scientific/numerical hygiene rules.
 *   **[Build & CI/CD](ci-cd.md)**: Full reference on CMake configuration variables, compiler-specific configurations (such as macOS OpenMP with libomp), and runtime YAML parameters.

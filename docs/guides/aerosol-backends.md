@@ -88,6 +88,8 @@ packages before finalizing it. GPU execution has not yet been validated.
 
 Explicit GOCART bulk number, size, resuspension, and deposited-budget
 utilities are described in [bulk removal coupling](bulk-removal.md).
+Host-owned cloudborne and ice-candidate diagnostics for both GOCART bulk and
+generic modal are described in [cloud and ice coupling](cloud-ice-coupling.md).
 
 | Surface | GOCART bulk | Experimental MAM4xx modal |
 | --- | --- | --- |

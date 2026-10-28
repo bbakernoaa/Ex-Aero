@@ -5,6 +5,7 @@
 #include <cassert>
 #include <cmath>
 #include <exaero/CloudIceCoupling.hpp>
+#include <exaero/CloudIceCoupling_C.h>
 #include <stdexcept>
 
 using namespace exaero;
@@ -12,6 +13,7 @@ namespace {
 struct Package final : IAerosolPackage, IBulkRemovalMetadata,
                        IBulkCloudIceMetadata {
   bool supply_rule = true;
+  bool hydrophilic = true;
   void initialize(const std::string &) override {}
   void executeMicrophysics(const EnvironmentalStateView &, View3D<double> &,
                            double) override {}
@@ -31,7 +33,8 @@ struct Package final : IAerosolPackage, IBulkRemovalMetadata,
     return {{"DU", StateQuantity::Mass, -1, false}};
   }
   BulkSpeciesSize bulkSpeciesSize(std::size_t) const override {
-    return {8e-7, 1000, 4e-7, 1.5, 1e-7, 9e-7, 5e-7, .5};
+    return {8e-7, 1000, 4e-7, 1.5, 1e-7, 9e-7, 5e-7,
+            hydrophilic ? .5 : 0};
   }
   std::vector<IceCategory> bulkIceCategories(std::size_t) const override {
     return {IceCategory::Dust};
@@ -102,6 +105,46 @@ int main() {
   assert(a[cloud_ice_properties::SIZE_WEIGHT] == 0);
   assert(as[0] == static_cast<int>(CloudIceStatus::NotConfigured));
   p.supply_rule = true;
+
+  std::array<double, 2> supersaturation{1e-10, 1e-8};
+  std::array<double, 4> fractions{};
+  View1D<const double> ss(supersaturation.data(), 2);
+  View4D<double> activation(fractions.data(), 1, 1, 1, 4);
+  bulkActivationFractions(p, env, ambient, ss, activation);
+  assert((fractions == std::array<double, 4>{0, 0, 1, 1}));
+  p.hydrophilic = false;
+  bulkActivationFractions(p, env, ambient, ss, activation);
+  assert((fractions == std::array<double, 4>{0, 0, 0, 0}));
+  p.hydrophilic = true;
+
+  std::array<char, 256> error{};
+  int error_flag = -1;
+  exaero_bulk_cloud_ice(&p, 1, 1, 1, temperature.data(), humidity.data(),
+                        ambient_mass.data(), cloud_mass.data(),
+                        EXAERO_ICE_DUST, 0, a.data(), c.data(), as.data(),
+                        cs.data(), error.data(), &error_flag);
+  assert(error_flag == 0 && error[0] == 0);
+  assert(near(a[cloud_ice_properties::ELIGIBLE_NUMBER],
+              .25e-12 / particle_mass));
+  const auto prior = a;
+  exaero_bulk_cloud_ice(&p, 1, 1, 1, temperature.data(), humidity.data(),
+                        ambient_mass.data(), cloud_mass.data(), -1, 0,
+                        a.data(), c.data(), as.data(), cs.data(),
+                        error.data(), &error_flag);
+  assert(error_flag == 1 && a == prior);
+  fractions.fill(-9);
+  exaero_bulk_activation_fractions(
+      &p, 1, 1, 1, 2, temperature.data(), humidity.data(),
+      ambient_mass.data(), supersaturation.data(), fractions.data(),
+      error.data(), &error_flag);
+  assert(error_flag == 0);
+  assert((fractions == std::array<double, 4>{0, 0, 1, 1}));
+  exaero_bulk_activation_fractions(
+      &p, 1, 1, 1, 0, temperature.data(), humidity.data(),
+      ambient_mass.data(), supersaturation.data(), fractions.data(),
+      error.data(), &error_flag);
+  assert(error_flag == 1);
+  assert((fractions == std::array<double, 4>{0, 0, 1, 1}));
 
   const auto old = a;
   ambient_mass[0] = -1;

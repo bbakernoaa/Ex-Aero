@@ -27,6 +27,9 @@ add_executable(exaero_bulk_cloud_ice_test test_bulk_cloud_ice.cpp)
 target_link_libraries(exaero_bulk_cloud_ice_test PRIVATE exaero)
 target_compile_features(exaero_bulk_cloud_ice_test PRIVATE cxx_std_23)
 add_test(NAME ExaeroBulkCloudIce COMMAND exaero_bulk_cloud_ice_test)
+add_executable(exaero_cloud_ice_fortran_test test_cloud_ice_fortran.f90)
+target_link_libraries(exaero_cloud_ice_fortran_test PRIVATE exaero)
+add_test(NAME ExaeroCloudIceFortran COMMAND exaero_cloud_ice_fortran_test)
 target_link_libraries(exaero_modal_test PRIVATE exaero Catch2::Catch2)
 target_compile_definitions(
   exaero_modal_test
