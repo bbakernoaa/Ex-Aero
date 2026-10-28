@@ -23,6 +23,7 @@ enum PackageCapability : unsigned {
   Diagnostics = 2,
   Optics = 4,
   CCN = 8,
-  Emissions = 16
+  Emissions = 16,
+  OpticsBands = 32
 };
 } // namespace exaero

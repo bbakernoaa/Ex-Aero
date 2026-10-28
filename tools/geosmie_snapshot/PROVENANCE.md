@@ -58,6 +58,16 @@ optional runtime portable-file path (FR-012), not baked in (FR-017).
 - **No RRTMG band file exists for BR/BRC** in this pinned release: BR's spectral data is
   monochromatic-only (delivered via the runtime file path).
 
+## Canonical RRTMG band coordinates
+
+The 14 shortwave and 16 longwave wavenumber intervals used by the public
+`RRTMG_30` band metadata are copied in source order from GEOSmie
+`src/geosmie/bandaverage.py:getBands('RRTMG')` at commit
+`fbc507e6edc09cf6dcaa5a1d88d63ffda4f30652`. The implementation defines
+separate SW/LW lower and upper edge arrays and concatenates SW before LW;
+GEOSmie table source IDs are 1-based while Ex-Aero's public selection indices
+are zero-based.
+
 ## Upgrading the pinned version
 
 Per FR-016: replace the files above, update the SHA-256 table, and re-run

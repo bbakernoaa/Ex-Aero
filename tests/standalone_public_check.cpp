@@ -22,6 +22,8 @@
 #include <exaero/ModalCoupling.hpp>
 #include <exaero/ModalCoupling_C.h>
 #include <exaero/ModalMechanismMap.hpp>
+#include <exaero/OpticsBandCoupling.hpp>
+#include <exaero/RadiationBands.hpp>
 
 #include <type_traits>
 
