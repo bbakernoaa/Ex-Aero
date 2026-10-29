@@ -8,7 +8,6 @@
 #include <exaero/AerosolIndices.hpp>
 #include <exaero/IAerosolPackage_C.h>
 #include <exaero/Mam4xxConfig.hpp>
-#include <exaero/OpticsBandCoupling.hpp>
 #include <limits>
 #include <mam4xx/coagulation.hpp>
 #include <mam4xx/conversions.hpp>
@@ -97,38 +96,6 @@ TEST_CASE("modal metadata preserves independent mass, number and phase") {
   REQUIRE(exaero_get_species_index(f.pkg.get(), "SO4_coarse_c") ==
           layout::mass(2, 1, true));
   REQUIRE(exaero_get_species_index(f.pkg.get(), "invalid") == -1);
-}
-
-TEST_CASE("MAM4xx delegates native band metadata and preserves unsupported output") {
-  Fixture f;
-  exaero_initialize_package(f.pkg.get(),
-                            "optics: {treatment: component_tables}",
-                            f.error.data(), &f.status);
-  REQUIRE(f.status==0);
-  auto *base=static_cast<exaero::IAerosolPackage *>(f.pkg.get());
-  auto *bands=dynamic_cast<exaero::IOpticsBandCoupling *>(base);
-  REQUIRE(bands);
-  REQUIRE((base->capabilities() & exaero::OpticsBands)!=0);
-  REQUIRE(bands->radiationBandInfo(exaero::RadiationBandSet::RRTMG_30).size()==30);
-  const auto availability=bands->bandAvailability(exaero::RadiationBandSet::RRTMG_30);
-  REQUIRE(availability.size()==static_cast<std::size_t>(layout::modes*layout::species));
-  for (const auto &component:availability)
-    for (const auto status:component.status)
-      REQUIRE(status==exaero::RadiationBandStatus::NotInSource);
-  exaero::EnvironmentalStateView env{
-    exaero::View2D<const double>(f.t.data(),nc,nl),
-    exaero::View2D<const double>(f.p.data(),nc,nl),
-    exaero::View2D<const double>(f.rho.data(),nc,nl),
-    exaero::View2D<const double>(f.rh.data(),nc,nl),
-    exaero::View2D<const double>(f.dz.data(),nc,nl)};
-  exaero::View3D<const double> state(f.state.data(),nc,nl,layout::fields);
-  std::vector<double> output(points*exaero::optical_indices::NUM_OPTICS,91.);
-  exaero::View4D<double> out(output.data(),nc,nl,1,
-                             exaero::optical_indices::NUM_OPTICS);
-  const int selected[]={2};
-  REQUIRE_THROWS(bands->computeBandOptics(env,state,
-      exaero::RadiationBandSet::RRTMG_30,selected,out));
-  for (double value:output) REQUIRE(value==91.);
 }
 
 TEST_CASE(

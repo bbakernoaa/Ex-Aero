@@ -1,5 +1,8 @@
 # Bulk removal coupling
 
+See [host removal tendencies](host-removal.md) for host-supplied deposition
+velocities and first-order wet-scavenging coefficients through C++, C and Fortran.
+
 The GOCART bulk backend packs one mass field per configured species. These utilities provide size and removal budgets for a host model; they do not calculate scavenging, resuspension, or deposition rates. All operations are explicit and leave aerosol state unchanged.
 
 `bulkFixedNumber` returns a diagnostic particle number concentration for each species, using the same fixed lognormal mass-to-number conversion as the existing GOCART diagnostics:

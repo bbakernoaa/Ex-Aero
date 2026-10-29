@@ -4,6 +4,7 @@
 #ifdef NDEBUG
 #undef NDEBUG
 #endif
+#include "removal_tendency_cases.hpp"
 #include <array>
 #include <cassert>
 #include <cmath>
@@ -57,6 +58,7 @@ bool near(double x, double y) {
 
 int main() {
   Package p;
+  removal_test::tendencies(p, false);
   std::array<double, 4> state_data{2, 0, 4, 5};
   std::array<double, 2> rh_data{.5, .2};
   std::array<double, 8> diameter_data{};

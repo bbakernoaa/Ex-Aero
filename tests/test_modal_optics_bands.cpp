@@ -1,5 +1,6 @@
 #include <algorithm>
 #include <exaero/Environment.hpp>
+#include <exaero/Mam4xxConfig.hpp>
 #include <exaero/ModalCoupling.hpp>
 #include <exaero/OpticsBandCoupling.hpp>
 #include <exaero/PackageFactory.hpp>
@@ -158,10 +159,51 @@ void modal_native_band_table_uses_source_ids_and_native_coefficients() {
         "particle-resolved native band integral");
 }
 
+/// @brief Public mdspan forwarding is tested without native Kokkos headers.
+void mam4xx_native_band_forwarding_preserves_unsupported_output() {
+  if (!packageAvailable("mam4xx")) return;
+  auto package = createPackage("mam4xx");
+  package->initialize("backend: mam4xx\noptics: {treatment: component_tables}");
+  auto &bands = opticsBandCoupling(*package);
+  check(package->capabilities() & OpticsBands, "MAM4xx band capability");
+  check(bands.radiationBandInfo(RadiationBandSet::RRTMG_30).size() == 30,
+        "MAM4xx band metadata");
+  const auto availability = bands.bandAvailability(RadiationBandSet::RRTMG_30);
+  check(availability.size() == mam4xx_layout::modes * mam4xx_layout::species,
+        "MAM4xx component availability");
+  for (const auto &component : availability)
+    for (const auto status : component.status)
+      check(status == RadiationBandStatus::NotInSource,
+            "MAM4xx source band unavailable");
+  double t = 280, p = 90000, rho = 1, rh = 0, dz = 100;
+  EnvironmentalStateView env{
+      View2D<const double>(&t, 1, 1), View2D<const double>(&p, 1, 1),
+      View2D<const double>(&rho, 1, 1), View2D<const double>(&rh, 1, 1),
+      View2D<const double>(&dz, 1, 1)};
+  std::vector<double> state_data(mam4xx_layout::fields, 0);
+  state_data[mam4xx_layout::number(0)] = 1e8;
+  state_data[mam4xx_layout::mass(0, 1)] = 1e-9;
+  View3D<const double> state(state_data.data(), 1, 1, state_data.size());
+  std::vector<double> output(optical_indices::NUM_OPTICS, 91);
+  View4D<double> out(output.data(), 1, 1, 1, optical_indices::NUM_OPTICS);
+  const int selected[] = {2};
+  bool rejected = false;
+  try {
+    bands.computeBandOptics(env, state, RadiationBandSet::RRTMG_30, selected,
+                           out);
+  } catch (const std::exception &) {
+    rejected = true;
+  }
+  check(rejected, "unsupported MAM4xx band accepted");
+  for (double value : output)
+    check(value == 91, "MAM4xx unsupported band changed output");
+}
+
 int main() {
   initialize_environment();
   modal_native_band_provider_reports_support_and_computes_atomically();
   modal_component_table_without_native_bands_is_unavailable();
   modal_native_band_table_uses_source_ids_and_native_coefficients();
+  mam4xx_native_band_forwarding_preserves_unsupported_output();
   finalize_environment();
 }

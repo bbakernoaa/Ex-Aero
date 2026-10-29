@@ -45,6 +45,35 @@ exaero::IAerosolPackage &package(exaero_package_t handle, int nc, int nl,
 } // namespace
 
 extern "C" {
+void exaero_bulk_removal_rate_tendencies(exaero_package_t h, int nc, int nl,
+                                         int nf, const double *state,
+                                         const double *rates, double *mass,
+                                         double *number, char *err, int *flag) {
+  guarded(err, flag, [&] {
+    auto &p = package(h, nc, nl, nf);
+    require(state && rates && mass && number);
+    exaero::View3D<double> mv(mass, nc, nl, nf), nv(number, nc, nl, nf);
+    exaero::bulkRemovalRateTendencies(
+        p, exaero::View3D<const double>(state, nc, nl, nf),
+        exaero::View3D<const double>(rates, nc, nl, nf), mv, nv);
+  });
+}
+void exaero_bulk_removal_velocity_tendencies(exaero_package_t h, int nc, int nl,
+                                             int nf, const double *state,
+                                             const double *velocity,
+                                             const double *thickness,
+                                             double *mass, double *number,
+                                             char *err, int *flag) {
+  guarded(err, flag, [&] {
+    auto &p = package(h, nc, nl, nf);
+    require(state && velocity && thickness && mass && number);
+    exaero::View3D<double> mv(mass, nc, nl, nf), nv(number, nc, nl, nf);
+    exaero::bulkRemovalVelocityTendencies(
+        p, exaero::View2D<const double>(thickness, nc, nl),
+        exaero::View3D<const double>(state, nc, nl, nf),
+        exaero::View3D<const double>(velocity, nc, nl, nf), mv, nv);
+  });
+}
 void exaero_bulk_fixed_number(exaero_package_t h, int nc, int nl, int nf,
                               const double *state, double *number, char *err,
                               int *flag) {

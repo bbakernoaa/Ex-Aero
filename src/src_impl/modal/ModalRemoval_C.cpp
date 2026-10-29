@@ -59,6 +59,36 @@ exaero::EnvironmentalStateView environment(int nc, int nl, const double *t,
 }
 } // namespace
 extern "C" {
+void exaero_modal_removal_rate_tendencies(exaero_package_t h, int nc, int nl,
+                                          int nf, int nm, const double *state,
+                                          const double *mass_rate,
+                                          const double *number_rate,
+                                          double *mass, double *number,
+                                          char *err, int *flag) {
+  guarded(err, flag, [&] {
+    auto &p = package(h, nc, nl, nf, &nm);
+    require(state && mass_rate && number_rate && mass && number);
+    exaero::View3D<double> mv(mass, nc, nl, nf), nv(number, nc, nl, nm);
+    exaero::modalRemovalRateTendencies(
+        p, exaero::View3D<const double>(state, nc, nl, nf),
+        exaero::View3D<const double>(mass_rate, nc, nl, nm),
+        exaero::View3D<const double>(number_rate, nc, nl, nm), mv, nv);
+  });
+}
+void exaero_modal_removal_velocity_tendencies(
+    exaero_package_t h, int nc, int nl, int nf, int nm, const double *state,
+    const double *velocity, const double *thickness, double *mass,
+    double *number, char *err, int *flag) {
+  guarded(err, flag, [&] {
+    auto &p = package(h, nc, nl, nf, &nm);
+    require(state && velocity && thickness && mass && number);
+    exaero::View3D<double> mv(mass, nc, nl, nf), nv(number, nc, nl, nm);
+    exaero::modalRemovalVelocityTendencies(
+        p, exaero::View2D<const double>(thickness, nc, nl),
+        exaero::View3D<const double>(state, nc, nl, nf),
+        exaero::View3D<const double>(velocity, nc, nl, nm), mv, nv);
+  });
+}
 void exaero_modal_inspect_bounds(exaero_package_t h, int nc, int nl, int nf,
                                  int nm, const double *state, double *report,
                                  int *status, char *err, int *flag) {

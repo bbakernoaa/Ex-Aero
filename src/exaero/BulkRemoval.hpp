@@ -46,6 +46,31 @@ enum class BulkRadiusStatus : int {
 void bulkFixedNumber(IAerosolPackage &package,
                      const View3D<const double> &state, View3D<double> &number);
 
+/// @brief Translate host first-order coefficients to bulk removal tendencies.
+/// @details All 3D arrays are host column-major (cell,level,species/bin).
+/// Inputs are finite nonnegative mass [kg/m3] and coefficients [1/s]. Outputs
+/// are signed mass [kg/m3/s] and diagnostic number [particles/m3/s] tendencies.
+/// Number follows the configured fixed lognormal mass-to-number conversion.
+/// Outputs must be disjoint from inputs and each other; failure leaves them
+/// unchanged. No state update, collection law, or timestep is evaluated.
+void bulkRemovalRateTendencies(IAerosolPackage &package,
+                               const View3D<const double> &state,
+                               const View3D<const double> &mass_scavenging_rate,
+                               View3D<double> &mass_tendency,
+                               View3D<double> &number_tendency);
+
+/// @brief Return bulk tendencies -velocity/layer_thickness times concentration.
+/// @details Host column-major velocity [m/s] is (cell,level,species/bin);
+/// thickness [m] is (cell,level), finite and positive. Output layout, units,
+/// fixed-number conversion and atomic failure match bulkRemovalRateTendencies.
+/// The host sets zero velocity at inactive levels and applies accepted updates.
+void bulkRemovalVelocityTendencies(IAerosolPackage &package,
+                                   const View2D<const double> &layer_thickness,
+                                   const View3D<const double> &state,
+                                   const View3D<const double> &velocity,
+                                   View3D<double> &mass_tendency,
+                                   View3D<double> &number_tendency);
+
 /// @brief Query physical dry lower, upper, and effective radii by species.
 /// @details radii and status have shape (species,3), in that order. Each
 /// value has its own BulkRadiusStatus; unavailable values remain zero. This

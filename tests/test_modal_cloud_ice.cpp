@@ -1,6 +1,7 @@
 #ifdef NDEBUG
 #undef NDEBUG
 #endif
+#include <algorithm>
 #include <array>
 #include <cassert>
 #include <cmath>
@@ -81,6 +82,8 @@ struct Package final : IAerosolPackage, IModalCoupling {
   }
   void setModalOpticsProvider(
       std::shared_ptr<const IModalOpticsProvider>) override {}
+  void setModalBandOpticsProvider(
+      std::shared_ptr<const IModalBandOpticsProvider>) override {}
 };
 bool near(double a, double b) {
   return std::abs(a - b) <= 1e-12 * std::max({1e-30, std::abs(a), std::abs(b)});
@@ -98,6 +101,7 @@ int main() {
                              View2D<const double>(thickness.data(), 1, 1)};
   std::array<double, 3> ambient_data{1e-12, 1e-12, 1e7};
   std::array<double, 3> cloud_data{2e-12, 0, 5e6};
+  const auto original_ambient = ambient_data, original_cloud = cloud_data;
   View3D<const double> ambient(ambient_data.data(), 1, 1, 3);
   View3D<const double> cloud(cloud_data.data(), 1, 1, 3);
   std::array<double, cloud_ice_properties::COUNT> a{}, c{};
@@ -158,6 +162,7 @@ int main() {
       ambient_data.data(), supersaturation.data(), fractions.data(),
       error.data(), &error_flag);
   assert(error_flag == 0 && near(fractions[0], .5));
+  assert(ambient_data == original_ambient && cloud_data == original_cloud);
   ambient_data[2] = 0;
   bool invalid_pair = false;
   try {

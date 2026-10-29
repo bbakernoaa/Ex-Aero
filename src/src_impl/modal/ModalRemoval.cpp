@@ -86,7 +86,93 @@ std::size_t index3(std::size_t c, std::size_t k, std::size_t m, std::size_t nc,
                    std::size_t nl) {
   return c + nc * (k + nl * m);
 }
+/// @brief Check the final signed sink without overflowing double intermediates.
+double removalSink(double coefficient, double concentration, double depth) {
+  const long double loss =
+      static_cast<long double>(coefficient) * concentration / depth;
+  check(std::isfinite(loss) && loss >= 0 &&
+            loss <= std::numeric_limits<double>::max(),
+        "modal removal tendency overflow");
+  return loss == 0 ? 0 : -static_cast<double>(loss);
+}
+/// @brief Translate per-mode moment coefficients; publish both buffers at end.
+void removalTendencies(IAerosolPackage &package,
+                       const View3D<const double> &state,
+                       const View3D<const double> &mass_rate,
+                       const View3D<const double> &number_rate,
+                       const View2D<const double> *thickness,
+                       View3D<double> &mass, View3D<double> &number) {
+  const auto &cfg = configuration(package);
+  stateShape(cfg, state);
+  const auto nc = state.extent(0), nl = state.extent(1), nf = state.extent(2),
+             nm = cfg.modes.size(), ns = cfg.species.size();
+  checkShape(mass_rate, {nc, nl, nm});
+  checkShape(number_rate, {nc, nl, nm});
+  checkShape(mass, {nc, nl, nf});
+  checkShape(number, {nc, nl, nm});
+  disjoint(state, mass);
+  disjoint(state, number);
+  disjoint(mass_rate, mass);
+  disjoint(mass_rate, number);
+  disjoint(number_rate, mass);
+  disjoint(number_rate, number);
+  disjoint(mass, number);
+  if (thickness) {
+    checkShape(*thickness, {nc, nl});
+    disjoint(*thickness, mass);
+    disjoint(*thickness, number);
+    for (std::size_t i = 0; i < thickness->size(); ++i)
+      check(std::isfinite(thickness->data_handle()[i]) &&
+                thickness->data_handle()[i] > 0,
+            "modal removal thickness must be finite and positive");
+  }
+  for (const auto &rates : {mass_rate, number_rate})
+    for (std::size_t i = 0; i < rates.size(); ++i)
+      check(std::isfinite(rates.data_handle()[i]) &&
+                rates.data_handle()[i] >= 0,
+            "modal removal coefficient must be finite and nonnegative");
+  std::vector<double> masses(mass.size(), 0), numbers(number.size());
+  View3D<double> mass_result(masses.data(), nc, nl, nf),
+      number_result(numbers.data(), nc, nl, nm);
+  for (std::size_t m = 0; m < nm; ++m) {
+    for (std::size_t k = 0; k < nl; ++k)
+      for (std::size_t c = 0; c < nc; ++c) {
+        const auto a = moment(cfg, state, c, k, m);
+        number_result(c, k, m) =
+            removalSink(number_rate(c, k, m), a.number,
+                        thickness ? (*thickness)(c, k) : 1.);
+      }
+    for (std::size_t s = 0; s < ns; ++s)
+      for (std::size_t k = 0; k < nl; ++k)
+        for (std::size_t c = 0; c < nc; ++c)
+          mass_result(c, k, m * (ns + 1) + s) =
+              removalSink(mass_rate(c, k, m), state(c, k, m * (ns + 1) + s),
+                          thickness ? (*thickness)(c, k) : 1.);
+  }
+  copyScratch(masses, mass);
+  copyScratch(numbers, number);
+}
 } // namespace
+
+void modalRemovalRateTendencies(
+    IAerosolPackage &package, const View3D<const double> &state,
+    const View3D<const double> &mass_scavenging_rate,
+    const View3D<const double> &number_scavenging_rate,
+    View3D<double> &mass_tendency, View3D<double> &number_tendency) {
+  removalTendencies(package, state, mass_scavenging_rate,
+                    number_scavenging_rate, nullptr, mass_tendency,
+                    number_tendency);
+}
+
+void modalRemovalVelocityTendencies(IAerosolPackage &package,
+                                    const View2D<const double> &layer_thickness,
+                                    const View3D<const double> &state,
+                                    const View3D<const double> &velocity,
+                                    View3D<double> &mass_tendency,
+                                    View3D<double> &number_tendency) {
+  removalTendencies(package, state, velocity, velocity, &layer_thickness,
+                    mass_tendency, number_tendency);
+}
 
 void inspectModalBounds(IAerosolPackage &p, const View3D<const double> &state,
                         View4D<double> &report, View3D<int> &status) {

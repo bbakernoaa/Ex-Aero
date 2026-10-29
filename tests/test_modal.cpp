@@ -520,8 +520,11 @@ TEST_CASE("unknown optical semantics and mismatched distribution widths fail") {
   cfg.species[0].optics->geometric_std_dev = 1.8;
   REQUIRE_THROWS(initializeModal(*package, cfg));
   cfg.species[0].optics = binding();
-  cfg.species[0].optics->wavelength_nodes.clear();
+  cfg.species[0].optics->wavelength_nodes = {5e-7};
   REQUIRE_THROWS(initializeModal(*package, cfg));
+  cfg.species[0].optics->wavelength_nodes.clear();
+  // A source axis explicitly labelled in metres supplies its own wavelengths.
+  REQUIRE_NOTHROW(initializeModal(*package, cfg));
   Fixture no_tables;
   REQUIRE(!(no_tables.package->capabilities() & Optics));
   REQUIRE_THROWS(no_tables.optics());

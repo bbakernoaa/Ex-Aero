@@ -24,6 +24,23 @@ void exaero_modal_scavenging_sizes(exaero_package_t pkg, int nc, int nl, int nf,
                                    int nm, const double *temp, const double *rh,
                                    const double *state, double *diameters,
                                    int *populated, char *errmsg, int *errflg);
+/// @brief Host first-order mass/number coefficients (nc,nl,nm) [1/s] to sinks.
+/// @details Host column-major state/mass output are (nc,nl,nf); number output
+/// is (nc,nl,nm). Mass coefficient is common to a mode's constituents; number
+/// is independent. Output units are kg/m3/s and particles/m3/s; packed number
+/// slots in mass output are zero. Outputs cannot overlap inputs or each other.
+/// No state update or bounds correction; errors preserve both output buffers.
+void exaero_modal_removal_rate_tendencies(
+    exaero_package_t pkg, int nc, int nl, int nf, int nm, const double *state,
+    const double *mass_scavenging_rate, const double *number_scavenging_rate,
+    double *mass_tendency, double *number_tendency, char *errmsg, int *errflg);
+/// @brief Mode velocities (nc,nl,nm) [m/s] and positive thickness (nc,nl) [m].
+/// @details Return -velocity/thickness times each mode's mass and number;
+/// output shape, units, non-overlap and atomicity match the rate adapter.
+void exaero_modal_removal_velocity_tendencies(
+    exaero_package_t pkg, int nc, int nl, int nf, int nm, const double *state,
+    const double *velocity, const double *layer_thickness,
+    double *mass_tendency, double *number_tendency, char *errmsg, int *errflg);
 void exaero_modal_resuspension(exaero_package_t pkg, int nc, int nl, int nf,
                                const double *rates, double *routed,
                                char *errmsg, int *errflg);

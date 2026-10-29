@@ -42,6 +42,35 @@ void modalScavengingSizes(IAerosolPackage &package,
                           const View3D<const double> &state,
                           View4D<double> &diameters, View3D<int> &populated);
 
+/// @brief Map host first-order mode/moment coefficients to removal tendencies.
+/// @details Synchronous host column-major views. State is packed mass/number
+/// (cell,level,field). Both coefficient inputs are (cell,level,mode), in [1/s].
+/// A mode's mass coefficient removes all its mixed constituents proportionally;
+/// its independent number coefficient may represent a different distribution
+/// moment. The host derives physically consistent coefficients from current
+/// composition, geometry, activation and precipitation; this computes no rates.
+/// Mass output uses state layout [kg/m3/s], with number slots zero. Number
+/// output is (cell,level,mode) [particles/m3/s]. Inputs remain unchanged.
+/// Outputs must be disjoint from inputs and each other; failure is atomic.
+void modalRemovalRateTendencies(
+    IAerosolPackage &package, const View3D<const double> &state,
+    const View3D<const double> &mass_scavenging_rate,
+    const View3D<const double> &number_scavenging_rate,
+    View3D<double> &mass_tendency, View3D<double> &number_tendency);
+
+/// @brief Return mode-uniform tendencies -velocity/layer_thickness times state.
+/// @details Velocity [m/s] is (cell,level,mode); thickness [m] is (cell,level),
+/// finite and positive. The same velocity applies to mass and number. Layout,
+/// output units and atomicity match modalRemovalRateTendencies. Hosts needing
+/// size-selective moment losses supply separate coefficients to that API.
+/// No bounds correction, timestep integration, or state update is performed.
+void modalRemovalVelocityTendencies(IAerosolPackage &package,
+                                    const View2D<const double> &layer_thickness,
+                                    const View3D<const double> &state,
+                                    const View3D<const double> &velocity,
+                                    View3D<double> &mass_tendency,
+                                    View3D<double> &number_tendency);
+
 /// @brief Route nonnegative returned material rates once from a snapshot.
 /// @param[in] package Initialized generic modal package.
 /// @param[in] mass_rates (cell,level,field), kg/m3/s, zero number slots.

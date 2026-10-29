@@ -63,6 +63,72 @@ void validateMass(const View3D<const double> &input) {
                 input.data_handle()[i] >= 0,
             "bulk material must be finite and nonnegative");
 }
+/// @brief Fixed lognormal mean particle mass; independent of optical tables.
+double particleMass(const BulkSpeciesSize &size) {
+  require(std::isfinite(size.dry_density) && size.dry_density > 0 &&
+              std::isfinite(size.lognormal_dg) && size.lognormal_dg > 0 &&
+              std::isfinite(size.lognormal_sigma) && size.lognormal_sigma >= 1,
+          "invalid fixed bulk number size parameters");
+  const double l = std::log(size.lognormal_sigma);
+  const double mass = (std::acos(-1.0) / 6.0) * size.dry_density *
+                      size.lognormal_dg * size.lognormal_dg *
+                      size.lognormal_dg * std::exp(4.5 * l * l);
+  require(std::isfinite(mass) && mass > 0,
+          "unrepresentable fixed bulk particle mass");
+  return mass;
+}
+/// @brief Validate a staged loss before conversion to a signed double sink.
+double negativeSink(long double loss) {
+  require(std::isfinite(loss) && loss >= 0 &&
+              loss <= std::numeric_limits<double>::max(),
+          "bulk removal tendency overflow");
+  return loss == 0 ? 0 : -static_cast<double>(loss);
+}
+/// @brief Common synchronous rate/velocity conversion with atomic publication.
+void removalTendencies(IAerosolPackage &package,
+                       const View3D<const double> &state,
+                       const View3D<const double> &rate,
+                       const View2D<const double> *thickness,
+                       View3D<double> &mass, View3D<double> &number) {
+  auto &meta = metadata(package);
+  stateShape(package, state);
+  const auto nc = state.extent(0), nl = state.extent(1), ns = state.extent(2);
+  shape(rate, {nc, nl, ns});
+  shape(mass, {nc, nl, ns});
+  shape(number, {nc, nl, ns});
+  disjoint(state, mass);
+  disjoint(state, number);
+  disjoint(rate, mass);
+  disjoint(rate, number);
+  disjoint(mass, number);
+  if (thickness) {
+    shape(*thickness, {nc, nl});
+    disjoint(*thickness, mass);
+    disjoint(*thickness, number);
+    for (std::size_t i = 0; i < thickness->size(); ++i)
+      require(std::isfinite(thickness->data_handle()[i]) &&
+                  thickness->data_handle()[i] > 0,
+              "bulk removal thickness must be finite and positive");
+  }
+  validateMass(state);
+  validateMass(rate);
+  std::vector<double> masses(mass.size()), numbers(number.size());
+  View3D<double> mass_result(masses.data(), nc, nl, ns),
+      number_result(numbers.data(), nc, nl, ns);
+  for (std::size_t s = 0; s < ns; ++s) {
+    const double particle_mass = particleMass(meta.bulkSpeciesSize(s));
+    for (std::size_t k = 0; k < nl; ++k)
+      for (std::size_t c = 0; c < nc; ++c) {
+        const long double loss = static_cast<long double>(rate(c, k, s)) *
+                                 state(c, k, s) /
+                                 (thickness ? (*thickness)(c, k) : 1.);
+        mass_result(c, k, s) = negativeSink(loss);
+        number_result(c, k, s) = negativeSink(loss / particle_mass);
+      }
+  }
+  std::copy(masses.begin(), masses.end(), mass.data_handle());
+  std::copy(numbers.begin(), numbers.end(), number.data_handle());
+}
 void edgesValid(const View1D<const double> &edges) {
   require(edges.data_handle() && edges.extent(0) >= 2,
           "invalid bulk diameter edges");
@@ -90,18 +156,7 @@ void bulkFixedNumber(IAerosolPackage &package,
   validateMass(state);
   std::vector<double> out(number.size());
   for (std::size_t s = 0; s < ns; ++s) {
-    const auto size = meta.bulkSpeciesSize(s);
-    require(std::isfinite(size.dry_density) && size.dry_density > 0 &&
-                std::isfinite(size.lognormal_dg) && size.lognormal_dg > 0 &&
-                std::isfinite(size.lognormal_sigma) &&
-                size.lognormal_sigma >= 1,
-            "invalid fixed bulk number size parameters");
-    const double l = std::log(size.lognormal_sigma);
-    const double particle_mass = (std::acos(-1.0) / 6.0) * size.dry_density *
-                                 size.lognormal_dg * size.lognormal_dg *
-                                 size.lognormal_dg * std::exp(4.5 * l * l);
-    require(std::isfinite(particle_mass) && particle_mass > 0,
-            "unrepresentable fixed bulk particle mass");
+    const double particle_mass = particleMass(meta.bulkSpeciesSize(s));
     for (std::size_t k = 0; k < nl; ++k)
       for (std::size_t c = 0; c < nc; ++c)
         out[index3(c, k, s, nc, nl)] = state(c, k, s) / particle_mass;
@@ -109,6 +164,25 @@ void bulkFixedNumber(IAerosolPackage &package,
   for (double value : out)
     require(std::isfinite(value), "bulk number concentration overflow");
   std::copy(out.begin(), out.end(), number.data_handle());
+}
+
+void bulkRemovalRateTendencies(IAerosolPackage &package,
+                               const View3D<const double> &state,
+                               const View3D<const double> &mass_scavenging_rate,
+                               View3D<double> &mass_tendency,
+                               View3D<double> &number_tendency) {
+  removalTendencies(package, state, mass_scavenging_rate, nullptr,
+                    mass_tendency, number_tendency);
+}
+
+void bulkRemovalVelocityTendencies(IAerosolPackage &package,
+                                   const View2D<const double> &layer_thickness,
+                                   const View3D<const double> &state,
+                                   const View3D<const double> &velocity,
+                                   View3D<double> &mass_tendency,
+                                   View3D<double> &number_tendency) {
+  removalTendencies(package, state, velocity, &layer_thickness, mass_tendency,
+                    number_tendency);
 }
 
 void bulkReferenceRadii(IAerosolPackage &package, View2D<double> &radii,

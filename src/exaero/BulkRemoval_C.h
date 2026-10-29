@@ -16,6 +16,23 @@ extern "C" {
 void exaero_bulk_fixed_number(exaero_package_t pkg, int nc, int nl, int nf,
                               const double *state, double *number, char *errmsg,
                               int *errflg);
+/// @brief Per-species/bin host coefficients [1/s] to signed mass/number sinks.
+/// @details All arrays are column-major (nc,nl,nf). Number loss is diagnostic
+/// for the configured fixed distribution. No state update; output failure is
+/// atomic. Output buffers must not overlap inputs or each other.
+void exaero_bulk_removal_rate_tendencies(exaero_package_t pkg, int nc, int nl,
+                                         int nf, const double *state,
+                                         const double *mass_scavenging_rate,
+                                         double *mass_tendency,
+                                         double *number_tendency, char *errmsg,
+                                         int *errflg);
+/// @brief Host velocities [m/s] and positive thickness (nc,nl) [m] to sinks.
+/// @details State, velocity and outputs are (nc,nl,nf); mass [kg/m3/s],
+/// number [particles/m3/s]. All buffers use host column-major layout.
+void exaero_bulk_removal_velocity_tendencies(
+    exaero_package_t pkg, int nc, int nl, int nf, const double *state,
+    const double *velocity, const double *layer_thickness,
+    double *mass_tendency, double *number_tendency, char *errmsg, int *errflg);
 /// @brief Physical dry lower/upper/effective radius and code, both (nf,3).
 void exaero_bulk_reference_radii(exaero_package_t pkg, int nf, double *radii,
                                  int *status, char *errmsg, int *errflg);

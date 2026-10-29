@@ -206,6 +206,75 @@ module exaero_interface
       integer(c_int), intent(out) :: errflg
     end subroutine exaero_modal_activation_fractions
 
+    !> @brief Host coefficients /s to bulk signed mass and diagnostic number sinks.
+    !> @details State, rate and outputs use column-major (nc,nl,nf) host arrays.
+    !> @param[in] state kg/m3; mass_scavenging_rate nonnegative per species/bin.
+    !> @param[inout] mass_tendency kg/m3/s; number_tendency particles/m3/s.
+    !> Failures preserve tendency buffers. The host applies accepted updates.
+    subroutine exaero_bulk_removal_rate_tendencies(pkg,nc,nl,nf,state,mass_scavenging_rate, &
+        mass_tendency,number_tendency,errmsg,errflg) bind(c,name="exaero_bulk_removal_rate_tendencies")
+      import :: c_int,c_double,c_char,exaero_package_t
+      implicit none
+      type(exaero_package_t),value,intent(in) :: pkg
+      integer(c_int),value,intent(in) :: nc,nl,nf
+      real(c_double),intent(in) :: state(*),mass_scavenging_rate(*)
+      real(c_double),intent(inout) :: mass_tendency(*),number_tendency(*)
+      character(kind=c_char),intent(out) :: errmsg(*)
+      integer(c_int),intent(out) :: errflg
+    end subroutine exaero_bulk_removal_rate_tendencies
+
+    !> @brief Bulk velocity / thickness to signed sink tendencies, without state update.
+    !> @details Column-major state/velocity/outputs (nc,nl,nf); thickness (nc,nl).
+    !> @param[in] velocity m/s; layer_thickness positive m; state kg/m3.
+    !> @param[inout] mass_tendency kg/m3/s; number_tendency particles/m3/s.
+    subroutine exaero_bulk_removal_velocity_tendencies(pkg,nc,nl,nf,state,velocity,layer_thickness, &
+        mass_tendency,number_tendency,errmsg,errflg) bind(c,name="exaero_bulk_removal_velocity_tendencies")
+      import :: c_int,c_double,c_char,exaero_package_t
+      implicit none
+      type(exaero_package_t),value,intent(in) :: pkg
+      integer(c_int),value,intent(in) :: nc,nl,nf
+      real(c_double),intent(in) :: state(*),velocity(*),layer_thickness(*)
+      real(c_double),intent(inout) :: mass_tendency(*),number_tendency(*)
+      character(kind=c_char),intent(out) :: errmsg(*)
+      integer(c_int),intent(out) :: errflg
+    end subroutine exaero_bulk_removal_velocity_tendencies
+
+    !> @brief Independent per-mode mass/number coefficients /s to signed sinks.
+    !> @details Host column-major state/mass output (nc,nl,nf); both input
+    !> coefficient arrays and number output (nc,nl,nm). Mass output number slots
+    !> are zero. Each mode's constituent masses share its mass coefficient.
+    !> @param[in] state Packed kg/m3 and particles/m3; coefficients nonnegative /s.
+    !> @param[inout] mass_tendency kg/m3/s; number_tendency particles/m3/s.
+    !> No state update or bounds correction; failures preserve both outputs.
+    subroutine exaero_modal_removal_rate_tendencies(pkg,nc,nl,nf,nm,state,mass_scavenging_rate, &
+        number_scavenging_rate,mass_tendency,number_tendency,errmsg,errflg) &
+        bind(c,name="exaero_modal_removal_rate_tendencies")
+      import :: c_int,c_double,c_char,exaero_package_t
+      implicit none
+      type(exaero_package_t),value,intent(in) :: pkg
+      integer(c_int),value,intent(in) :: nc,nl,nf,nm
+      real(c_double),intent(in) :: state(*),mass_scavenging_rate(*),number_scavenging_rate(*)
+      real(c_double),intent(inout) :: mass_tendency(*),number_tendency(*)
+      character(kind=c_char),intent(out) :: errmsg(*)
+      integer(c_int),intent(out) :: errflg
+    end subroutine exaero_modal_removal_rate_tendencies
+
+    !> @brief One host mode velocity removes mass and number with coefficient v/dz.
+    !> @details State/mass output (nc,nl,nf); velocity/number output (nc,nl,nm).
+    !> @param[in] velocity m/s; layer_thickness (nc,nl) positive m, column-major.
+    !> @param[inout] mass_tendency kg/m3/s; number_tendency particles/m3/s.
+    subroutine exaero_modal_removal_velocity_tendencies(pkg,nc,nl,nf,nm,state,velocity,layer_thickness, &
+        mass_tendency,number_tendency,errmsg,errflg) bind(c,name="exaero_modal_removal_velocity_tendencies")
+      import :: c_int,c_double,c_char,exaero_package_t
+      implicit none
+      type(exaero_package_t),value,intent(in) :: pkg
+      integer(c_int),value,intent(in) :: nc,nl,nf,nm
+      real(c_double),intent(in) :: state(*),velocity(*),layer_thickness(*)
+      real(c_double),intent(inout) :: mass_tendency(*),number_tendency(*)
+      character(kind=c_char),intent(out) :: errmsg(*)
+      integer(c_int),intent(out) :: errflg
+    end subroutine exaero_modal_removal_velocity_tendencies
+
     !> @brief Diagnostic fixed particles/m3 for each bulk mass field.
     subroutine exaero_bulk_fixed_number(pkg,nc,nl,nf,state,number,errmsg,errflg) &
         bind(c,name="exaero_bulk_fixed_number")

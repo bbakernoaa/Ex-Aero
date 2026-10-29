@@ -1,5 +1,8 @@
 # Generic modal removal and number bounds
 
+See [host removal tendencies](host-removal.md) for separate modal mass/number
+scavenging coefficients and the simple per-mode velocity adapter.
+
 These are explicit host utilities for the configurable `modal` backend. They do not run during `executeMicrophysics` or a chemical solver stage. The fixed `mam4xx` package has a separate state layout and does not use these interfaces.
 
 Each mode may set `dry_geometric_radius_min` and `dry_geometric_radius_max` in metres, in a `modes` entry or `mode_overrides`. Both values are required together; omitted bounds are disabled. After an accepted chemistry and removal update, call `enforceModalBounds` once. It preserves every material mass and adjusts only particle number to keep dry geometric radius in range. Record the signed returned `delta_number` as a correction budget. An empty mode remains empty; the host must provide both mass and number when injecting particles. The correction is non-differentiable at the bounds and is not a chemical tendency.

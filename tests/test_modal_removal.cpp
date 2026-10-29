@@ -3,6 +3,7 @@
 #ifdef NDEBUG
 #undef NDEBUG
 #endif
+#include "removal_tendency_cases.hpp"
 #include <cassert>
 #include <cmath>
 #include <exaero/ModalCoupling.hpp>
@@ -76,6 +77,8 @@ struct Package final : IAerosolPackage, IModalCoupling {
   void
   setModalOpticsProvider(std::shared_ptr<const IModalOpticsProvider>) override {
   }
+  void setModalBandOpticsProvider(
+      std::shared_ptr<const IModalBandOpticsProvider>) override {}
 };
 
 bool near(double x, double y, double tolerance = 1e-12) {
@@ -86,6 +89,7 @@ bool near(double x, double y, double tolerance = 1e-12) {
 
 int main() {
   Package p;
+  removal_test::tendencies(p, true);
   const double n = 1e8;
   const double mass = n * modalNumberVolume(4e-7, 1.5) * 1000;
   std::array<double, 6> raw{mass, 0, n, 0, 0, 0};

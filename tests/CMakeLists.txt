@@ -20,7 +20,7 @@ target_link_libraries(exaero_cloud_ice_yaml_test PRIVATE exaero)
 target_include_directories(exaero_cloud_ice_yaml_test PRIVATE ${EXAERO_REPO_ROOT}/src/src_impl)
 target_compile_features(exaero_cloud_ice_yaml_test PRIVATE cxx_std_23)
 add_test(NAME ExaeroCloudIceYaml COMMAND exaero_cloud_ice_yaml_test)
-add_executable(exaero_modal_test test_modal.cpp test_modal_mam4.cpp
+add_executable(exaero_modal_test test_modal.cpp test_modal_parity.cpp test_modal_mam4.cpp
                                  test_modal_chemistry.cpp test_modal_main.cpp)
 add_executable(exaero_modal_optics_bands_test test_modal_optics_bands.cpp)
 target_link_libraries(exaero_modal_optics_bands_test PRIVATE exaero)
@@ -76,6 +76,9 @@ add_test(
 add_executable(exaero_modal_fortran_test test_modal_fortran.f90)
 target_link_libraries(exaero_modal_fortran_test PRIVATE exaero)
 add_test(NAME ExaeroModalFortran COMMAND exaero_modal_fortran_test)
+add_executable(exaero_removal_fortran_test test_removal_fortran.f90)
+target_link_libraries(exaero_removal_fortran_test PRIVATE exaero)
+add_test(NAME ExaeroRemovalFortran COMMAND exaero_removal_fortran_test)
 set_tests_properties(
   ExaeroModalFortran PROPERTIES ENVIRONMENT
                                 "OMP_NUM_THREADS=2;OMP_PROC_BIND=false")
