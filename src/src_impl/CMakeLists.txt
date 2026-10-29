@@ -91,6 +91,8 @@ add_library(
   HostCoupling.cpp
   Removal.cpp
   PopulationProperties.cpp
+  DepositionCoupling.cpp
+  DepositionCoupling_C.cpp
   PopulationProperties_C.cpp
   Removal_C.cpp
   HostCoupling_C.cpp

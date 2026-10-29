@@ -259,3 +259,7 @@ add_test(NAME ExaeroHostFacadeFortran COMMAND exaero_host_facade_fortran_test)
 add_executable(exaero_population_properties_test test_population_properties.cpp)
 target_link_libraries(exaero_population_properties_test PRIVATE exaero)
 add_test(NAME ExaeroPopulationProperties COMMAND exaero_population_properties_test)
+
+add_executable(exaero_deposition_coupling_test test_deposition_coupling.cpp)
+target_link_libraries(exaero_deposition_coupling_test PRIVATE exaero)
+add_test(NAME ExaeroDepositionCoupling COMMAND exaero_deposition_coupling_test)

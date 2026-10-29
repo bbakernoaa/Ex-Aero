@@ -71,7 +71,16 @@ number coefficient `1e-4 /s` produce `{-1e-12,-1.5e-12} kg/m3/s` and
 `-5e3 /m3/s`. Material ratios are preserved while the two moments can differ.
 A host velocity `0.01 m/s` over a `10 m` layer corresponds to `0.001 /s`.
 
-## Validation record
+The facade also supplies common cloud/ice, activation, population-property,
+resuspension and deposition-rebinning calls, with C/Fortran bindings and explicit
+operation support. Bulk diagnosed number and modal prognostic number retain
+separate representation meanings. Dry/reference sizes, unavailable properties,
+and empty populations have explicit metadata/status contracts. Existing optics,
+CCN, diagnostics and emissions surfaces continue to be shared. See the common
+[verification record](host-coupling.md#verification-scope) for the current 29-test
+generic / 31-test optional builds; the earlier behavior-slice record follows.
+
+## Earlier behavior-slice validation record
 
 The generic Debug profile passes all 22 CTest tests with GNU C++/Fortran 12.2,
 Kokkos 5.1.1 Serial, yaml-cpp 0.8.0, Catch2 2.13.10 and Python 3.11.2.

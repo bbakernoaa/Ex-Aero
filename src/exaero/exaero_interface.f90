@@ -177,6 +177,43 @@ module exaero_interface
   !> header for the full per-argument unit/index contract.
   ! Public C-bindings interfaces (CCPP-standard error signatures)
   interface
+    !> @brief Query configured field routes; capacity zero queries only count.
+    subroutine exaero_resuspension_routes(pkg,capacity,nroute,sources,destinations,errmsg,errflg) &
+        bind(c,name="exaero_resuspension_routes")
+      import :: c_int,c_char,c_ptr,exaero_package_t
+      implicit none
+      type(exaero_package_t),value,intent(in) :: pkg
+      integer(c_int),value,intent(in) :: capacity
+      integer(c_int),intent(inout) :: nroute
+      type(c_ptr),value,intent(in) :: sources,destinations
+      character(c_char),intent(out) :: errmsg(*)
+      integer(c_int),intent(out) :: errflg
+    end subroutine
+    !> @brief Route original host-supplied material return fields once.
+    subroutine exaero_redistribute_resuspension(pkg,nc,nl,nf,nroute,sources,destinations,rates,routed,errmsg,errflg) &
+        bind(c,name="exaero_redistribute_resuspension")
+      import :: c_int,c_double,c_char,exaero_package_t
+      implicit none
+      type(exaero_package_t),value,intent(in) :: pkg
+      integer(c_int),value,intent(in) :: nc,nl,nf,nroute
+      integer(c_int),intent(in) :: sources(*),destinations(*)
+      real(c_double),intent(in) :: rates(*)
+      real(c_double),intent(inout) :: routed(*)
+      character(c_char),intent(out) :: errmsg(*)
+      integer(c_int),intent(out) :: errflg
+    end subroutine
+    !> @brief Rebin selected-species deposited kg/m2 budgets by dry diameter.
+    subroutine exaero_rebin_deposition(pkg,nc,nl,nf,species_index,nbin,budget,edges,bin_mass,tail_mass,errmsg,errflg) &
+        bind(c,name="exaero_rebin_deposition")
+      import :: c_int,c_double,c_char,exaero_package_t
+      implicit none
+      type(exaero_package_t),value,intent(in) :: pkg
+      integer(c_int),value,intent(in) :: nc,nl,nf,species_index,nbin
+      real(c_double),intent(in) :: budget(*),edges(*)
+      real(c_double),intent(inout) :: bin_mass(*),tail_mass(*)
+      character(c_char),intent(out) :: errmsg(*)
+      integer(c_int),intent(out) :: errflg
+    end subroutine
     !> @brief Common physical properties and per-value availability; no state update.
     subroutine exaero_population_properties(pkg,nc,nl,nf,np,temp,rh,state,values,availability,status,errmsg,errflg) &
         bind(c,name="exaero_population_properties")

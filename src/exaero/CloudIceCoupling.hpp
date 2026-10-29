@@ -44,13 +44,14 @@ public:
 /// bulkCloudIce/modalCloudIce; population count comes from hostCouplingInfo.
 void cloudIce(IAerosolPackage &, const EnvironmentalStateView &,
               const View3D<const double> &ambient,
-              const View3D<const double> *cloudborne, IceCategory, bool preexisting_ice,
-              View4D<double> &ambient_out, View4D<double> &cloudborne_out,
-              View3D<int> &ambient_status, View3D<int> &cloudborne_status);
+              const View3D<const double> *cloudborne, IceCategory,
+              bool preexisting_ice, View4D<double> &ambient_out,
+              View4D<double> &cloudborne_out, View3D<int> &ambient_status,
+              View3D<int> &cloudborne_status);
 /// @brief Common number/mass activation fractions (cell,level,P,2*num_S).
 void activationFractions(IAerosolPackage &, const EnvironmentalStateView &,
-                         const View3D<const double> &,const View1D<const double> &,
-                         View4D<double> &);
+                         const View3D<const double> &,
+                         const View1D<const double> &, View4D<double> &);
 
 /// @brief Diagnose both populations from host-owned packed states.
 /// @details Output slabs are (cell,level,species-or-mode,COUNT); status slabs
@@ -58,17 +59,15 @@ void activationFractions(IAerosolPackage &, const EnvironmentalStateView &,
 /// and Absent status. No state is mutated.
 void bulkCloudIce(IAerosolPackage &package, const EnvironmentalStateView &env,
                   const View3D<const double> &ambient,
-                  const View3D<const double> *cloudborne,
-                  IceCategory category, bool preexisting_ice,
-                  View4D<double> &ambient_out, View4D<double> &cloudborne_out,
-                  View3D<int> &ambient_status,
+                  const View3D<const double> *cloudborne, IceCategory category,
+                  bool preexisting_ice, View4D<double> &ambient_out,
+                  View4D<double> &cloudborne_out, View3D<int> &ambient_status,
                   View3D<int> &cloudborne_status);
 void modalCloudIce(IAerosolPackage &package, const EnvironmentalStateView &env,
                    const View3D<const double> &ambient,
-                   const View3D<const double> *cloudborne,
-                   IceCategory category, bool preexisting_ice,
-                   View4D<double> &ambient_out, View4D<double> &cloudborne_out,
-                   View3D<int> &ambient_status,
+                   const View3D<const double> *cloudborne, IceCategory category,
+                   bool preexisting_ice, View4D<double> &ambient_out,
+                   View4D<double> &cloudborne_out, View3D<int> &ambient_status,
                    View3D<int> &cloudborne_status);
 
 /// @brief Interstitial number and mass activation fractions for each S.

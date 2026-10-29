@@ -110,3 +110,6 @@ int main() {
 
 #include <exaero/PopulationProperties.hpp>
 #include <exaero/PopulationProperties_C.h>
+
+#include <exaero/DepositionCoupling.hpp>
+#include <exaero/DepositionCoupling_C.h>

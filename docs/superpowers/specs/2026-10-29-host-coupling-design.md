@@ -106,5 +106,5 @@ queries do no I/O and introduce no process-global state.
 
 The [roadmap](../plans/2026-10-29-host-coupling-roadmap.md) divides work into four
 independently testable slices. Each slice includes bindings, documentation and
-verification before moving on. This revision changes plans only; implementation
-has not begun.
+verification before moving on. All four slices are implemented, with the verification record in
+[host coupling](../../guides/host-coupling.md).

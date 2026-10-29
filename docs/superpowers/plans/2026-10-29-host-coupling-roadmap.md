@@ -17,8 +17,9 @@ generic modal helpers, using the package's representation and explicit metadata.
 Execute slice 1 first. Slices 2–4 consume its metadata and capability contract;
 each delivers complete C++, C and Fortran calls, tests and a host usage guide.
 Use native inline execution for continuity unless the user requests otherwise.
-The execution skill supplies a final whole-slice review. No implementation,
-branch publication or integration is included in this documentation revision.
+The execution skill supplies a final whole-slice review. All four slices are implemented. Validation and public usage are recorded in
+[host coupling](../../guides/host-coupling.md). Branch publication and integration
+remain separate from this local implementation.
 
 ## Shared decisions
 

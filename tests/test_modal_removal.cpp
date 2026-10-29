@@ -89,27 +89,51 @@ bool near(double x, double y, double tolerance = 1e-12) {
 
 int main() {
   Package p;
-  // Distinct species losses in a mode, with independently supplied particle loss.
+  // Distinct species losses in a mode, with independently supplied particle
+  // loss.
   {
-    std::array<double,6> x{2e-9,3e-9,5e7,0,0,0}, rates{5e-4,2e-4,0,0,0,0}, sink{};
-    std::array<double,2> nr{1e-4,0}, nsink{};
-    View3D<const double> xv(x.data(),1,1,6), rv(rates.data(),1,1,6), nv(nr.data(),1,1,2);
-    View3D<double> mv(sink.data(),1,1,6), no(nsink.data(),1,1,2);
-    modalSpeciesRemovalRateTendencies(p,xv,rv,nv,mv,no);
-    assert(near(sink[0],-1e-12)&&near(sink[1],-6e-13)&&near(nsink[0],-5e3));
-    assert(sink[2]==0&&sink[5]==0&&x[0]==2e-9);
-    for(double invalid : {1.,-1.,std::numeric_limits<double>::quiet_NaN()}) {
-      rates[5]=invalid; sink.fill(77);nsink.fill(88);
-      bool failed=false; try{modalSpeciesRemovalRateTendencies(p,xv,rv,nv,mv,no);}catch(const std::exception&){failed=true;}
-      assert(failed&&std::all_of(sink.begin(),sink.end(),[](double v){return v==77;})&&nsink[0]==88);
+    std::array<double, 6> x{2e-9, 3e-9, 5e7, 0, 0, 0},
+        rates{5e-4, 2e-4, 0, 0, 0, 0}, sink{};
+    std::array<double, 2> nr{1e-4, 0}, nsink{};
+    View3D<const double> xv(x.data(), 1, 1, 6), rv(rates.data(), 1, 1, 6),
+        nv(nr.data(), 1, 1, 2);
+    View3D<double> mv(sink.data(), 1, 1, 6), no(nsink.data(), 1, 1, 2);
+    modalSpeciesRemovalRateTendencies(p, xv, rv, nv, mv, no);
+    assert(near(sink[0], -1e-12) && near(sink[1], -6e-13) &&
+           near(nsink[0], -5e3));
+    assert(sink[2] == 0 && sink[5] == 0 && x[0] == 2e-9);
+    for (double invalid : {1., -1., std::numeric_limits<double>::quiet_NaN()}) {
+      rates[5] = invalid;
+      sink.fill(77);
+      nsink.fill(88);
+      bool failed = false;
+      try {
+        modalSpeciesRemovalRateTendencies(p, xv, rv, nv, mv, no);
+      } catch (const std::exception &) {
+        failed = true;
+      }
+      assert(failed &&
+             std::all_of(sink.begin(), sink.end(),
+                         [](double v) { return v == 77; }) &&
+             nsink[0] == 88);
     }
-    rates[5]=0;
-    bool failed=false; View3D<const double> wrong(rates.data(),1,1,2);
-    try{modalSpeciesRemovalRateTendencies(p,xv,wrong,nv,mv,no);}catch(const std::exception&){failed=true;}
-    assert(failed&&sink[0]==77&&nsink[0]==88);
-    View3D<double> alias(x.data(),1,1,6);failed=false;
-    try{modalSpeciesRemovalRateTendencies(p,xv,rv,nv,alias,no);}catch(const std::exception&){failed=true;}
-    assert(failed&&x[0]==2e-9);
+    rates[5] = 0;
+    bool failed = false;
+    View3D<const double> wrong(rates.data(), 1, 1, 2);
+    try {
+      modalSpeciesRemovalRateTendencies(p, xv, wrong, nv, mv, no);
+    } catch (const std::exception &) {
+      failed = true;
+    }
+    assert(failed && sink[0] == 77 && nsink[0] == 88);
+    View3D<double> alias(x.data(), 1, 1, 6);
+    failed = false;
+    try {
+      modalSpeciesRemovalRateTendencies(p, xv, rv, nv, alias, no);
+    } catch (const std::exception &) {
+      failed = true;
+    }
+    assert(failed && x[0] == 2e-9);
   }
   removal_test::tendencies(p, true);
   const double n = 1e8;

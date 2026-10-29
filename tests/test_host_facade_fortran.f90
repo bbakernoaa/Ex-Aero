@@ -7,6 +7,9 @@ program test_host_facade_fortran
   type(exaero_package_t) :: pkg
   integer(c_int) :: flag,nf,np,ncon,rep
   integer :: backend,c,k
+  integer(c_int) :: sources(1),destinations(1),nroute
+  real(c_double),allocatable :: returns(:,:,:),routed(:,:,:),bins(:,:,:),tails(:,:,:)
+  real(c_double) :: edges(4)
   real(c_double),allocatable :: properties(:,:,:,:)
   integer(c_int),allocatable :: availability(:,:,:,:),pstatus(:,:,:)
   integer(c_int),parameter :: nc=2,nl=3
@@ -102,6 +105,31 @@ program test_host_facade_fortran
     if(flag==0.or.any(properties/=77).or.any(availability/=88).or.any(pstatus/=99)) &
       error stop 'FATAL ERROR: facade atomic property error'
     deallocate(properties,availability,pstatus)
+    allocate(returns(nc,nl,nf),routed(nc,nl,nf),bins(nc,nl,3),tails(nc,nl,2))
+    returns=state
+    sources=0;destinations=1
+    if(backend==1) then
+      returns(:,:,3)=0;returns(:,:,6)=0;destinations=3
+    end if
+    call exaero_resuspension_routes(pkg,0_c_int,nroute,c_null_ptr,c_null_ptr,error,flag)
+    if(flag/=0.or.nroute/=0) error stop 'FATAL ERROR: facade route query'
+    call exaero_redistribute_resuspension(pkg,nc,nl,nf,1_c_int,sources,destinations,returns,routed,error,flag)
+    if(flag/=0.or.any(routed(:,:,1)/=0)) error stop 'FATAL ERROR: facade redistribution'
+    if(any(abs(sum(routed,dim=3)-sum(returns,dim=3))>1e-20_c_double)) error stop 'FATAL ERROR: facade return budget'
+    edges=[1e-12_c_double,2e-7_c_double,4e-7_c_double,1e-3_c_double]
+    call exaero_rebin_deposition(pkg,nc,nl,nf,0_c_int,3_c_int,state,edges,bins,tails,error,flag)
+    if(flag/=0) error stop 'FATAL ERROR: facade rebin'
+    if(backend==0) then
+      if(any(abs(sum(bins,dim=3)+sum(tails,dim=3)-state(:,:,1))>1e-20_c_double)) &
+        error stop 'FATAL ERROR: facade bulk rebin budget'
+    else
+      if(any(abs(sum(bins,dim=3)+sum(tails,dim=3)-state(:,:,1)-state(:,:,4))>1e-20_c_double)) &
+        error stop 'FATAL ERROR: facade modal rebin budget'
+    end if
+    bins=77;tails=88
+    call exaero_rebin_deposition(pkg,nc,nl,nf,nf,3_c_int,state,edges,bins,tails,error,flag)
+    if(flag==0.or.any(bins/=77).or.any(tails/=88)) error stop 'FATAL ERROR: facade atomic rebin error'
+    deallocate(returns,routed,bins,tails)
     deallocate(state,a,b,fractions,ast,bst)
     call exaero_free_package(pkg)
   end do

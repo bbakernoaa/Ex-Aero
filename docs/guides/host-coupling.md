@@ -93,3 +93,59 @@ populations have zero extensive quantities and retain configured dry/reference
 geometry and width. Bulk configuration still defines kappa and wet reference
 properties. Empty modal mixture kappa, density and wet geometry are unavailable.
 Neither missing bounds nor an empty population triggers number correction.
+
+## Returned and deposited budgets
+
+`configuredResuspensionRoutes(package)` translates configured modal routes into
+explicit source/destination mass-field indices; bulk configuration supplies no
+routes. Hosts can pass their own `ResuspensionFieldRoute` list to
+`redistributeResuspension`. Inputs and outputs use the packed state shape with
+material return rates in kg/m3/s and zero modal number slots. The helper moves
+each original source once. Chained routes do not reroute newly received returns;
+all original routed sources leave before incoming returns accumulate. Duplicate
+sources, cycles, forbidden fields and cross-material modal routes are rejected.
+Bulk cross-bin/material identity follows the host's explicit mapping.
+
+`rebinDeposition(package,budget,species_index,diameter_edges,bin_mass,tail_mass)`
+uses the existing representation's physical distribution. Species index selects
+one configured bulk species/bin or a modal material across all modes; it is not
+a population or field selector. Budgets use kg/m2 with particles/m2 in modal
+number fields. Dry diameter edges are in m; outputs are kg/m2 in bins and two
+tails (below, above). Modal mixture geometry uses all mode constituents and
+particle number, so changing deposited number at fixed mass changes fractions.
+
+C/Fortran use `exaero_resuspension_routes` (capacity zero queries count),
+`exaero_redistribute_resuspension`, and `exaero_rebin_deposition`. Fortran route
+queries use `c_loc` of contiguous integer `target` buffers, or `c_null_ptr` for
+a count-only query. Explicit route indices and species indices are zero-based.
+Neither routing nor rebinning calculates precipitation physics or creates a
+particle-number return.
+
+## Existing shared compute and explicit extensions
+
+Continue using the existing package diagnostics, CCN, emissions and optics
+interfaces, including `opticsBandCoupling` for shortwave/longwave bands. The
+host-helper facade adds population semantics without replacing those APIs.
+`supportsHostOperation` reports modal number-bound inspection/enforcement where
+applicable; hosts call the existing explicit modal routines and receive their
+correction budgets. Bulk physical radius bounds are diagnostic metadata.
+MKPP chemistry, uptake derivatives and native-package extensions retain their
+existing interfaces and ownership.
+
+## Verification scope
+
+The common facade is checked with initialized bulk and generic modal packages,
+multiple cells/levels, explicit material permissions, reordered configurations,
+separate cloudborne buffers, analytical lognormal moments, composition-sensitive
+kappa, and deposited-budget closure. C and Fortran calls check population/field
+indices and atomic failures. Native MAM4xx retains its existing tests and reports
+unsupported generic helper surfaces explicitly.
+
+Validation uses GNU C++/Fortran 12.2, Kokkos 5.1.1 Serial, the existing Debug
+profiles and Fortran `-fcheck=all -fbacktrace`. The generic suite passes 29/29
+CTest tests; the optional MAM4xx suite passes 31/31. New/changed implementation
+translation units pass `-Wall -Wextra -Wpedantic -Werror` syntax checks, public
+C headers pass a strict C11 compile, and new public headers participate in the
+standalone compile gate. No GPU execution or full CAM wet-deposition run was
+performed. These checks establish interface and utility behavior, while host
+rate laws and coupled integration require their own validation.

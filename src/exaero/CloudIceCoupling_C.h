@@ -32,39 +32,53 @@ enum {
 #ifdef __cplusplus
 extern "C" {
 #endif
-/// @brief Common population cloud/ice slabs (nc,nl,np,12); cloud_state nullable.
-void exaero_cloud_ice(exaero_package_t,int nc,int nl,int nf,int np,
-    const double *temperature,const double *rh,const double *state,const double *cloud_state,
-    int category,int preexisting_ice,double *ambient_out,double *cloud_out,
-    int *ambient_status,int *cloud_status,char *errmsg,int *errflg);
-/// @brief Common fractions (nc,nl,np,2*nss), number then mass per supersaturation.
-void exaero_activation_fractions(exaero_package_t,int nc,int nl,int nf,int np,int nss,
-    const double *temperature,const double *rh,const double *state,const double *supersaturation,
-    double *fractions,char *errmsg,int *errflg);
+/// @brief Common population cloud/ice slabs (nc,nl,np,12); cloud_state
+/// nullable.
+void exaero_cloud_ice(exaero_package_t, int nc, int nl, int nf, int np,
+                      const double *temperature, const double *rh,
+                      const double *state, const double *cloud_state,
+                      int category, int preexisting_ice, double *ambient_out,
+                      double *cloud_out, int *ambient_status, int *cloud_status,
+                      char *errmsg, int *errflg);
+/// @brief Common fractions (nc,nl,np,2*nss), number then mass per
+/// supersaturation.
+void exaero_activation_fractions(exaero_package_t, int nc, int nl, int nf,
+                                 int np, int nss, const double *temperature,
+                                 const double *rh, const double *state,
+                                 const double *supersaturation,
+                                 double *fractions, char *errmsg, int *errflg);
 /// @brief Bulk outputs (nc,nl,nf,12); cloud_state may be NULL.
-void exaero_bulk_cloud_ice(
-    exaero_package_t pkg, int nc, int nl, int nf, const double *temperature,
-    const double *rh, const double *state, const double *cloud_state,
-    int category, int preexisting_ice, double *ambient_out, double *cloud_out,
-    int *ambient_status, int *cloud_status, char *errmsg, int *errflg);
+void exaero_bulk_cloud_ice(exaero_package_t pkg, int nc, int nl, int nf,
+                           const double *temperature, const double *rh,
+                           const double *state, const double *cloud_state,
+                           int category, int preexisting_ice,
+                           double *ambient_out, double *cloud_out,
+                           int *ambient_status, int *cloud_status, char *errmsg,
+                           int *errflg);
 /// @brief Modal outputs (nc,nl,nm,12); nf is packed mass+number fields.
-void exaero_modal_cloud_ice(
-    exaero_package_t pkg, int nc, int nl, int nf, const double *temperature,
-    const double *rh, const double *state, const double *cloud_state,
-    int category, int preexisting_ice, double *ambient_out, double *cloud_out,
-    int *ambient_status, int *cloud_status, char *errmsg, int *errflg);
+void exaero_modal_cloud_ice(exaero_package_t pkg, int nc, int nl, int nf,
+                            const double *temperature, const double *rh,
+                            const double *state, const double *cloud_state,
+                            int category, int preexisting_ice,
+                            double *ambient_out, double *cloud_out,
+                            int *ambient_status, int *cloud_status,
+                            char *errmsg, int *errflg);
 /// @brief Interstitial fractions (nc,nl,nf,2*nss), number then mass.
-void exaero_bulk_activation_fractions(
-    exaero_package_t pkg, int nc, int nl, int nf, int nss,
-    const double *temperature, const double *rh, const double *state,
-    const double *supersaturation, double *fractions, char *errmsg,
-    int *errflg);
+void exaero_bulk_activation_fractions(exaero_package_t pkg, int nc, int nl,
+                                      int nf, int nss,
+                                      const double *temperature,
+                                      const double *rh, const double *state,
+                                      const double *supersaturation,
+                                      double *fractions, char *errmsg,
+                                      int *errflg);
 /// @brief Interstitial fractions (nc,nl,nm,2*nss), number then mass.
-void exaero_modal_activation_fractions(
-    exaero_package_t pkg, int nc, int nl, int nf, int nss,
-    const double *temperature, const double *rh, const double *state,
-    const double *supersaturation, double *fractions, char *errmsg,
-    int *errflg);
+void exaero_modal_activation_fractions(exaero_package_t pkg, int nc, int nl,
+                                       int nf, int nss,
+                                       const double *temperature,
+                                       const double *rh, const double *state,
+                                       const double *supersaturation,
+                                       double *fractions, char *errmsg,
+                                       int *errflg);
 #ifdef __cplusplus
 }
 #endif
