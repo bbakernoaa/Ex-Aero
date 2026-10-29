@@ -40,6 +40,7 @@ bool supportsHostOperation(IAerosolPackage &p,HostOperation op) {
   host_detail::require(int(op)>=0&&int(op)<=8,"invalid host operation code");
   try {
     const auto info=hostCouplingInfo(p);
+    if(op==HostOperation::RemovalRates||op==HostOperation::RemovalVelocity)return true;
     return (op==HostOperation::InspectNumberBounds||op==HostOperation::EnforceNumberBounds)&&info.representation==AerosolRepresentation::Modal;
   } catch(const std::logic_error&) { return false; }
 }

@@ -89,6 +89,8 @@ add_library(
   exaero_impl OBJECT
   PackageFactory.cpp
   HostCoupling.cpp
+  Removal.cpp
+  Removal_C.cpp
   HostCoupling_C.cpp
   CloudIceActivation.cpp
   CloudIceCoupling_C.cpp

@@ -28,6 +28,13 @@ zero-valued budgets and reserved number slots are checked exactly.
 | Bulk `actfracs`, `scav_diam`, `resuspension_resize`, `rebin_bulk_fluxes` | bulk activation/size/route/rebin utilities | Ex-Aero extensions: CAM bulk methods are explicitly unimplemented; they are not numeric parity targets. |
 | Modal SW/LW native band datasets | `modalBandOptics`, availability APIs | Partial; the independent optics-data plan supplies source-supported bands. This behavior work does not claim new spectral coverage. |
 
+The common [host-coupling facade](host-coupling.md) now maps populations and
+constituent fields explicitly. `removalRateTendencies` accepts independent modal
+constituent mass coefficients and a separate mode number coefficient. This
+expresses host-specified selective uptake as well as equal-rate whole-particle
+removal; the host owns the corresponding solubility and precipitation physics.
+The existing mode-shared helper remains available.
+
 ## Source-derived numerical cases
 
 For width `sigma`, the mean particle volume is

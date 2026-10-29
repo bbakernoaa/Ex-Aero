@@ -158,6 +158,33 @@ module exaero_interface
   !> header for the full per-argument unit/index contract.
   ! Public C-bindings interfaces (CCPP-standard error signatures)
   interface
+    !> @brief Common host removal; mass slots per field, number per population.
+    subroutine exaero_removal_rate_tendencies(pkg,nc,nl,nf,np,state,mass_rate,number_rate, &
+        mass_tendency,number_tendency,errmsg,errflg) bind(c,name="exaero_removal_rate_tendencies")
+      import :: c_int,c_double,c_char,c_ptr,exaero_package_t
+      implicit none
+      type(exaero_package_t),value,intent(in) :: pkg
+      integer(c_int),value,intent(in) :: nc,nl,nf,np
+      real(c_double),intent(in) :: state(*),mass_rate(*)
+      type(c_ptr),value,intent(in) :: number_rate
+      real(c_double),intent(inout) :: mass_tendency(*),number_tendency(*)
+      character(c_char),intent(out) :: errmsg(*)
+      integer(c_int),intent(out) :: errflg
+    end subroutine exaero_removal_rate_tendencies
+
+    !> @brief Common host removal; mass slots per field, number per population.
+    subroutine exaero_removal_velocity_tendencies(pkg,nc,nl,nf,np,state,velocity,thickness, &
+        mass_tendency,number_tendency,errmsg,errflg) bind(c,name="exaero_removal_velocity_tendencies")
+      import :: c_int,c_double,c_char,c_ptr,exaero_package_t
+      implicit none
+      type(exaero_package_t),value,intent(in) :: pkg
+      integer(c_int),value,intent(in) :: nc,nl,nf,np
+      real(c_double),intent(in) :: state(*),velocity(*),thickness(*)
+      real(c_double),intent(inout) :: mass_tendency(*),number_tendency(*)
+      character(c_char),intent(out) :: errmsg(*)
+      integer(c_int),intent(out) :: errflg
+    end subroutine exaero_removal_velocity_tendencies
+
     !> @brief Checked zero-based host metadata; outputs preserved on failure.
     subroutine exaero_host_coupling_counts(pkg,rep,nf,np,ns,errmsg,errflg) &
         bind(c,name="exaero_host_coupling_counts")

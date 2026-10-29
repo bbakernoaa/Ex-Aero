@@ -86,3 +86,12 @@ write a 256-byte `errmsg`. Zeroing a coefficient disables only that sink.
 The host may reject a step or integrate accepted tendencies. Its explicit
 `enforceModalBounds` call can then correct number and return a separate
 correction budget; no removal helper adjusts number or budgets implicitly.
+
+## Common representation-aware entry points
+
+The [common host-coupling API](host-coupling.md) provides metadata-driven rate
+and velocity adapters for both representations. Its modal rate path accepts a
+mass coefficient for each constituent field, plus a separate number coefficient
+per mode. The existing `modalRemovalRateTendencies` remains the convenient
+mode-shared whole-particle path. All precipitation physics, solubility factors
+and accepted updates remain host-owned.

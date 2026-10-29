@@ -104,3 +104,6 @@ int main() {
 
 #include <exaero/HostCoupling.hpp>
 #include <exaero/HostCoupling_C.h>
+
+#include <exaero/Removal.hpp>
+#include <exaero/Removal_C.h>

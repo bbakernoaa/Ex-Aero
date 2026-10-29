@@ -53,11 +53,11 @@ contains
     original=state
     call exaero_bulk_fixed_number(pkg,nc,nl,nf,state,number,error,flag)
     if(flag/=0) error stop 'FATAL ERROR: bulk removal number diagnostic'
-    call exaero_bulk_removal_rate_tendencies(pkg,nc,nl,nf,state,rates,mass_sink,number_sink,error,flag)
+    call exaero_removal_rate_tendencies(pkg,nc,nl,nf,nf,state,rates,c_null_ptr,mass_sink,number_sink,error,flag)
     if(flag/=0) error stop 'FATAL ERROR: bulk removal rates'
     if(any(.not.near(mass_sink,-rates*state))) error stop 'FATAL ERROR: bulk mass rate layout'
     if(any(.not.near(number_sink,-rates*number))) error stop 'FATAL ERROR: bulk number rate layout'
-    call exaero_bulk_removal_velocity_tendencies(pkg,nc,nl,nf,state,velocity,dz, &
+    call exaero_removal_velocity_tendencies(pkg,nc,nl,nf,nf,state,velocity,dz, &
         mass_sink,number_sink,error,flag)
     if(flag/=0) error stop 'FATAL ERROR: bulk removal velocities'
     do s=1,nf
@@ -89,7 +89,8 @@ contains
       '{name: B, density: 2000, molecular_weight: 0.2, hygroscopicity: 0.0}]'//new_line('a')// &
       'modes: [{name: fine, geometric_radius: 1e-7, geometric_std_dev: 1.5}, '// &
       '{name: coarse, geometric_radius: 2e-7, geometric_std_dev: 1.5}]'
-    real(c_double) :: state(nc,nl,nf),original(nc,nl,nf),lm(nc,nl,nm),ln(nc,nl,nm)
+    real(c_double) :: state(nc,nl,nf),original(nc,nl,nf),lm(nc,nl,nm),field_rates(nc,nl,nf)
+    real(c_double),target :: ln(nc,nl,nm)
     real(c_double) :: mass_sink(nc,nl,nf),number_sink(nc,nl,nm),velocity(nc,nl,nm),dz(nc,nl)
     pkg=exaero_create_package('modal'//c_null_char,error,flag)
     if(flag/=0) error stop 'FATAL ERROR: modal removal construction'
@@ -121,7 +122,27 @@ contains
       if(any(.not.near(number_sink(:,:,m),-ln(:,:,m)*state(:,:,m*3)))) &
           error stop 'FATAL ERROR: modal independent number rate'
     end do
-    call exaero_modal_removal_velocity_tendencies(pkg,nc,nl,nf,nm,state,velocity,dz, &
+    field_rates=0
+    do m=1,nm
+      do s=1,2
+        f=(m-1)*3+s
+        field_rates(:,:,f)=lm(:,:,m)*s
+      end do
+    end do
+    call exaero_removal_rate_tendencies(pkg,nc,nl,nf,nm,state,field_rates,c_loc(ln), &
+        mass_sink,number_sink,error,flag)
+    if(flag/=0) error stop 'FATAL ERROR: common modal species rates'
+    do m=1,nm
+      do s=1,2
+        f=(m-1)*3+s
+        if(any(.not.near(mass_sink(:,:,f),-field_rates(:,:,f)*state(:,:,f)))) &
+          error stop 'FATAL ERROR: common modal constituent layout'
+      end do
+      if(any(mass_sink(:,:,m*3)/=0)) error stop 'FATAL ERROR: common modal number mass slot'
+      if(any(.not.near(number_sink(:,:,m),-ln(:,:,m)*state(:,:,m*3)))) &
+          error stop 'FATAL ERROR: common modal number loss'
+    end do
+    call exaero_removal_velocity_tendencies(pkg,nc,nl,nf,nm,state,velocity,dz, &
         mass_sink,number_sink,error,flag)
     if(flag/=0) error stop 'FATAL ERROR: modal removal velocities'
     do m=1,nm
