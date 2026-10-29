@@ -58,6 +58,16 @@ void modalRemovalRateTendencies(
     const View3D<const double> &number_scavenging_rate,
     View3D<double> &mass_tendency, View3D<double> &number_tendency);
 
+/// @brief Constituent-specific mass rates [1/s] with mode-level number rates.
+/// @details Mass-rate extent matches packed state; number-field slots must be
+/// zero. Each species mass uses its own rate; number remains one per mode.
+/// Shapes, units, validation and atomicity otherwise match the mode-shared API.
+void modalSpeciesRemovalRateTendencies(
+    IAerosolPackage &package, const View3D<const double> &state,
+    const View3D<const double> &mass_scavenging_rate,
+    const View3D<const double> &number_scavenging_rate,
+    View3D<double> &mass_tendency, View3D<double> &number_tendency);
+
 /// @brief Return mode-uniform tendencies -velocity/layer_thickness times state.
 /// @details Velocity [m/s] is (cell,level,mode); thickness [m] is (cell,level),
 /// finite and positive. The same velocity applies to mass and number. Layout,

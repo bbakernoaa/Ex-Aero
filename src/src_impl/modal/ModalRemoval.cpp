@@ -101,12 +101,13 @@ void removalTendencies(IAerosolPackage &package,
                        const View3D<const double> &mass_rate,
                        const View3D<const double> &number_rate,
                        const View2D<const double> *thickness,
-                       View3D<double> &mass, View3D<double> &number) {
+                       View3D<double> &mass, View3D<double> &number,
+                       bool constituent_rates = false) {
   const auto &cfg = configuration(package);
   stateShape(cfg, state);
   const auto nc = state.extent(0), nl = state.extent(1), nf = state.extent(2),
              nm = cfg.modes.size(), ns = cfg.species.size();
-  checkShape(mass_rate, {nc, nl, nm});
+  checkShape(mass_rate, {nc, nl, constituent_rates ? nf : nm});
   checkShape(number_rate, {nc, nl, nm});
   checkShape(mass, {nc, nl, nf});
   checkShape(number, {nc, nl, nm});
@@ -131,6 +132,12 @@ void removalTendencies(IAerosolPackage &package,
       check(std::isfinite(rates.data_handle()[i]) &&
                 rates.data_handle()[i] >= 0,
             "modal removal coefficient must be finite and nonnegative");
+  if (constituent_rates)
+    for (std::size_t m=0;m<nm;++m)
+      for (std::size_t k=0;k<nl;++k)
+        for (std::size_t c=0;c<nc;++c)
+          check(mass_rate(c,k,m*(ns+1)+ns)==0,
+                "modal mass-rate number slots must be zero");
   std::vector<double> masses(mass.size(), 0), numbers(number.size());
   View3D<double> mass_result(masses.data(), nc, nl, nf),
       number_result(numbers.data(), nc, nl, nm);
@@ -146,7 +153,7 @@ void removalTendencies(IAerosolPackage &package,
       for (std::size_t k = 0; k < nl; ++k)
         for (std::size_t c = 0; c < nc; ++c)
           mass_result(c, k, m * (ns + 1) + s) =
-              removalSink(mass_rate(c, k, m), state(c, k, m * (ns + 1) + s),
+              removalSink(mass_rate(c, k, constituent_rates ? m*(ns+1)+s : m), state(c, k, m * (ns + 1) + s),
                           thickness ? (*thickness)(c, k) : 1.);
   }
   copyScratch(masses, mass);
@@ -162,6 +169,14 @@ void modalRemovalRateTendencies(
   removalTendencies(package, state, mass_scavenging_rate,
                     number_scavenging_rate, nullptr, mass_tendency,
                     number_tendency);
+}
+
+void modalSpeciesRemovalRateTendencies(
+    IAerosolPackage &package, const View3D<const double> &state,
+    const View3D<const double> &mass_rate,
+    const View3D<const double> &number_rate,
+    View3D<double> &mass, View3D<double> &number) {
+  removalTendencies(package,state,mass_rate,number_rate,nullptr,mass,number,true);
 }
 
 void modalRemovalVelocityTendencies(IAerosolPackage &package,
