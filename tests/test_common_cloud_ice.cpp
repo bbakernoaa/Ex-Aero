@@ -73,6 +73,71 @@ int main() {
                bsi);
     });
     assert(a.front() == 77 && b.back() == 88);
+    // All supplied environmental buffers are host inputs, including unused
+    // ones.
+    for (int field = 0; field < 5; ++field) {
+      std::vector<double> slab(a.size(), field == 3 ? .5 : 280.);
+      auto alias_env = g.env();
+      View2D<const double> input_alias(slab.data(), g.nc, g.nl);
+      if (field == 0)
+        alias_env.temperature = input_alias;
+      if (field == 1)
+        alias_env.pressure = input_alias;
+      if (field == 2)
+        alias_env.air_density = input_alias;
+      if (field == 3)
+        alias_env.relative_humidity = input_alias;
+      if (field == 4)
+        alias_env.layer_thickness = input_alias;
+      View4D<double> alias_output(slab.data(), g.nc, g.nl, g.np, props);
+      const auto before = slab;
+      std::fill(a.begin(), a.end(), 77);
+      std::fill(b.begin(), b.end(), 88);
+      const auto original_as = as, original_bs = bs;
+      host_test::rejects([&] {
+        cloudIce(*p, alias_env, input, nullptr, IceCategory::Dust, false,
+                 alias_output, bv, asi, bsi);
+      });
+      assert(slab == before && a.front() == 77 && b.back() == 88 &&
+             as == original_as && bs == original_bs);
+      host_test::rejects([&] {
+        cloudIce(*p, alias_env, input, nullptr, IceCategory::Dust, false, av,
+                 alias_output, asi, bsi);
+      });
+      assert(slab == before && a.front() == 77 && b.back() == 88);
+      View3D<int> alias_status(reinterpret_cast<int *>(slab.data()), g.nc, g.nl,
+                               g.np);
+      host_test::rejects([&] {
+        cloudIce(*p, alias_env, input, nullptr, IceCategory::Dust, false, av,
+                 bv, alias_status, bsi);
+      });
+      assert(slab == before && a.front() == 77 && b.back() == 88);
+      host_test::rejects([&] {
+        cloudIce(*p, alias_env, input, nullptr, IceCategory::Dust, false, av,
+                 bv, asi, alias_status);
+      });
+      assert(slab == before && as == original_as && bs == original_bs);
+      if (field == 0 || field == 3) {
+        exaero_cloud_ice(p.get(), g.nc, g.nl, g.nf, g.np,
+                         field == 0 ? slab.data() : g.temp.data(),
+                         field == 3 ? slab.data() : g.rh.data(), g.state.data(),
+                         nullptr, int(IceCategory::Dust), 0, slab.data(),
+                         b.data(), as.data(), bs.data(), error, &flag);
+        assert(flag != 0 && slab == before && b.back() == 88 &&
+               as == original_as && bs == original_bs);
+        if (field == 3) {
+          exaero_activation_fractions(
+              p.get(), g.nc, g.nl, g.nf, g.np, 3, g.temp.data(), slab.data(),
+              g.state.data(), ss, slab.data(), error, &flag);
+          assert(flag != 0 && slab == before);
+        }
+      }
+      View4D<double> activation_alias(slab.data(), g.nc, g.nl, g.np, 6);
+      host_test::rejects([&] {
+        activationFractions(*p, alias_env, input, ssv, activation_alias);
+      });
+      assert(slab == before);
+    }
     assert(supportsHostOperation(*p, HostOperation::CloudIce) &&
            supportsHostOperation(*p, HostOperation::Activation));
   }

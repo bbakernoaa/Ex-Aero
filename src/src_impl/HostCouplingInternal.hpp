@@ -72,6 +72,40 @@ inline HostCouplingInfo dimensions(IAerosolPackage &p, int nc, int nl, int nf,
           "host coupling population/field count mismatch");
   return info;
 }
+/// @brief Rebin outputs have bins, not populations times bins, on their final
+/// axis.
+inline void rebinDimensions(IAerosolPackage &p, int nc, int nl, int nf,
+                            int nbin) {
+  const auto info = hostCouplingInfo(p);
+  dimensions(p, nc, nl, nf, int(info.populations.size()));
+  require(nbin > 0 && nbin < std::numeric_limits<int>::max(),
+          "invalid rebin dimensions");
+  require(nc <= std::numeric_limits<int>::max() / nl / std::max(nbin, 2),
+          "rebin output dimension overflow");
+}
+/// @brief Protect every supplied host environment buffer, including unused
+/// fields.
+template <class... Output>
+void environmentInputs(const EnvironmentalStateView &env, std::size_t nc,
+                       std::size_t nl, const Output &...output) {
+  shape(env.temperature, {nc, nl});
+  shape(env.relative_humidity, {nc, nl});
+  for (const auto &input : {env.temperature, env.pressure, env.air_density,
+                            env.relative_humidity, env.layer_thickness}) {
+    if (input.data_handle()) {
+      shape(input, {nc, nl});
+      (disjoint(input, output), ...);
+    }
+  }
+  for (std::size_t k = 0; k < nl; ++k)
+    for (std::size_t c = 0; c < nc; ++c)
+      require(std::isfinite(env.temperature(c, k)) &&
+                  env.temperature(c, k) > 0 &&
+                  std::isfinite(env.relative_humidity(c, k)) &&
+                  env.relative_humidity(c, k) >= 0 &&
+                  env.relative_humidity(c, k) <= 1,
+              "invalid host coupling temperature/RH");
+}
 inline EnvironmentalStateView environment(int nc, int nl, const double *temp,
                                           const double *rh) {
   require(temp && rh, "null host coupling environment");

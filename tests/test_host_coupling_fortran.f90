@@ -39,6 +39,8 @@ program test_host_coupling_fortran
     supported=77
     call exaero_supports_host_operation(pkg,999_c_int,supported,error,flag)
     if(flag==0.or.supported/=77) error stop 'FATAL ERROR: metadata atomic operation error'
+    call exaero_supports_host_operation(pkg,exaero_HOST_INSPECT_NUMBER_BOUNDS,supported,error,flag)
+    if(flag/=0.or.supported/=m) error stop 'FATAL ERROR: metadata operation support'
     call exaero_free_package(pkg)
   end do
   call exaero_finalize_environment()

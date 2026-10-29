@@ -160,6 +160,15 @@ contains
     if(flag==0.or.any(mass_sink/=77).or.any(number_sink/=88)) error stop 'FATAL ERROR: modal atomic depth error'
     call exaero_modal_removal_rate_tendencies(pkg,nc,nl,nf,1_c_int,state,lm,ln,mass_sink,number_sink,error,flag)
     if(flag==0.or.any(mass_sink/=77).or.any(number_sink/=88)) error stop 'FATAL ERROR: modal atomic extent error'
+    mass_sink=77;number_sink=88
+    call exaero_removal_rate_tendencies(pkg,nc,nl,nf,nm,state,field_rates,c_null_ptr, &
+        mass_sink,number_sink,error,flag)
+    if(flag==0.or.any(mass_sink/=77).or.any(number_sink/=88)) &
+      error stop 'FATAL ERROR: common modal missing number rate'
+    call exaero_removal_rate_tendencies(pkg,nc,nl,nf,nm+1,state,field_rates,c_loc(ln), &
+        mass_sink,number_sink,error,flag)
+    if(flag==0.or.any(mass_sink/=77).or.any(number_sink/=88)) &
+      error stop 'FATAL ERROR: common modal population count'
     if(any(state/=original)) error stop 'FATAL ERROR: modal removal mutated state'
     call exaero_free_package(pkg)
   end subroutine check_modal

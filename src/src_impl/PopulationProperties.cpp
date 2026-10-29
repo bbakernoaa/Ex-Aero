@@ -29,8 +29,6 @@ void populationProperties(IAerosolPackage &p, const EnvironmentalStateView &env,
   shape(values, {nc, nl, np, count});
   shape(availability, {nc, nl, np, count});
   shape(status, {nc, nl, np});
-  shape(env.temperature, {nc, nl});
-  shape(env.relative_humidity, {nc, nl});
   for (const auto &input : {state}) {
     disjoint(input, values);
     disjoint(input, availability);
@@ -39,19 +37,7 @@ void populationProperties(IAerosolPackage &p, const EnvironmentalStateView &env,
   disjoint(values, availability);
   disjoint(values, status);
   disjoint(availability, status);
-  for (const auto &input : {env.temperature, env.relative_humidity}) {
-    disjoint(input, values);
-    disjoint(input, availability);
-    disjoint(input, status);
-  }
-  for (std::size_t k = 0; k < nl; ++k)
-    for (std::size_t c = 0; c < nc; ++c)
-      require(std::isfinite(env.temperature(c, k)) &&
-                  env.temperature(c, k) > 0 &&
-                  std::isfinite(env.relative_humidity(c, k)) &&
-                  env.relative_humidity(c, k) >= 0 &&
-                  env.relative_humidity(c, k) <= 1,
-              "invalid property temperature/RH");
+  environmentInputs(env, nc, nl, values, availability, status);
   std::vector<double> scratch(values.size(), 0);
   std::vector<int> codes(availability.size(),
                          int(PropertyAvailability::Unavailable)),

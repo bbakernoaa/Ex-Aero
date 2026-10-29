@@ -61,6 +61,8 @@ public:
   }
   /// @brief Bulk mass field names and units in configured species order.
   std::vector<StateField> stateFields() const override {
+    if (!initialized_)
+      return {};
     std::vector<StateField> fields;
     for (const auto &name : species_names_)
       fields.push_back({name, StateQuantity::Mass, -1, false});
@@ -73,6 +75,8 @@ private:
     int solver_radius_node = -1, n_radius = 0;
     bool physical_wavelengths = false;
   };
+  /// @brief Hide partial metadata until initialization completes successfully.
+  bool initialized_ = false;
   int num_species_ = 0; ///< Active species count (state axis length).
   std::vector<GocartSpeciesParams> h_species_params_;
   std::vector<std::string>

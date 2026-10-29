@@ -4,6 +4,7 @@
 #include "../src/src_impl/HostCouplingInternal.hpp"
 #include "host_coupling_fixture.hpp"
 #include <cstring>
+#include <exaero/GocartConfig.hpp>
 #include <exaero/HostCoupling.hpp>
 #include <exaero/HostCoupling_C.h>
 #include <exaero/ModalCoupling.hpp>
@@ -79,6 +80,67 @@ int main() {
            reordered.constituents.front().mass_field == 0);
     assert(reordered.populations.front().name == (modal ? "coarse" : "B"));
     assert(reordered.constituents.front().permitted == !modal);
+  }
+  {
+    auto p = exaero::createPackage("gocart");
+    std::string invalid = host_test::bulk_yaml;
+    invalid.replace(invalid.find("name: B,"), 8,
+                    "name: B, dry_radius_lower: 1e-7,");
+    for (bool prior_success : {false, true}) {
+      if (prior_success)
+        p->initialize(host_test::bulk_yaml);
+      host_test::rejects([&] { p->initialize(invalid); });
+      host_test::rejects([&] { exaero::hostCouplingInfo(*p); });
+      for (int op = 0; op <= 8; ++op)
+        assert(!exaero::supportsHostOperation(
+            *p, static_cast<exaero::HostOperation>(op)));
+      int rep = 77, nf = 77, np = 77, ns = 77, flag;
+      char error[256];
+      exaero_host_coupling_counts(p.get(), &rep, &nf, &np, &ns, error, &flag);
+      assert(flag != 0 && rep == 77 && nf == 77 && np == 77 && ns == 77);
+      p->initialize(host_test::bulk_yaml);
+      assert(exaero::hostCouplingInfo(*p).populations.size() == 2);
+    }
+    host_test::rejects([&] { p->initialize("species: ["); });
+    assert(!exaero::supportsHostOperation(*p,
+                                          exaero::HostOperation::RemovalRates));
+    p->initialize(host_test::bulk_yaml);
+    exaero::GocartConfig cfg;
+    exaero::GocartSpeciesConfig species;
+    species.name = "A";
+    species.dry_density = 1000;
+    species.molecular_weight = 100;
+    species.dry_particle_diameter = 2e-7;
+    species.lognormal_dg = 2e-7;
+    species.lognormal_sigma = 1.5;
+    species.refractive_index_real = 1.5;
+    species.refractive_index_imag = .002;
+    species.dry_radius_lower = 1e-7;
+    cfg.species.push_back(species);
+    host_test::rejects([&] { p->initialize(cfg); });
+    assert(!exaero::supportsHostOperation(*p,
+                                          exaero::HostOperation::RemovalRates));
+    p->initialize(host_test::bulk_yaml);
+    assert(exaero::hostCouplingInfo(*p).populations.size() == 2);
+  }
+  {
+    std::string yaml = "species:\n", line = host_test::bulk_yaml;
+    line = line.substr(line.find("  - {name: B"));
+    for (int i = 0; i < 100; ++i) {
+      auto species = line;
+      species.replace(species.find("name: B"), 7,
+                      "name: bin" + std::to_string(i));
+      yaml += species;
+    }
+    auto p = exaero::createPackage("gocart");
+    p->initialize(yaml);
+    // 30 million actual elements, not three billion: rebin has no population
+    // output axis.
+    exaero::host_detail::rebinDimensions(*p, 300000, 1, 100, 100);
+    host_test::rejects([&] {
+      exaero::host_detail::rebinDimensions(*p, std::numeric_limits<int>::max(),
+                                           1, 100, 100);
+    });
   }
   auto uninitialized = exaero::createPackage("modal");
   assert(!exaero::supportsHostOperation(*uninitialized,

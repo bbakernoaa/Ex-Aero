@@ -42,6 +42,16 @@ byte capacities including the terminating NUL. Query counts before sizing arrays
 Known unsupported operation queries succeed with false; invalid operation codes
 or descriptor indices set an error and preserve descriptor outputs.
 
+A failed bulk initialization hides partially built field metadata and reports
+helper operations unsupported until successful reinitialization. Generic modal
+initialization is transactional and retains its last successfully validated
+configuration if a later initialization attempt fails.
+
+Common environment-taking helpers require temperature and relative humidity.
+Optional pressure, air density and layer thickness remain optional; if supplied,
+their spatial shapes and non-overlap with outputs are checked even when the
+particular helper does not use them in its physics.
+
 Every numerical facade uses synchronous column-major host arrays, validates the
 complete request, requires outputs disjoint from inputs and each other, and
 publishes outputs atomically. No call applies a timestep or mutates aerosol
@@ -143,7 +153,7 @@ unsupported generic helper surfaces explicitly.
 
 Validation uses GNU C++/Fortran 12.2, Kokkos 5.1.1 Serial, the existing Debug
 profiles and Fortran `-fcheck=all -fbacktrace`. The generic suite passes 29/29
-CTest tests; the optional MAM4xx suite passes 31/31. New/changed implementation
+CTest tests; the optional MAM4xx suite passes 31/31. The eleven facade/removal implementation
 translation units pass `-Wall -Wextra -Wpedantic -Werror` syntax checks, public
 C headers pass a strict C11 compile, and new public headers participate in the
 standalone compile gate. No GPU execution or full CAM wet-deposition run was

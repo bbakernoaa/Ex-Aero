@@ -67,12 +67,11 @@ void exaero_rebin_deposition(exaero_package_t h, int nc, int nl, int nf,
                              char *error, int *flag) {
   guarded(error, flag, [&] {
     auto &p = package(h);
-    const auto info = hostCouplingInfo(p);
     require(species >= 0 && nbin > 0 &&
                 nbin < std::numeric_limits<int>::max() && budget && edges &&
                 bins && tails,
             "invalid rebin C arguments");
-    dimensions(p, nc, nl, nf, int(info.populations.size()), std::max(nbin, 2));
+    rebinDimensions(p, nc, nl, nf, nbin);
     View3D<double> b(bins, nc, nl, nbin), t(tails, nc, nl, 2);
     rebinDeposition(p, View3D<const double>(budget, nc, nl, nf),
                     std::size_t(species), View1D<const double>(edges, nbin + 1),

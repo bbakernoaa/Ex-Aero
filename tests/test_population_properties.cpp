@@ -96,6 +96,39 @@ int main() {
     assert(flag != 0 && values.front() == 77 && values.back() == 77 &&
            available.back() == 88 && status.back() == 99);
     g.rh.back() = .5;
+    for (int field = 1; field <= 4; ++field) {
+      if (field == 3)
+        continue; // required temperature/RH overlap already covered by the
+                  // facade contract.
+      std::vector<double> slab(values.size(), 1000.);
+      auto alias_env = g.env();
+      View2D<const double> env_input(slab.data(), g.nc, g.nl);
+      if (field == 1)
+        alias_env.pressure = env_input;
+      if (field == 2)
+        alias_env.air_density = env_input;
+      if (field == 4)
+        alias_env.layer_thickness = env_input;
+      View4D<double> env_output(slab.data(), g.nc, g.nl, g.np, count);
+      const auto original = slab;
+      host_test::rejects([&] {
+        populationProperties(*p, alias_env, g.input(), env_output, a, st);
+      });
+      assert(slab == original && available.back() == 88 && status.back() == 99);
+      View4D<int> env_availability(reinterpret_cast<int *>(slab.data()), g.nc,
+                                   g.nl, g.np, count);
+      View3D<int> env_status(reinterpret_cast<int *>(slab.data()), g.nc, g.nl,
+                             g.np);
+      host_test::rejects([&] {
+        populationProperties(*p, alias_env, g.input(), v, env_availability, st);
+      });
+      host_test::rejects([&] {
+        populationProperties(*p, alias_env, g.input(), v, a, env_status);
+      });
+      assert(slab == original && values.front() == 77 &&
+             available.back() == 88 && status.back() == 99);
+    }
+    g.rh.back() = .5;
     View4D<double> alias(g.state.data(), g.nc, g.nl, g.np, count);
     host_test::rejects(
         [&] { populationProperties(*p, g.env(), g.input(), alias, a, st); });

@@ -823,14 +823,18 @@ void GocartPackage::initializeImpl(PackageConfigReader &reader) {
 
 // @copydoc IAerosolPackage::initialize(const std::string &)
 void GocartPackage::initialize(const std::string &config_yaml) {
+  initialized_ = false;
   YamlReader reader{YAML::Load(config_yaml)};
   initializeImpl(reader);
+  initialized_ = true;
 }
 
 // @copydoc GocartPackage::initialize(const GocartConfig &)
 void GocartPackage::initialize(const GocartConfig &config) {
+  initialized_ = false;
   StructReader reader{config};
   initializeImpl(reader);
+  initialized_ = true;
 }
 
 // @copydoc GocartPackage::executeMicrophysics
