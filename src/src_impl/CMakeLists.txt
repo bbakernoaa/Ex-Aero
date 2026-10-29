@@ -90,6 +90,8 @@ add_library(
   PackageFactory.cpp
   HostCoupling.cpp
   Removal.cpp
+  PopulationProperties.cpp
+  PopulationProperties_C.cpp
   Removal_C.cpp
   HostCoupling_C.cpp
   CloudIceActivation.cpp

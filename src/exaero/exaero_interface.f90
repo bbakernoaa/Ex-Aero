@@ -28,6 +28,25 @@ module exaero_interface
   integer(c_int), parameter :: exaero_HOST_INSPECT_NUMBER_BOUNDS=7
   integer(c_int), parameter :: exaero_HOST_ENFORCE_NUMBER_BOUNDS=8
 
+  integer(c_int),parameter :: exaero_PROPERTY_UNAVAILABLE=0, exaero_PROPERTY_CONFIGURED=1, exaero_PROPERTY_DERIVED=2
+  integer(c_int),parameter :: exaero_POPULATION_EMPTY=0, exaero_POPULATION_POPULATED=1
+  integer(c_int),parameter :: exaero_POP_MASS=0
+  integer(c_int),parameter :: exaero_POP_NUMBER=1
+  integer(c_int),parameter :: exaero_POP_DRY_NUMBER_MEDIAN_RADIUS=2
+  integer(c_int),parameter :: exaero_POP_WET_NUMBER_MEDIAN_RADIUS=3
+  integer(c_int),parameter :: exaero_POP_DRY_SCAVENGING_DIAMETER=4
+  integer(c_int),parameter :: exaero_POP_WET_SCAVENGING_DIAMETER=5
+  integer(c_int),parameter :: exaero_POP_DRY_VOLUME=6
+  integer(c_int),parameter :: exaero_POP_DRY_SURFACE_AREA=7
+  integer(c_int),parameter :: exaero_POP_KAPPA=8
+  integer(c_int),parameter :: exaero_POP_DRY_DENSITY=9
+  integer(c_int),parameter :: exaero_POP_WET_DENSITY=10
+  integer(c_int),parameter :: exaero_POP_GEOMETRIC_STD_DEV=11
+  integer(c_int),parameter :: exaero_POP_LOWER_DRY_RADIUS=12
+  integer(c_int),parameter :: exaero_POP_UPPER_DRY_RADIUS=13
+  integer(c_int),parameter :: exaero_POP_EFFECTIVE_DRY_RADIUS=14
+  integer(c_int),parameter :: exaero_POP_PROPERTY_COUNT=15
+
   ! Representation, quantity and capability codes mirror StateField.hpp.
   integer(c_int), parameter :: exaero_BULK = 0, exaero_MODAL = 1
   integer(c_int), parameter :: exaero_STATE_MASS = 0, exaero_STATE_NUMBER = 1
@@ -158,6 +177,19 @@ module exaero_interface
   !> header for the full per-argument unit/index contract.
   ! Public C-bindings interfaces (CCPP-standard error signatures)
   interface
+    !> @brief Common physical properties and per-value availability; no state update.
+    subroutine exaero_population_properties(pkg,nc,nl,nf,np,temp,rh,state,values,availability,status,errmsg,errflg) &
+        bind(c,name="exaero_population_properties")
+      import :: c_int,c_double,c_char,exaero_package_t
+      implicit none
+      type(exaero_package_t),value,intent(in) :: pkg
+      integer(c_int),value,intent(in) :: nc,nl,nf,np
+      real(c_double),intent(in) :: temp(*),rh(*),state(*)
+      real(c_double),intent(inout) :: values(*)
+      integer(c_int),intent(inout) :: availability(*),status(*)
+      character(c_char),intent(out) :: errmsg(*)
+      integer(c_int),intent(out) :: errflg
+    end subroutine
     !> @brief Common cloud/ice; independent ambient/cloudborne host slabs.
     subroutine exaero_cloud_ice(pkg,nc,nl,nf,np,temp,rh,state,cloud_state,category, &
         preexisting_ice,ambient_out,cloud_out,ambient_status,cloud_status,errmsg,errflg) &

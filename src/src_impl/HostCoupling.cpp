@@ -42,6 +42,7 @@ bool supportsHostOperation(IAerosolPackage &p,HostOperation op) {
   try {
     const auto info=hostCouplingInfo(p);
     if(op==HostOperation::CloudIce)return info.representation==AerosolRepresentation::Modal||dynamic_cast<IBulkCloudIceMetadata*>(&p)!=nullptr;
+    if(op==HostOperation::PopulationProperties)return true;
     if(op==HostOperation::Activation)return true;
     if(op==HostOperation::RemovalRates||op==HostOperation::RemovalVelocity)return true;
     return (op==HostOperation::InspectNumberBounds||op==HostOperation::EnforceNumberBounds)&&info.representation==AerosolRepresentation::Modal;

@@ -60,3 +60,36 @@ host-supplied supersaturations. Its output is `(cell,level,population,2*num_S)`.
 C/Fortran with explicit `nf,np` dimensions. A null cloudborne pointer produces
 `Absent`; a supplied empty reservoir produces `Empty`. Both reservoir snapshots
 are host-owned. No aerosol transfer is inferred or applied.
+
+## Physical population properties
+
+`populationProperties` returns values and per-value availability with shape
+`(cell,level,population,15)`, plus a separate `(cell,level,population)` empty/
+populated status. Use `PopulationProperty` or matching `exaero_POP_*` constants.
+The C/Fortran entry point is `exaero_population_properties`.
+
+| Properties | Units / definition |
+| --- | --- |
+| Mass, Number | kg/m3 air; particles/m3 air |
+| Dry/WetNumberMedianRadius | m; lognormal number-median radius |
+| Dry/WetScavengingDiameter | m; existing representation's scavenging size |
+| DryVolume | m3 dry aerosol / m3 air |
+| DrySurfaceArea | m2 dry aerosol / m3 air; lognormal second moment |
+| Kappa, GeometricStdDev | dimensionless; modal kappa is volume-weighted |
+| Dry/WetDensity | kg/m3 of dry/wet particle volume, respectively |
+| Lower/UpperDryRadius | m; configured physical radius bounds, when present |
+| EffectiveDryRadius | m; configured bulk value or lognormal third/second-moment ratio |
+
+Bulk scavenging diameter uses `dry_particle_diameter`; its number-median radius
+uses `lognormal_dg/2`, so these can differ. Bulk kappa sizing retains its RH cap
+of 0.99. Modal properties retain the configured existing water-uptake model
+(default kappa sizing RH cap 0.98); the facade does not change those models.
+The common surface area is **dry**; the older modal property surface reports
+area at the wet radius.
+
+Availability is `Unavailable`, `Configured`, or `Derived` (including values
+read/derived from current state). An unavailable numerical slot is zero. Empty
+populations have zero extensive quantities and retain configured dry/reference
+geometry and width. Bulk configuration still defines kappa and wet reference
+properties. Empty modal mixture kappa, density and wet geometry are unavailable.
+Neither missing bounds nor an empty population triggers number correction.

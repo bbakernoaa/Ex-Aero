@@ -107,3 +107,6 @@ int main() {
 
 #include <exaero/Removal.hpp>
 #include <exaero/Removal_C.h>
+
+#include <exaero/PopulationProperties.hpp>
+#include <exaero/PopulationProperties_C.h>

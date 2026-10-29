@@ -7,6 +7,8 @@ program test_host_facade_fortran
   type(exaero_package_t) :: pkg
   integer(c_int) :: flag,nf,np,ncon,rep
   integer :: backend,c,k
+  real(c_double),allocatable :: properties(:,:,:,:)
+  integer(c_int),allocatable :: availability(:,:,:,:),pstatus(:,:,:)
   integer(c_int),parameter :: nc=2,nl=3
   character(c_char) :: error(256)
   real(c_double),allocatable,target :: state(:,:,:)
@@ -81,6 +83,25 @@ program test_host_facade_fortran
         exaero_ICE_DUST,0_c_int,a,b,ast,bst,error,flag)
     if(flag==0.or.any(a/=77).or.any(b/=88).or.any(ast/=99).or.any(bst/=100)) &
         error stop 'FATAL ERROR: facade atomic cloud error'
+    allocate(properties(nc,nl,np,exaero_POP_PROPERTY_COUNT),availability(nc,nl,np,exaero_POP_PROPERTY_COUNT))
+    allocate(pstatus(nc,nl,np))
+    call exaero_population_properties(pkg,nc,nl,nf,np,temp,rh,state,properties,availability,pstatus,error,flag)
+    if(flag/=0.or.any(pstatus/=exaero_POPULATION_POPULATED)) error stop 'FATAL ERROR: facade properties status'
+    if(any(properties(:,:,:,exaero_POP_NUMBER+1)<=0)) error stop 'FATAL ERROR: facade properties number'
+    if(backend==0) then
+      if(any(properties(:,:,:,exaero_POP_MASS+1)/=state)) error stop 'FATAL ERROR: facade bulk property mass'
+    else
+      if(any(properties(:,:,1,exaero_POP_MASS+1)/=state(:,:,1)+state(:,:,2))) &
+        error stop 'FATAL ERROR: facade modal property mass'
+      if(any(properties(:,:,2,exaero_POP_NUMBER+1)/=state(:,:,6))) error stop 'FATAL ERROR: facade property number'
+    end if
+    if(any(availability(:,:,:,exaero_POP_LOWER_DRY_RADIUS+1)/=exaero_PROPERTY_UNAVAILABLE)) &
+      error stop 'FATAL ERROR: facade unavailable bound'
+    properties=77;availability=88;pstatus=99
+    call exaero_population_properties(pkg,nc,nl,nf,np+1,temp,rh,state,properties,availability,pstatus,error,flag)
+    if(flag==0.or.any(properties/=77).or.any(availability/=88).or.any(pstatus/=99)) &
+      error stop 'FATAL ERROR: facade atomic property error'
+    deallocate(properties,availability,pstatus)
     deallocate(state,a,b,fractions,ast,bst)
     call exaero_free_package(pkg)
   end do
