@@ -17,6 +17,17 @@ module exaero_interface
   use iso_c_binding
   implicit none
 
+  integer(c_int), parameter :: exaero_NUMBER_DIAGNOSED=0, exaero_NUMBER_PROGNOSTIC=1
+  integer(c_int), parameter :: exaero_HOST_POPULATION_PROPERTIES=0
+  integer(c_int), parameter :: exaero_HOST_CLOUD_ICE=1
+  integer(c_int), parameter :: exaero_HOST_ACTIVATION=2
+  integer(c_int), parameter :: exaero_HOST_REMOVAL_RATES=3
+  integer(c_int), parameter :: exaero_HOST_REMOVAL_VELOCITY=4
+  integer(c_int), parameter :: exaero_HOST_RESUSPENSION=5
+  integer(c_int), parameter :: exaero_HOST_DEPOSITION_REBIN=6
+  integer(c_int), parameter :: exaero_HOST_INSPECT_NUMBER_BOUNDS=7
+  integer(c_int), parameter :: exaero_HOST_ENFORCE_NUMBER_BOUNDS=8
+
   ! Representation, quantity and capability codes mirror StateField.hpp.
   integer(c_int), parameter :: exaero_BULK = 0, exaero_MODAL = 1
   integer(c_int), parameter :: exaero_STATE_MASS = 0, exaero_STATE_NUMBER = 1
@@ -147,6 +158,55 @@ module exaero_interface
   !> header for the full per-argument unit/index contract.
   ! Public C-bindings interfaces (CCPP-standard error signatures)
   interface
+    !> @brief Checked zero-based host metadata; outputs preserved on failure.
+    subroutine exaero_host_coupling_counts(pkg,rep,nf,np,ns,errmsg,errflg) &
+        bind(c,name="exaero_host_coupling_counts")
+      import :: c_int,c_char,exaero_package_t
+      implicit none
+      type(exaero_package_t),value,intent(in) :: pkg
+      integer(c_int),intent(inout) :: rep,nf,np,ns
+      character(c_char),intent(out) :: errmsg(*)
+      integer(c_int),intent(out) :: errflg
+    end subroutine exaero_host_coupling_counts
+
+    !> @brief Checked zero-based host metadata; outputs preserved on failure.
+    subroutine exaero_host_population_info(pkg,population,index,kind,field,name,capacity,errmsg,errflg) &
+        bind(c,name="exaero_host_population_info")
+      import :: c_int,c_char,exaero_package_t
+      implicit none
+      type(exaero_package_t),value,intent(in) :: pkg
+      integer(c_int),value,intent(in) :: population,capacity
+      integer(c_int),intent(inout) :: index,kind,field
+      character(c_char),intent(inout) :: name(*)
+      character(c_char),intent(out) :: errmsg(*)
+      integer(c_int),intent(out) :: errflg
+    end subroutine exaero_host_population_info
+
+    !> @brief Checked zero-based host metadata; outputs preserved on failure.
+    subroutine exaero_host_constituent_info(pkg,constituent,population,species,field,permitted,name,capacity,errmsg,errflg) &
+        bind(c,name="exaero_host_constituent_info")
+      import :: c_int,c_char,exaero_package_t
+      implicit none
+      type(exaero_package_t),value,intent(in) :: pkg
+      integer(c_int),value,intent(in) :: constituent,capacity
+      integer(c_int),intent(inout) :: population,species,field,permitted
+      character(c_char),intent(inout) :: name(*)
+      character(c_char),intent(out) :: errmsg(*)
+      integer(c_int),intent(out) :: errflg
+    end subroutine exaero_host_constituent_info
+
+    !> @brief Checked zero-based host metadata; outputs preserved on failure.
+    subroutine exaero_supports_host_operation(pkg,operation,supported,errmsg,errflg) &
+        bind(c,name="exaero_supports_host_operation")
+      import :: c_int,c_char,exaero_package_t
+      implicit none
+      type(exaero_package_t),value,intent(in) :: pkg
+      integer(c_int),value,intent(in) :: operation
+      integer(c_int),intent(inout) :: supported
+      character(c_char),intent(out) :: errmsg(*)
+      integer(c_int),intent(out) :: errflg
+    end subroutine exaero_supports_host_operation
+
     !> @brief Bulk ambient and optional cloudborne diagnostics (nc,nl,nf,12).
     !> @details cloud_state is c_loc of a host mass buffer or c_null_ptr.
     subroutine exaero_bulk_cloud_ice(pkg,nc,nl,nf,temp,rh,state,cloud_state,category, &

@@ -88,6 +88,8 @@ target_link_libraries(exaero_solver PUBLIC Kokkos::kokkos)
 add_library(
   exaero_impl OBJECT
   PackageFactory.cpp
+  HostCoupling.cpp
+  HostCoupling_C.cpp
   CloudIceActivation.cpp
   CloudIceCoupling_C.cpp
   modal/ModalPackage.cpp

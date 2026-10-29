@@ -101,3 +101,6 @@ int main() {
 }
 #include <exaero/Mam4xxConfig.hpp>
 #include <exaero/PackageFactory.hpp>
+
+#include <exaero/HostCoupling.hpp>
+#include <exaero/HostCoupling_C.h>
