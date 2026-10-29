@@ -217,6 +217,16 @@ void test_gocart_pm1_cut() {
   assert(diags[Slot::MASS_CONCENTRATION] == PmCutFixture::kMass[0]);
   assert(diags[Slot::NUMBER_CONCENTRATION] > 0.0);
   assert(diags[Slot::SURFACE_AREA_DENSITY] > 0.0);
+  double number_data[PmCutFixture::kSpecies]{};
+  exaero::View3D<const double> bulk_state(fx.state_raw, 1, 1,
+                                          PmCutFixture::kSpecies);
+  exaero::View3D<double> bulk_number(number_data, 1, 1, PmCutFixture::kSpecies);
+  exaero::bulkFixedNumber(package, bulk_state, bulk_number);
+  const double expected_number =
+      number_data[0] + number_data[1] + number_data[2];
+  assert(std::abs(diags[Slot::NUMBER_CONCENTRATION] - expected_number) <=
+         1e-12 * expected_number);
+  assert(diags[Slot::AEROSOL_LIQUID_WATER] == 0);
 
   std::cout << "PM1 Dry-Diameter Cut Test: PASS" << std::endl;
 }

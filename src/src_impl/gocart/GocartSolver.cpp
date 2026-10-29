@@ -392,8 +392,6 @@ void run_gocart_diagnostics(GocartSolverState *state, int num_cells,
 
           if (mass_conc <= 0.0)
             continue;
-          if (params.hygroscopicity <= 0.0)
-            continue;
 
           // 0. GEOSmie table-backed microphysics when this species is
           // curve-bound, growth factor and wet particle density are read
@@ -975,8 +973,11 @@ void run_gocart_ccn(GocartSolverState *state, int num_cells, int num_levels,
           if (mass_conc <= 0.0)
             continue;
 
-          // Calculate analytical critical supersaturation S_c for liquid cloud
-          // droplet activation S_c = sqrt((4 * A^3) / (27 * kappa * D_dry^3))
+          // Zero kappa is inactive; the denominator floor is not activation.
+          if (params.hygroscopicity <= 0.0)
+            continue;
+          // Critical supersaturation for liquid cloud droplet activation:
+          // S_c = sqrt((4 * A^3) / (27 * kappa * D_dry^3))
           // [fraction]
           double s_crit =
               Kokkos::sqrt((4.0 * Kokkos::pow(a_kelvin, 3)) /
