@@ -1,6 +1,6 @@
 # Common Cloud/Ice Coupling Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking.
 
 **Goal:** Expose common cloud/ice and activation calls for bulk and generic modal populations.
 
@@ -33,11 +33,11 @@
 - `cloudIce(package,env,ambient,cloudborne_or_null,category,preexisting_ice,ambient_out,cloudborne_out,ambient_status,cloudborne_status)` has exactly the existing `bulkCloudIce` argument types and population-based shapes.
 - `activationFractions(package,env,ambient,supersaturation,fractions)` has exactly the existing bulk/modal activation argument types; output `(cell,level,P,2*num_S)`.
 
-- [ ] **Step 1: Add failing common-call tests** comparing every returned property/status with the matching existing representation-specific call for two populations and multiple cells/levels. Use different ambient/cloudborne snapshots; verify null cloudborne gives `Absent`, while supplied zero cloudborne gives `Empty`.
-- [ ] **Step 2: Build affected targets and observe missing-common-function failure.**
-- [ ] **Step 3: Implement dispatch** using slice 1 support queries and existing kernels; advertise `CloudIce` and `Activation` only for supported initialized packages.
-- [ ] **Step 4: Add activation and atomic-error tests.** At a configured mode's critical supersaturation, require number fraction 0.5 and the existing independent mass-tail reference. Cover zero-kappa behavior, bad population extents, invalid category/NaN input, unsupported packages and output overlap.
-- [ ] **Step 5: Run `ExaeroBulkCloudIce`, `ExaeroModalCloudIce`, and `ExaeroHostCoupling`; commit** as `feat: unify aerosol cloud and activation helpers`.
+- [x] **Step 1: Add failing common-call tests** comparing every returned property/status with the matching existing representation-specific call for two populations and multiple cells/levels. Use different ambient/cloudborne snapshots; verify null cloudborne gives `Absent`, while supplied zero cloudborne gives `Empty`.
+- [x] **Step 2: Build affected targets and observe missing-common-function failure.**
+- [x] **Step 3: Implement dispatch** using slice 1 support queries and existing kernels; advertise `CloudIce` and `Activation` only for supported initialized packages.
+- [x] **Step 4: Add activation and atomic-error tests.** At a configured mode's critical supersaturation, require number fraction 0.5 and the existing independent mass-tail reference. Cover zero-kappa behavior, bad population extents, invalid category/NaN input, unsupported packages and output overlap.
+- [x] **Step 5: Run `ExaeroBulkCloudIce`, `ExaeroModalCloudIce`, and `ExaeroHostCoupling`; commit** as `feat: unify aerosol cloud and activation helpers`.
 
 ### Task 2: Deliver bindings and host documentation
 
@@ -45,8 +45,8 @@
 
 **Interfaces:** `exaero_cloud_ice` and `exaero_activation_fractions` take explicit `nc,nl,nf,np` counts, then the corresponding existing inputs/outputs and error buffers; activation also takes `nss`. Cloud-state pointers are nullable; caller-provided `np` must agree with metadata.
 
-- [ ] **Step 1: Add failing C/Fortran common-call tests** with two populations and multiple levels; assert slab ordering, category/status codes, zero-based indexing, independent activation moments and unchanged state.
-- [ ] **Step 2: Observe missing bindings, then implement wrappers** with the existing 256-byte message/error flag contract and null-cloud handling.
-- [ ] **Step 3: Run the cloud/ice Fortran target with runtime checks**, including wrong `np`, missing cloudborne, invalid inputs and all output sentinels preserved on failure.
-- [ ] **Step 4: Document common examples and capability checks; add standalone header coverage.**
-- [ ] **Step 5: Build/run both configured CTest profiles, run `git diff --check`, and commit** as `feat: expose common cloud coupling to C and Fortran`. Record actual results without claiming a complete cloud microphysics scheme.
+- [x] **Step 1: Add failing C/Fortran common-call tests** with two populations and multiple levels; assert slab ordering, category/status codes, zero-based indexing, independent activation moments and unchanged state.
+- [x] **Step 2: Observe missing bindings, then implement wrappers** with the existing 256-byte message/error flag contract and null-cloud handling.
+- [x] **Step 3: Run the cloud/ice Fortran target with runtime checks**, including wrong `np`, missing cloudborne, invalid inputs and all output sentinels preserved on failure.
+- [x] **Step 4: Document common examples and capability checks; add standalone header coverage.**
+- [x] **Step 5: Build/run both configured CTest profiles, run `git diff --check`, and commit** as `feat: expose common cloud coupling to C and Fortran`. Record actual results without claiming a complete cloud microphysics scheme.

@@ -93,6 +93,8 @@ add_library(
   Removal_C.cpp
   HostCoupling_C.cpp
   CloudIceActivation.cpp
+  CloudIceCoupling.cpp
+  CommonCloudIce_C.cpp
   CloudIceCoupling_C.cpp
   modal/ModalPackage.cpp
   modal/ModalChemistry.cpp

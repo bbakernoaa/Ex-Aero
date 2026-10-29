@@ -49,3 +49,14 @@ state. C/Fortran error messages need 256 bytes; `errflg=0` indicates success.
 Existing representation-specific APIs remain available. Modal bounds and
 chemistry/uptake derivatives retain their explicit interfaces. Native MAM4xx
 helper support is queried separately from its modal representation label.
+
+## Cloud and activation coupling
+
+`cloudIce` has the same arguments and property/status definitions as the existing
+bulk/modal calls in `CloudIceCoupling.hpp`, using the metadata population axis.
+The common `activationFractions` returns separate number/mass fractions for
+host-supplied supersaturations. Its output is `(cell,level,population,2*num_S)`.
+`exaero_cloud_ice` and `exaero_activation_fractions` expose these operations to
+C/Fortran with explicit `nf,np` dimensions. A null cloudborne pointer produces
+`Absent`; a supplied empty reservoir produces `Empty`. Both reservoir snapshots
+are host-owned. No aerosol transfer is inferred or applied.

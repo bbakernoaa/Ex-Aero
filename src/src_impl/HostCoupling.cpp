@@ -2,6 +2,7 @@
 /// @brief Representation-aware population metadata, without changing package vtables.
 #include "HostCouplingInternal.hpp"
 #include <exaero/BulkRemoval.hpp>
+#include <exaero/CloudIceCoupling.hpp>
 #include <exaero/ModalCoupling.hpp>
 namespace exaero {
 HostCouplingInfo hostCouplingInfo(IAerosolPackage &p) {
@@ -40,6 +41,8 @@ bool supportsHostOperation(IAerosolPackage &p,HostOperation op) {
   host_detail::require(int(op)>=0&&int(op)<=8,"invalid host operation code");
   try {
     const auto info=hostCouplingInfo(p);
+    if(op==HostOperation::CloudIce)return info.representation==AerosolRepresentation::Modal||dynamic_cast<IBulkCloudIceMetadata*>(&p)!=nullptr;
+    if(op==HostOperation::Activation)return true;
     if(op==HostOperation::RemovalRates||op==HostOperation::RemovalVelocity)return true;
     return (op==HostOperation::InspectNumberBounds||op==HostOperation::EnforceNumberBounds)&&info.representation==AerosolRepresentation::Modal;
   } catch(const std::logic_error&) { return false; }

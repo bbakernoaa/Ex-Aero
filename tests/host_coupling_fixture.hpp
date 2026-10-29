@@ -26,3 +26,19 @@ inline bool near(double a,double b) {
 template<class F> void rejects(F f) { bool failed=false; try { f(); } catch(const std::exception&) { failed=true; } assert(failed); }
 struct Runtime { Runtime(){exaero_init_environment();} ~Runtime(){exaero_finalize_environment();} };
 }
+namespace host_test {
+struct Grid {
+  int nc=2,nl=3,np=2,nf;
+  std::vector<double> state,temp,rh;
+  explicit Grid(bool modal):nf(modal?6:2),state(nc*nl*nf),temp(nc*nl,280),rh(nc*nl,.5) {
+    exaero::View3D<double> x(state.data(),nc,nl,nf);
+    for(int k=0;k<nl;++k)for(int c=0;c<nc;++c){
+      const double a=c+k+1;x(c,k,0)=2e-9*a;x(c,k,1)=3e-9*a;
+      if(modal){x(c,k,2)=5e7*a;x(c,k,3)=1e-9*a;x(c,k,5)=1e7*a;}
+    }
+  }
+  auto input() const {return exaero::View3D<const double>(state.data(),nc,nl,nf);}
+  auto env() const { return exaero::EnvironmentalStateView{
+    exaero::View2D<const double>(temp.data(),nc,nl),{}, {},exaero::View2D<const double>(rh.data(),nc,nl),{}}; }
+};
+}

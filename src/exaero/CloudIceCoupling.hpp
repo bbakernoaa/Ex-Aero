@@ -39,6 +39,19 @@ public:
   bulkIceRules(std::size_t species_index) const = 0;
 };
 
+/// @brief Common population diagnostics; package selects bulk or modal.
+/// @details Same host-owned reservoir, shape, status and atomicity contract as
+/// bulkCloudIce/modalCloudIce; population count comes from hostCouplingInfo.
+void cloudIce(IAerosolPackage &, const EnvironmentalStateView &,
+              const View3D<const double> &ambient,
+              const View3D<const double> *cloudborne, IceCategory, bool preexisting_ice,
+              View4D<double> &ambient_out, View4D<double> &cloudborne_out,
+              View3D<int> &ambient_status, View3D<int> &cloudborne_status);
+/// @brief Common number/mass activation fractions (cell,level,P,2*num_S).
+void activationFractions(IAerosolPackage &, const EnvironmentalStateView &,
+                         const View3D<const double> &,const View1D<const double> &,
+                         View4D<double> &);
+
 /// @brief Diagnose both populations from host-owned packed states.
 /// @details Output slabs are (cell,level,species-or-mode,COUNT); status slabs
 /// are (cell,level,species-or-mode). Missing cloudborne input gives zero output

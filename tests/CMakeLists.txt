@@ -248,3 +248,10 @@ add_test(NAME ExaeroHostCouplingFortran COMMAND exaero_host_coupling_fortran_tes
 add_executable(exaero_common_removal_test test_common_removal.cpp)
 target_link_libraries(exaero_common_removal_test PRIVATE exaero)
 add_test(NAME ExaeroCommonRemoval COMMAND exaero_common_removal_test)
+add_executable(exaero_common_cloud_ice_test test_common_cloud_ice.cpp)
+target_link_libraries(exaero_common_cloud_ice_test PRIVATE exaero)
+add_test(NAME ExaeroCommonCloudIce COMMAND exaero_common_cloud_ice_test)
+
+add_executable(exaero_host_facade_fortran_test test_host_facade_fortran.f90)
+target_link_libraries(exaero_host_facade_fortran_test PRIVATE exaero)
+add_test(NAME ExaeroHostFacadeFortran COMMAND exaero_host_facade_fortran_test)

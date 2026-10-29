@@ -158,6 +158,33 @@ module exaero_interface
   !> header for the full per-argument unit/index contract.
   ! Public C-bindings interfaces (CCPP-standard error signatures)
   interface
+    !> @brief Common cloud/ice; independent ambient/cloudborne host slabs.
+    subroutine exaero_cloud_ice(pkg,nc,nl,nf,np,temp,rh,state,cloud_state,category, &
+        preexisting_ice,ambient_out,cloud_out,ambient_status,cloud_status,errmsg,errflg) &
+        bind(c,name="exaero_cloud_ice")
+      import :: c_int,c_double,c_char,c_ptr,exaero_package_t
+      implicit none
+      type(exaero_package_t),value,intent(in) :: pkg
+      integer(c_int),value,intent(in) :: nc,nl,nf,np,category,preexisting_ice
+      real(c_double),intent(in) :: temp(*),rh(*),state(*)
+      type(c_ptr),value,intent(in) :: cloud_state
+      real(c_double),intent(inout) :: ambient_out(*),cloud_out(*)
+      integer(c_int),intent(inout) :: ambient_status(*),cloud_status(*)
+      character(c_char),intent(out) :: errmsg(*)
+      integer(c_int),intent(out) :: errflg
+    end subroutine
+    !> @brief Common population number/mass fractions per supersaturation.
+    subroutine exaero_activation_fractions(pkg,nc,nl,nf,np,nss,temp,rh,state,ss,fractions,errmsg,errflg) &
+        bind(c,name="exaero_activation_fractions")
+      import :: c_int,c_double,c_char,exaero_package_t
+      implicit none
+      type(exaero_package_t),value,intent(in) :: pkg
+      integer(c_int),value,intent(in) :: nc,nl,nf,np,nss
+      real(c_double),intent(in) :: temp(*),rh(*),state(*),ss(*)
+      real(c_double),intent(inout) :: fractions(*)
+      character(c_char),intent(out) :: errmsg(*)
+      integer(c_int),intent(out) :: errflg
+    end subroutine
     !> @brief Common host removal; mass slots per field, number per population.
     subroutine exaero_removal_rate_tendencies(pkg,nc,nl,nf,np,state,mass_rate,number_rate, &
         mass_tendency,number_tendency,errmsg,errflg) bind(c,name="exaero_removal_rate_tendencies")
