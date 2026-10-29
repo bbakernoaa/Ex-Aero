@@ -41,7 +41,7 @@ CAM `actfracs` uses `x=(2/3)*log(Scrit/S)/(sqrt(2)*log(sigma))` and
 At `S=Scrit`, `fn=0.5` and
 `fm=(1+erf(1.5*sqrt(2)*log(sigma)))/2`; these are different moments.
 
-For kappa equilibrium sizing, dry/wet diameter ratio is
+For kappa equilibrium sizing, wet/dry diameter ratio is
 `(1+kappa*RH/(1-RH))^(1/3)` before the documented model RH cap. At fixed
 total dry volume/number, changing constituent kappa `{0.6,0}` volume fractions
 from `{0.75,0.25}` to `{0.25,0.75}` changes effective kappa from `0.45` to
